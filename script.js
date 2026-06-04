@@ -39,7 +39,7 @@ const PRODUCTS = [
     name: 'Freegells',
     desc: 'Extra forte e refrescante para qualquer hora',
     price: 2.50,
-    img: 'https://images.pexels.com/photos/5485080/pexels-photo-5485080.jpeg?auto=compress&cs=tinysrgb&w=800',
+    img: 'https://images.pexels.com/photos/4466439/pexels-photo-4466439.jpeg?auto=compress&cs=tinysrgb&w=800',
     fallbackIcon: 'fa-candy-cane',
     fallbackLabel: 'Freegells',
     badges: ['novo'],
