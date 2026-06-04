@@ -414,8 +414,8 @@ function buildProductCard(p) {
         <span class="qty-val">${qty}</span>
         <button class="qty-btn" onclick="addToCart(${p.id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
       </div>`
-    : `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})">
-        <i class="fas fa-plus"></i> Adicionar
+    : `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})" aria-label="Adicionar ${p.name}">
+        <i class="fas fa-plus"></i>
       </button>`;
 
   return `
@@ -450,8 +450,8 @@ function refreshProductCard(id) {
       <button class="qty-btn" onclick="addToCart(${id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
     </div>`;
   } else {
-    ctrl.outerHTML = `<button class="btn-add" id="ctrl-${id}" onclick="event.stopPropagation();addToCart(${id})">
-      <i class="fas fa-plus"></i> Adicionar
+    ctrl.outerHTML = `<button class="btn-add" id="ctrl-${id}" onclick="event.stopPropagation();addToCart(${id})" aria-label="Adicionar">
+      <i class="fas fa-plus"></i>
     </button>`;
   }
 }
@@ -1001,7 +1001,29 @@ function renderSpSuggestions() {
   }).join('');
 }
 
-/* ── Resultados ── */
+/* ── Resultados — mesmo card do catálogo ── */
+function buildSpResultCard(p) {
+  const icon    = p.fallbackIcon || 'fa-utensils';
+  const safeN   = p.name.replace(/'/g, "\\'");
+  const imgHTML = p.img
+    ? `<img src="${p.img}" alt="${p.name}" loading="lazy" onerror="handleCardImgError(this,'${icon}')">`
+    : `<div class="card-img-placeholder"><i class="fas ${icon}"></i></div>`;
+  return `
+    <div class="product-card" onclick="spSelectProduct(${p.id})">
+      <div class="card-img-wrap">${imgHTML}</div>
+      <div class="card-body">
+        <h3 class="card-name">${p.name}</h3>
+        <p class="card-desc">${p.desc}</p>
+        <div class="card-footer">
+          <span class="card-price">R$ ${fmt(p.price)}</span>
+          <button class="btn-add" onclick="event.stopPropagation();addToCart(${p.id});showToast('${safeN} adicionado!')" aria-label="Adicionar">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderSpResults(q) {
   const list  = el('sp-results-list');
   const noRes = el('sp-no-results');
@@ -1016,24 +1038,7 @@ function renderSpResults(q) {
     return;
   }
   noRes.style.display = 'none';
-  list.innerHTML = filtered.map(p => {
-    const imgH = p.img
-      ? `<img class="sp-result-img" src="${p.img}" alt="${p.name}" loading="lazy">`
-      : `<div class="sp-result-placeholder"><i class="fas ${p.fallbackIcon||'fa-utensils'}"></i></div>`;
-    const safeN = p.name.replace(/'/g, "\\'");
-    return `
-      <div class="sp-result-item" onclick="spSelectProduct(${p.id})">
-        ${imgH}
-        <div class="sp-result-info">
-          <div class="sp-result-name">${p.name}</div>
-          <div class="sp-result-desc">${p.desc}</div>
-          <div class="sp-result-price">R$ ${fmt(p.price)}</div>
-        </div>
-        <button class="sp-result-add" onclick="event.stopPropagation();addToCart(${p.id});showToast('${safeN} adicionado!')">
-          <i class="fas fa-plus"></i> Add
-        </button>
-      </div>`;
-  }).join('');
+  list.innerHTML = filtered.map(p => buildSpResultCard(p)).join('');
 }
 
 /* ── Ações ── */
