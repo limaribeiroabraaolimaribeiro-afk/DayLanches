@@ -148,9 +148,7 @@ const PRODUCTS = [
     name: 'Coca-Cola 2L',
     desc: 'Gelada, perfeita para acompanhar seu pedido',
     price: 16.00,
-    img: null, /* trocar pela foto real */
-    fallbackIcon: 'fa-bottle-droplet',
-    fallbackLabel: 'Coca-Cola',
+    img: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&h=300&fit=crop&q=80',
     badges: [],
   },
 ];
@@ -405,9 +403,10 @@ function buildProductCard(p) {
     ? `<span class="badge ${badgeMap[p.badges[0]][0]}">${badgeMap[p.badges[0]][1]}</span>`
     : '';
 
+  const icon    = p.fallbackIcon || 'fa-utensils';
   const imgHTML = p.img
-    ? `<img src="${p.img}" alt="${p.name}" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\"card-img-placeholder\\"><i class=\\"fas ${p.fallbackIcon || 'fa-utensils'}\\"></i><span>Foto em breve</span></div>'">`
-    : `<div class="card-img-placeholder"><i class="fas ${p.fallbackIcon || 'fa-utensils'}"></i><span>Foto em breve</span></div>`;
+    ? `<img src="${p.img}" alt="${p.name}" loading="lazy" onerror="handleCardImgError(this,'${icon}')">`
+    : `<div class="card-img-placeholder"><i class="fas ${icon}"></i><span>Foto em breve</span></div>`;
 
   const ctrlHTML = qty > 0
     ? `<div class="qty-ctrl" id="ctrl-${p.id}" onclick="event.stopPropagation()">
@@ -1252,6 +1251,14 @@ function el(id) {
 }
 function toggleMenu() {
   showToast('Menu em breve!');
+}
+function handleCardImgError(img, icon) {
+  const wrap = img.parentNode;
+  if (!wrap) return;
+  const ph = document.createElement('div');
+  ph.className = 'card-img-placeholder';
+  ph.innerHTML = `<i class="fas ${icon}"></i><span>Foto em breve</span>`;
+  wrap.replaceChild(ph, img);
 }
 
 /* ──────────────────────────────────────────
