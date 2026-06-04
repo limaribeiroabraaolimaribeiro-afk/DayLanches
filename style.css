@@ -1035,6 +1035,58 @@ a { text-decoration: none; color: inherit; }
 }
 
 /* ═══════════════════════════════════════════
+   BOTÃO DE GEOLOCALIZAÇÃO
+═══════════════════════════════════════════ */
+.btn-geo {
+  width: 100%;
+  height: 50px;
+  background: var(--white);
+  border: 2px dashed var(--primary);
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: .9rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+.btn-geo:hover { background: var(--primary-light); }
+.btn-geo:disabled { opacity: .7; cursor: not-allowed; }
+.btn-geo.btn-geo-done {
+  background: var(--success-bg);
+  border: 2px solid var(--success);
+  color: var(--success-dark);
+  border-style: solid;
+}
+
+.geo-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--success-dark);
+  font-size: .88rem;
+  font-weight: 600;
+  margin-top: 12px;
+}
+.geo-success i { font-size: 1rem; flex-shrink: 0; }
+
+.geo-map-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary);
+  font-size: .82rem;
+  font-weight: 600;
+  margin-top: 8px;
+  text-decoration: none;
+}
+.geo-map-link:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════════════
    BARRA FIXA DO CARRINHO
 ═══════════════════════════════════════════ */
 .cart-bar {

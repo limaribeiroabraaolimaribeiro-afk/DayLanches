@@ -189,39 +189,27 @@
           <label class="form-label">Nome completo *</label>
           <input type="text" id="f-name" class="form-input" placeholder="Ex: Maria da Silva" autocomplete="name">
         </div>
-        <div class="form-group">
-          <label class="form-label">WhatsApp *</label>
-          <input type="tel" id="f-phone" class="form-input" placeholder="(47) 99999-9999" autocomplete="tel">
-        </div>
       </div>
 
-      <div class="ck-card" id="address-block">
-        <h3 class="ck-card-title"><i class="fas fa-location-dot"></i> Endereço de entrega</h3>
-        <div class="form-row">
-          <div class="form-group fg-2">
-            <label class="form-label">Rua / Avenida *</label>
-            <input type="text" id="f-street" class="form-input" placeholder="Rua, Avenida...">
+      <div class="ck-card" id="geo-card">
+        <h3 class="ck-card-title"><i class="fas fa-location-dot"></i> Localização de entrega</h3>
+        <button class="btn-geo" id="btn-geo" onclick="requestGeoLocation()" type="button">
+          <i class="fas fa-location-dot"></i> Usar minha localização atual
+        </button>
+        <div id="geo-status" style="display:none">
+          <div class="geo-success">
+            <i class="fas fa-check-circle"></i>
+            <span>Localização adicionada com sucesso!</span>
           </div>
-          <div class="form-group fg-1">
-            <label class="form-label">Número *</label>
-            <input type="text" id="f-number" class="form-input" placeholder="Nº">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group fg-1">
-            <label class="form-label">Bairro</label>
-            <input type="text" id="f-hood" class="form-input" placeholder="Bairro">
-          </div>
-          <div class="form-group fg-1">
-            <label class="form-label">Complemento</label>
-            <input type="text" id="f-comp" class="form-input" placeholder="Apto, Bloco...">
-          </div>
+          <a id="geo-link" href="#" target="_blank" rel="noopener" class="geo-map-link">
+            <i class="fas fa-map-location-dot"></i> Abrir no mapa
+          </a>
         </div>
       </div>
 
       <div class="ck-card">
-        <h3 class="ck-card-title"><i class="fas fa-comment-dots"></i> Observações</h3>
-        <textarea id="f-notes" class="form-textarea" placeholder="Ex: sem cebola, ponto da carne, portão azul..." rows="3"></textarea>
+        <h3 class="ck-card-title"><i class="fas fa-comment-dots"></i> Observações <small class="txt-muted" style="font-weight:400;font-size:.75rem">(opcional)</small></h3>
+        <textarea id="f-notes" class="form-textarea" placeholder="Ex: sem cebola, ponto da carne, portão branco, casa dos fundos..." rows="3"></textarea>
       </div>
 
       <div id="delivery-error" class="form-error" style="display:none">
@@ -291,14 +279,6 @@
       </div>
 
       <div class="ck-card">
-        <div class="ck-card-row">
-          <h3 class="ck-card-title"><i class="fab fa-whatsapp"></i> Contato para atualização do pedido</h3>
-          <button class="btn-link-sm" onclick="navigateTo('delivery')">Editar</button>
-        </div>
-        <p id="pay-phone-txt" class="info-txt"></p>
-      </div>
-
-      <div class="ck-card">
         <h3 class="ck-card-title"><i class="fas fa-tag"></i> Cupom de desconto</h3>
         <div class="coupon-row">
           <input type="text" id="coupon-input" class="form-input coupon-field" placeholder="Digite seu cupom">
@@ -337,9 +317,8 @@
         <div id="pix-section">
           <div class="pix-top-row">
             <div class="pix-badge"><i class="fas fa-qrcode"></i> PAGAMENTO VIA PIX</div>
-            <div class="pix-auto-badge"><i class="fas fa-bolt"></i> Confirmação automática</div>
           </div>
-          <p class="pix-subtitle">Aprovação automática e imediata</p>
+          <p class="pix-subtitle">Após confirmar o pagamento, o pedido será liberado.</p>
           <div class="pix-body">
             <div class="pix-qr-col">
               <div class="pix-qr-border">
@@ -356,19 +335,19 @@
               </button>
             </div>
           </div>
-          <!-- status da simulação -->
+          <!-- Status PIX — confirmação real via webhook Mercado Pago -->
           <div class="pix-progress" id="pix-progress">
             <div class="pp-step pp-waiting" id="pp-1">
               <span class="pp-icon"><i class="fas fa-circle-notch fa-spin"></i></span>
-              <span>Aguardando pagamento</span>
+              <span>Aguardando confirmação do pagamento PIX</span>
             </div>
             <div class="pp-step" id="pp-2">
               <span class="pp-icon"><i class="fas fa-check-circle"></i></span>
-              <span>Pagamento confirmado automaticamente</span>
+              <span>Pagamento confirmado pelo banco</span>
             </div>
             <div class="pp-step" id="pp-3">
               <span class="pp-icon"><i class="fas fa-fire"></i></span>
-              <span>Pedido enviado para produção 🍔</span>
+              <span>Pedido em produção</span>
             </div>
           </div>
 

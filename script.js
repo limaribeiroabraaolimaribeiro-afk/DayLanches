@@ -164,9 +164,9 @@ const state = {
   search:      '',
   deliveryType: 'delivery',  /* delivery | pickup */
   form: {
-    name: '', phone: '', street: '', number: '',
-    hood: '', comp: '', notes: ''
+    name: '', notes: ''
   },
+  geo: { lat: null, lon: null, link: '' },
   payMethod:   'pix',
   payStatus:   'idle',     /* idle | waiting | confirmed | production */
   couponApplied: false,
@@ -188,6 +188,13 @@ function navigateTo(page) {
   state.page = page;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
+  if (page === 'delivery') {
+    state.geo = { lat: null, lon: null, link: '' };
+    const btn = el('btn-geo');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
+    const stat = el('geo-status');
+    if (stat) stat.style.display = 'none';
+  }
   if (page === 'payment') {
     updatePaymentPage();
     startPixSimulation();
@@ -205,8 +212,41 @@ function goBack() {
 
 function setDeliveryType(type) {
   state.deliveryType = type;
-  const addrBlock = document.getElementById('address-block');
-  if (addrBlock) addrBlock.style.display = type === 'pickup' ? 'none' : 'block';
+  const geoCard = el('geo-card');
+  if (geoCard) geoCard.style.display = type === 'pickup' ? 'none' : 'block';
+}
+
+function requestGeoLocation() {
+  const btn  = el('btn-geo');
+  const stat = el('geo-status');
+
+  if (!navigator.geolocation) {
+    showToast('Geolocalização não disponível neste navegador.');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obtendo localização...'; }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat  = pos.coords.latitude.toFixed(6);
+      const lon  = pos.coords.longitude.toFixed(6);
+      const link = `https://www.google.com/maps?q=${lat},${lon}`;
+      state.geo  = { lat, lon, link };
+
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
+      if (stat) stat.style.display = 'block';
+      const geoLink = el('geo-link');
+      if (geoLink) geoLink.href = link;
+      showToast('Localização adicionada com sucesso!');
+    },
+    err => {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; }
+      const msgs = { 1: 'Permissão negada. Você pode continuar sem localização.', 2: 'Localização indisponível.', 3: 'Tempo esgotado. Tente novamente.' };
+      showToast(msgs[err.code] || 'Não foi possível obter a localização.');
+    },
+    { timeout: 10000, enableHighAccuracy: true }
+  );
 }
 
 /* ──────────────────────────────────────────
@@ -510,20 +550,10 @@ function goToCheckout() {
 }
 
 function goToPayment() {
-  const name  = document.getElementById('f-name').value.trim();
-  const phone = document.getElementById('f-phone').value.trim();
-
-  let hasError = false;
-  if (!name || !phone) hasError = true;
-
-  if (state.deliveryType === 'delivery') {
-    const street = document.getElementById('f-street').value.trim();
-    const number = document.getElementById('f-number').value.trim();
-    if (!street || !number) hasError = true;
-  }
-
+  const name = document.getElementById('f-name').value.trim();
   const errBox = document.getElementById('delivery-error');
-  if (hasError) {
+
+  if (!name) {
     errBox.style.display = 'flex';
     errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
@@ -532,12 +562,7 @@ function goToPayment() {
 
   state.form = {
     name,
-    phone,
-    street: el('f-street')?.value.trim() || '',
-    number: el('f-number')?.value.trim() || '',
-    hood:   el('f-hood')?.value.trim() || '',
-    comp:   el('f-comp')?.value.trim() || '',
-    notes:  el('f-notes')?.value.trim() || '',
+    notes: el('f-notes')?.value.trim() || '',
   };
 
   navigateTo('payment');
@@ -587,22 +612,15 @@ function updatePaymentPage() {
     list.innerHTML = `<p class="pay-items-preview">${count} ite${count !== 1 ? 'ns' : 'm'}</p>`;
   }
 
-  /* Address */
-  const f = state.form;
-  const addrCard = el('pay-address-card');
-  const addrTxt  = el('pay-address-txt');
+  /* Endereço / localização */
+  const addrTxt = el('pay-address-txt');
   if (state.deliveryType === 'pickup') {
     if (addrTxt) addrTxt.textContent = 'Retirada no local — R. Faustino Martini, 160, Luiz Alves - SC';
+  } else if (state.geo.lat) {
+    if (addrTxt) addrTxt.innerHTML = `<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Localização enviada — Abrir no mapa</a>`;
   } else {
-    if (addrTxt) {
-      const parts = [f.street, f.number, f.comp, f.hood].filter(Boolean);
-      addrTxt.textContent = parts.join(', ') + ' — Luiz Alves, SC';
-    }
+    if (addrTxt) addrTxt.textContent = 'Localização não informada';
   }
-
-  /* Phone */
-  const phoneTxt = el('pay-phone-txt');
-  if (phoneTxt) phoneTxt.textContent = f.phone;
 }
 
 function applyCoupon() {
@@ -632,16 +650,13 @@ function applyCoupon() {
 function startPixSimulation() {
   clearInterval(state._pixTimer);
   resetPixProgress();
-
-  /* Aguardando */
   setPixStep('waiting');
 
-  /* Confirmado após ~5s */
-  const t1 = setTimeout(() => setPixStep('confirmed'), 5000);
-  /* Em produção após ~9s */
-  const t2 = setTimeout(() => setPixStep('production'), 9000);
-
-  state._pixTimers = [t1, t2];
+  // Futuramente integrar com Mercado Pago:
+  // 1. Criar pagamento PIX no backend → receber qrcode e txid reais
+  // 2. Receber webhook POST /api/webhook-pix do Mercado Pago
+  // 3. Verificar body.action === 'payment.updated' && body.data.status === 'approved'
+  // 4. Só então atualizar pedido para "Pago" via SSE ou WebSocket ao front-end
 }
 
 function resetPixProgress() {
@@ -671,8 +686,8 @@ function setPixStep(step) {
   if (step === 'production') {
     pp3.className = 'pp-step pp-production';
     pp3.querySelector('.pp-icon').innerHTML = '<i class="fas fa-fire"></i>';
-    /* Auto-redirecionar para confirmação */
-    setTimeout(autoConfirm, 1500);
+    // Removido: auto-confirmação por tempo
+    // Pagamento só confirma via webhook real do Mercado Pago
   }
 }
 
@@ -695,7 +710,6 @@ function copyPix() {
 function confirmOrder() {
   if (state.cart.length === 0) return;
   state.orderId = Math.floor(Math.random() * 90000) + 10000;
-  if (state._pixTimers) state._pixTimers.forEach(clearTimeout);
   navigateTo('confirmation');
 }
 
@@ -792,19 +806,26 @@ function sendWhatsApp() {
   const f     = state.form;
   const items = state.cart.map(i => `• ${i.qty}x ${i.name} — R$ ${fmt(i.price * i.qty)}`).join('\n');
   const payLabels = { pix: 'PIX ✅', card: 'Cartão 💳', cash: 'Dinheiro 💵' };
-  const addr = state.deliveryType === 'pickup'
-    ? 'Retirada no local'
-    : `${f.street}, ${f.number}${f.comp ? ` (${f.comp})` : ''}${f.hood ? `, ${f.hood}` : ''} — Luiz Alves, SC`;
+
+  let localTxt;
+  if (state.deliveryType === 'pickup') {
+    localTxt = '🏪 Retirada no local — R. Faustino Martini, 160, Luiz Alves - SC';
+  } else if (state.geo.lat) {
+    localTxt = `🛵 Entrega\n📍 Localização: ${state.geo.link}`;
+  } else {
+    localTxt = '🛵 Entrega — localização não informada';
+  }
 
   const msg = encodeURIComponent(
     `🍔 *Pedido Day Lanches* 🍔\n` +
     `*Pedido nº ${state.orderId}*\n\n` +
+    `*Cliente:* ${f.name}\n\n` +
     `*Itens:*\n${items}\n\n` +
     `*Subtotal:* R$ ${fmt(getSubtotal())}\n` +
     `*Taxa de entrega:* ${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}\n` +
     `*Total:* R$ ${fmt(getTotal())}\n\n` +
-    `*Pagamento:* ${payLabels[state.payMethod] || state.payMethod}\n\n` +
-    `*Endereço:*\n${f.name}\n${addr}\n📱 ${f.phone}` +
+    `*Pagamento:* ${payLabels[state.payMethod] || state.payMethod}\n` +
+    `*Entrega:* ${localTxt}` +
     (f.notes ? `\n\n*Observações:* ${f.notes}` : '')
   );
 
@@ -1302,13 +1323,9 @@ document.addEventListener('DOMContentLoaded', () => {
   renderProducts();
   initCarousel();
 
-  /* Pre-fill form with demo data para facilitar a demonstração */
+  /* Pre-fill: apenas nome para demonstração */
   setTimeout(() => {
-    const fn = el('f-name');  if (fn && !fn.value) fn.value = 'Maria da Silva';
-    const fp = el('f-phone'); if (fp && !fp.value) fp.value = '(47) 99155-9926';
-    const fs = el('f-street');if (fs && !fs.value) fs.value = 'R. Faustino Martini';
-    const fn2= el('f-number');if (fn2 && !fn2.value) fn2.value = '160';
-    const fh = el('f-hood');  if (fh && !fh.value)  fh.value = 'Rio do Peixe';
+    const fn = el('f-name'); if (fn && !fn.value) fn.value = 'Maria da Silva';
   }, 200);
 
   /* Inicializa seção de pagamento PIX visível */
