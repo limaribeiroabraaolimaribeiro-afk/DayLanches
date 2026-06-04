@@ -229,6 +229,7 @@ function addToCart(id) {
   }
   saveCart();
   refreshCartCount();
+  updateCartBar();
   refreshProductCard(id);
   renderCartItems();
   showToast(`${product.name} adicionado!`);
@@ -243,6 +244,7 @@ function changeQty(id, delta) {
   }
   saveCart();
   refreshCartCount();
+  updateCartBar();
   refreshProductCard(id);
   renderCartItems();
 }
@@ -251,6 +253,7 @@ function removeFromCart(id) {
   state.cart = state.cart.filter(i => i.id !== id);
   saveCart();
   refreshCartCount();
+  updateCartBar();
   refreshProductCard(id);
   renderCartItems();
 }
@@ -349,6 +352,29 @@ function refreshCartCount() {
   badge.style.display = total > 0 ? 'flex' : 'none';
 }
 
+function updateCartBar() {
+  const bar   = el('cart-bar');
+  const waBar = el('wa-bar');
+  if (!bar) return;
+
+  const qty      = state.cart.reduce((s, i) => s + i.qty, 0);
+  const subtotal = getSubtotal();
+
+  if (qty === 0) {
+    bar.style.display = 'none';
+    if (waBar) waBar.style.display = 'block';
+    return;
+  }
+
+  bar.style.display = 'block';
+  if (waBar) waBar.style.display = 'none';
+
+  const countEl = el('cart-bar-count');
+  const totalEl = el('cart-bar-total');
+  if (countEl) countEl.textContent = qty === 1 ? '1 item' : `${qty} itens`;
+  if (totalEl) totalEl.textContent = `R$ ${fmt(subtotal)}`;
+}
+
 /* ──────────────────────────────────────────
    6. RENDERIZAÇÃO DOS PRODUTOS
 ────────────────────────────────────────── */
@@ -415,7 +441,7 @@ function buildProductCard(p) {
         <button class="qty-btn" onclick="addToCart(${p.id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
       </div>`
     : `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})" aria-label="Adicionar ${p.name}">
-        <i class="fas fa-cart-plus"></i>
+        <i class="fas fa-cart-plus"></i> Adicionar
       </button>`;
 
   return `
@@ -451,7 +477,7 @@ function refreshProductCard(id) {
     </div>`;
   } else {
     ctrl.outerHTML = `<button class="btn-add" id="ctrl-${id}" onclick="event.stopPropagation();addToCart(${id})" aria-label="Adicionar">
-      <i class="fas fa-cart-plus"></i>
+      <i class="fas fa-cart-plus"></i> Adicionar
     </button>`;
   }
 }
@@ -1017,7 +1043,7 @@ function buildSpResultCard(p) {
         <div class="card-footer">
           <span class="card-price">R$ ${fmt(p.price)}</span>
           <button class="btn-add" onclick="event.stopPropagation();addToCart(${p.id});showToast('${safeN} adicionado!')" aria-label="Adicionar">
-            <i class="fas fa-cart-plus"></i>
+            <i class="fas fa-cart-plus"></i> Adicionar
           </button>
         </div>
       </div>
@@ -1272,6 +1298,7 @@ function handleCardImgError(img, icon) {
 document.addEventListener('DOMContentLoaded', () => {
   loadCart();
   refreshCartCount();
+  updateCartBar();
   renderProducts();
   initCarousel();
 

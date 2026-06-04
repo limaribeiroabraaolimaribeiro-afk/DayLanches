@@ -94,7 +94,7 @@
       </div>
     </section>
 
-    <div class="wa-bar">
+    <div class="wa-bar" id="wa-bar">
       <a href="https://wa.me/5547991559926" target="_blank" rel="noopener" class="wa-bar-link">
         <i class="fab fa-whatsapp wa-icon"></i>
         <div class="wa-bar-text">
@@ -103,6 +103,22 @@
         </div>
         <i class="fas fa-chevron-right wa-arrow"></i>
       </a>
+    </div>
+
+    <!-- Barra fixa do carrinho (aparece quando há itens) -->
+    <div class="cart-bar" id="cart-bar" style="display:none">
+      <div class="cart-bar-inner">
+        <div class="cart-bar-info">
+          <i class="fas fa-shopping-bag cart-bar-ico"></i>
+          <div class="cart-bar-texts">
+            <span class="cart-bar-count" id="cart-bar-count">1 item</span>
+            <span class="cart-bar-total" id="cart-bar-total">R$ 0,00</span>
+          </div>
+        </div>
+        <button class="cart-bar-btn" onclick="openCart()">
+          Ver carrinho <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
     </div>
 
   </div>
