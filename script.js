@@ -183,6 +183,7 @@ const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 }; /* Cupons válidos (demo) */
    3. NAVEGAÇÃO
 ────────────────────────────────────────── */
 function navigateTo(page) {
+  if (spOpen) closeSearchPage();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   state.page = page;
@@ -785,6 +786,192 @@ function sendWhatsApp() {
 }
 
 /* ──────────────────────────────────────────
+   TELA DE PESQUISA
+────────────────────────────────────────── */
+const SP_SUGGEST_IDS = [8, 2, 15, 16]; /* Burguer Duplo, Açaí 500ml, Fritas Bacon, Coca-Cola */
+
+let spOpen = false;
+
+function openSearchPage() {
+  const page = el('search-page');
+  if (!page) return;
+  page.classList.add('open');
+  spOpen = true;
+  document.body.style.overflow = 'hidden';
+  renderSpHistory();
+  renderSpSuggestions();
+  setTimeout(() => { el('sp-input')?.focus(); }, 320);
+}
+
+function closeSearchPage() {
+  const page = el('search-page');
+  if (!page) return;
+  page.classList.remove('open');
+  spOpen = false;
+  if (!state.cartOpen) document.body.style.overflow = '';
+  /* Limpa estado interno */
+  const inp = el('sp-input');
+  if (inp) inp.value = '';
+  el('sp-body').style.display    = '';
+  el('sp-results').style.display = 'none';
+  el('sp-clear-btn').style.display = 'none';
+}
+
+function handleSearchPage(val) {
+  el('sp-clear-btn').style.display = val ? 'flex' : 'none';
+  if (val.trim()) {
+    el('sp-body').style.display    = 'none';
+    el('sp-results').style.display = '';
+    renderSpResults(val.trim());
+  } else {
+    el('sp-body').style.display    = '';
+    el('sp-results').style.display = 'none';
+  }
+}
+
+function handleSearchPageKey(e) {
+  if (e.key === 'Enter') {
+    const val = el('sp-input')?.value.trim();
+    if (val) saveSpHistory(val);
+  }
+}
+
+function clearSpInput() {
+  const inp = el('sp-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+  handleSearchPage('');
+}
+
+/* ── Histórico ── */
+function getSpHistory() {
+  try { return JSON.parse(localStorage.getItem('dl_search_hist') || '[]'); } catch(e) { return []; }
+}
+
+function saveSpHistory(term) {
+  if (!term) return;
+  let h = getSpHistory().filter(t => t.toLowerCase() !== term.toLowerCase());
+  h.unshift(term);
+  if (h.length > 5) h = h.slice(0, 5);
+  try { localStorage.setItem('dl_search_hist', JSON.stringify(h)); } catch(e) {}
+  renderSpHistory();
+}
+
+function clearSearchHistory() {
+  try { localStorage.removeItem('dl_search_hist'); } catch(e) {}
+  renderSpHistory();
+}
+
+function removeSpHistItem(term) {
+  const h = getSpHistory().filter(t => t !== term);
+  try { localStorage.setItem('dl_search_hist', JSON.stringify(h)); } catch(e) {}
+  renderSpHistory();
+}
+
+function applySpHistory(term) {
+  const inp = el('sp-input');
+  if (inp) { inp.value = term; inp.focus(); }
+  handleSearchPage(term);
+}
+
+function renderSpHistory() {
+  const sec  = el('sp-history-section');
+  const list = el('sp-history-list');
+  if (!sec || !list) return;
+  const h = getSpHistory();
+  if (!h.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  list.innerHTML = h.map(term => `
+    <div class="sp-history-item" onclick="applySpHistory('${term.replace(/'/g,"\\'")}')">
+      <i class="fas fa-clock sp-hist-ico"></i>
+      <span class="sp-hist-term">${term}</span>
+      <button class="sp-hist-remove" onclick="event.stopPropagation();removeSpHistItem('${term.replace(/'/g,"\\'")}')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>`).join('');
+}
+
+/* ── Sugestões ── */
+function renderSpSuggestions() {
+  const grid = el('sp-suggest-grid');
+  if (!grid) return;
+  const items = SP_SUGGEST_IDS.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean);
+  grid.innerHTML = items.map(p => {
+    const imgH = p.img
+      ? `<img class="sp-suggest-img" src="${p.img}" alt="${p.name}" loading="lazy">`
+      : `<div class="sp-suggest-placeholder"><i class="fas ${p.fallbackIcon||'fa-utensils'}"></i></div>`;
+    return `
+      <div class="sp-suggest-card" onclick="spSelectProduct(${p.id})">
+        ${imgH}
+        <div class="sp-suggest-info">
+          <div class="sp-suggest-name">${p.name}</div>
+          <div class="sp-suggest-price">R$ ${fmt(p.price)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ── Resultados ── */
+function renderSpResults(q) {
+  const list  = el('sp-results-list');
+  const noRes = el('sp-no-results');
+  if (!list || !noRes) return;
+  const ql = q.toLowerCase();
+  const filtered = PRODUCTS.filter(p =>
+    p.name.toLowerCase().includes(ql) || p.desc.toLowerCase().includes(ql)
+  );
+  if (!filtered.length) {
+    list.innerHTML = '';
+    noRes.style.display = 'block';
+    return;
+  }
+  noRes.style.display = 'none';
+  list.innerHTML = filtered.map(p => {
+    const imgH = p.img
+      ? `<img class="sp-result-img" src="${p.img}" alt="${p.name}" loading="lazy">`
+      : `<div class="sp-result-placeholder"><i class="fas ${p.fallbackIcon||'fa-utensils'}"></i></div>`;
+    const safeN = p.name.replace(/'/g, "\\'");
+    return `
+      <div class="sp-result-item" onclick="spSelectProduct(${p.id})">
+        ${imgH}
+        <div class="sp-result-info">
+          <div class="sp-result-name">${p.name}</div>
+          <div class="sp-result-desc">${p.desc}</div>
+          <div class="sp-result-price">R$ ${fmt(p.price)}</div>
+        </div>
+        <button class="sp-result-add" onclick="event.stopPropagation();addToCart(${p.id});showToast('${safeN} adicionado!')">
+          <i class="fas fa-plus"></i> Add
+        </button>
+      </div>`;
+  }).join('');
+}
+
+/* ── Ações ── */
+function searchGoCategory(cat) {
+  closeSearchPage();
+  setTimeout(() => {
+    state.cat    = cat;
+    state.search = '';
+    document.querySelectorAll('.cat-chip').forEach(c =>
+      c.classList.toggle('active', !!c.getAttribute('onclick')?.includes(`'${cat}'`))
+    );
+    const sinp = el('search-input');
+    if (sinp) sinp.value = '';
+    renderProducts();
+    setTimeout(() => el('products-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }, 320);
+}
+
+function spSelectProduct(id) {
+  const term = el('sp-input')?.value.trim();
+  if (term) saveSpHistory(term);
+  closeSearchPage();
+  setTimeout(() => {
+    const p = PRODUCTS.find(p => p.id === id);
+    scrollToCategory(p ? p.cat : 'all', id);
+  }, 320);
+}
+
+/* ──────────────────────────────────────────
    CARROSSEL DE DESTAQUES
 ────────────────────────────────────────── */
 const CAROUSEL_IDS = [2, 3, 8, 11, 15, 16];
@@ -1001,9 +1188,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cardSec) cardSec.style.display = 'none';
   if (cashSec) cashSec.style.display = 'none';
 
-  /* Keyboard: fechar carrinho com ESC */
+  /* Keyboard: ESC fecha pesquisa ou carrinho */
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && state.cartOpen) closeCart();
+    if (e.key === 'Escape') {
+      if (spOpen)          closeSearchPage();
+      else if (state.cartOpen) closeCart();
+    }
   });
 
   console.log('%c🍔 Day Lanches — Cardápio Digital', 'color:#FF6B00;font-size:16px;font-weight:bold;');

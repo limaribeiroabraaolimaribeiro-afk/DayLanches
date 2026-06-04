@@ -41,8 +41,10 @@
           id="search-input"
           class="search-input"
           placeholder="Buscar produto..."
-          oninput="handleSearch(this.value)"
+          readonly
+          onclick="openSearchPage()"
           autocomplete="off"
+          style="cursor:pointer"
         >
       </div>
     </div>
@@ -503,6 +505,74 @@
       </button>
     </div>
   </aside>
+
+  <!-- ===================== TELA DE PESQUISA ===================== -->
+  <div class="search-page" id="search-page">
+
+    <div class="search-page-hd">
+      <button class="btn-icon sp-back" onclick="closeSearchPage()" aria-label="Voltar">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <div class="search-wrap sp-input-wrap">
+        <i class="fas fa-search search-ico"></i>
+        <input
+          type="search"
+          id="sp-input"
+          class="search-input"
+          placeholder="Buscar no cardápio..."
+          oninput="handleSearchPage(this.value)"
+          onkeydown="handleSearchPageKey(event)"
+          autocomplete="off"
+        >
+        <button class="sp-clear-btn" id="sp-clear-btn" onclick="clearSpInput()" style="display:none" aria-label="Limpar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Estado inicial: categorias + histórico + sugestões -->
+    <div class="sp-body" id="sp-body">
+
+      <div class="sp-section">
+        <h3 class="sp-title">Categorias</h3>
+        <div class="sp-chips">
+          <button class="sp-chip" onclick="searchGoCategory('acai')">🍇 Açaí</button>
+          <button class="sp-chip" onclick="searchGoCategory('hamburguer')">🍔 Hambúrguer</button>
+          <button class="sp-chip" onclick="searchGoCategory('hotdog')">🌭 Hot Dogs</button>
+          <button class="sp-chip" onclick="searchGoCategory('porcoes')">🍟 Porções</button>
+          <button class="sp-chip" onclick="searchGoCategory('bebidas')">🥤 Bebidas</button>
+          <button class="sp-chip" onclick="searchGoCategory('combos')">🎁 Combos</button>
+          <button class="sp-chip" onclick="searchGoCategory('artesanais')">🥩 Artesanais</button>
+        </div>
+      </div>
+
+      <div class="sp-section" id="sp-history-section" style="display:none">
+        <div class="sp-title-row">
+          <h3 class="sp-title">Histórico de pesquisa</h3>
+          <button class="sp-link-btn" onclick="clearSearchHistory()">Limpar tudo</button>
+        </div>
+        <div id="sp-history-list"></div>
+      </div>
+
+      <div class="sp-section">
+        <h3 class="sp-title">Você também pode gostar</h3>
+        <div class="sp-suggest-grid" id="sp-suggest-grid"></div>
+      </div>
+
+    </div>
+
+    <!-- Estado com resultados: ao digitar -->
+    <div class="sp-results" id="sp-results" style="display:none">
+      <div id="sp-results-list"></div>
+      <div class="sp-no-results" id="sp-no-results" style="display:none">
+        <i class="fas fa-search"></i>
+        <p>Nenhum produto encontrado</p>
+        <small>Tente outro nome ou categoria</small>
+      </div>
+    </div>
+
+  </div>
+  <!-- fim search-page -->
 
 </div><!-- fim #app -->
 
