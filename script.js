@@ -785,6 +785,151 @@ function sendWhatsApp() {
 }
 
 /* ──────────────────────────────────────────
+   CARROSSEL DE DESTAQUES
+────────────────────────────────────────── */
+const CAROUSEL_IDS = [2, 3, 8, 11, 15, 16];
+
+const CAROUSEL_BADGE_MAP = {
+  2:  { badge: 'mais',  label: 'Mais pedido' },
+  3:  { badge: 'combo', label: '3 adicionais grátis' },
+  8:  { badge: 'promo', label: 'Promoção' },
+  11: { badge: 'dest',  label: 'Destaque' },
+  15: { badge: 'dest',  label: 'Destaque' },
+  16: { badge: 'novo',  label: 'Novo' },
+};
+
+const carousel = {
+  index:    0,
+  total:    CAROUSEL_IDS.length,
+  timer:    null,
+  dragging: false,
+  startX:   0,
+};
+
+function initCarousel() {
+  const track  = el('carousel-track');
+  const dotsEl = el('carousel-dots');
+  if (!track || !dotsEl) return;
+
+  const slides = CAROUSEL_IDS.map(id => {
+    const p    = PRODUCTS.find(p => p.id === id);
+    const meta = CAROUSEL_BADGE_MAP[id] || {};
+    if (!p) return null;
+    return { ...p, cBadge: meta.badge || 'novo', cLabel: meta.label || '' };
+  }).filter(Boolean);
+
+  carousel.total   = slides.length;
+  track.innerHTML  = slides.map(p => buildCarouselSlide(p)).join('');
+  dotsEl.innerHTML = slides.map((_, i) =>
+    `<button class="carousel-dot${i === 0 ? ' active' : ''}" onclick="goToSlide(${i})" aria-label="Slide ${i + 1}"></button>`
+  ).join('');
+
+  setupCarouselTouch();
+  carousel.timer = setInterval(autoNextSlide, 3500);
+}
+
+function buildCarouselSlide(p) {
+  const imgHTML = p.img
+    ? `<img class="slide-img" src="${p.img}" alt="${p.name}" loading="eager">`
+    : `<div class="slide-img-placeholder"><i class="fas ${p.fallbackIcon || 'fa-utensils'}"></i></div>`;
+
+  return `
+    <div class="carousel-slide">
+      <div class="slide-inner">
+        <div class="slide-img-wrap">${imgHTML}</div>
+        <div class="slide-content">
+          <span class="slide-badge slide-badge-${p.cBadge}">${p.cLabel}</span>
+          <h2 class="slide-name">${p.name}</h2>
+          <div class="slide-price">R$ ${fmt(p.price)}</div>
+          <p class="slide-desc">${p.desc}</p>
+          <div class="slide-actions">
+            <button class="slide-btn-add" onclick="addToCart(${p.id})">
+              <i class="fas fa-plus"></i> Adicionar
+            </button>
+            <button class="slide-btn-detail" onclick="scrollToProduct(${p.id})">
+              <i class="fas fa-eye"></i> Ver detalhes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function goToSlide(index) {
+  const track = el('carousel-track');
+  const dots  = document.querySelectorAll('.carousel-dot');
+  if (!track) return;
+  carousel.index = ((index % carousel.total) + carousel.total) % carousel.total;
+  track.style.transform = `translateX(-${carousel.index * 100}%)`;
+  dots.forEach((d, i) => d.classList.toggle('active', i === carousel.index));
+}
+
+function nextSlide() {
+  clearInterval(carousel.timer);
+  goToSlide(carousel.index + 1);
+  carousel.timer = setInterval(autoNextSlide, 3500);
+}
+
+function prevSlide() {
+  clearInterval(carousel.timer);
+  goToSlide(carousel.index - 1);
+  carousel.timer = setInterval(autoNextSlide, 3500);
+}
+
+function autoNextSlide() {
+  goToSlide(carousel.index + 1);
+}
+
+function setupCarouselTouch() {
+  const wrap = el('carousel-track-wrap');
+  if (!wrap) return;
+
+  /* Touch (mobile) */
+  wrap.addEventListener('touchstart', e => {
+    carousel.startX   = e.touches[0].clientX;
+    carousel.dragging = true;
+  }, { passive: true });
+
+  wrap.addEventListener('touchend', e => {
+    if (!carousel.dragging) return;
+    const diff = carousel.startX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) { diff > 0 ? nextSlide() : prevSlide(); }
+    carousel.dragging = false;
+  }, { passive: true });
+
+  /* Mouse drag (desktop) */
+  wrap.addEventListener('mousedown', e => {
+    carousel.startX   = e.clientX;
+    carousel.dragging = true;
+    e.preventDefault();
+  });
+  wrap.addEventListener('mouseup', e => {
+    if (!carousel.dragging) return;
+    const diff = carousel.startX - e.clientX;
+    if (Math.abs(diff) > 40) { diff > 0 ? nextSlide() : prevSlide(); }
+    carousel.dragging = false;
+  });
+  wrap.addEventListener('mouseleave', () => { carousel.dragging = false; });
+}
+
+function scrollToProduct(id) {
+  state.cat    = 'all';
+  state.search = '';
+  document.querySelectorAll('.cat-chip').forEach((c, i) => c.classList.toggle('active', i === 0));
+  const searchEl = el('search-input');
+  if (searchEl) searchEl.value = '';
+  renderProducts();
+  setTimeout(() => {
+    const card = document.querySelector(`.product-card[data-id="${id}"]`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.outline = '3px solid var(--primary)';
+      setTimeout(() => { card.style.outline = ''; }, 1800);
+    }
+  }, 120);
+}
+
+/* ──────────────────────────────────────────
    14. TOAST
 ────────────────────────────────────────── */
 let toastTimer;
@@ -821,6 +966,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCart();
   refreshCartCount();
   renderProducts();
+  initCarousel();
 
   /* Pre-fill form with demo data para facilitar a demonstração */
   setTimeout(() => {
