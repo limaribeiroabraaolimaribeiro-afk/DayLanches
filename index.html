@@ -33,6 +33,20 @@
       </div>
     </header>
 
+    <div class="search-top-bar">
+      <div class="search-wrap">
+        <i class="fas fa-search search-ico"></i>
+        <input
+          type="search"
+          id="search-input"
+          class="search-input"
+          placeholder="Buscar produto..."
+          oninput="handleSearch(this.value)"
+          autocomplete="off"
+        >
+      </div>
+    </div>
+
     <section class="hero-carousel" id="hero-carousel">
       <div class="carousel-track-wrap" id="carousel-track-wrap">
         <div class="carousel-track" id="carousel-track"></div>
@@ -48,18 +62,6 @@
 
     <section class="menu-section">
       <div class="menu-inner">
-
-        <div class="search-wrap">
-          <i class="fas fa-search search-ico"></i>
-          <input
-            type="search"
-            id="search-input"
-            class="search-input"
-            placeholder="Buscar produto..."
-            oninput="handleSearch(this.value)"
-            autocomplete="off"
-          >
-        </div>
 
         <div class="cats-scroll-wrap">
           <div class="cats-scroll" id="cats-scroll">

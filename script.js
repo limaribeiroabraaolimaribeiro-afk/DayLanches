@@ -798,6 +798,15 @@ const CAROUSEL_BADGE_MAP = {
   16: { badge: 'novo',  label: 'Novo' },
 };
 
+const CAROUSEL_CAT_MAP = {
+  2:  'acai',
+  3:  'acai',
+  8:  'hamburguer',
+  11: 'artesanais',
+  15: 'porcoes',
+  16: 'bebidas',
+};
+
 const carousel = {
   index:    0,
   total:    CAROUSEL_IDS.length,
@@ -832,27 +841,21 @@ function initCarousel() {
 }
 
 function buildCarouselSlide(p) {
+  const cat     = CAROUSEL_CAT_MAP[p.id] || 'all';
   const imgHTML = p.img
-    ? `<img class="slide-img" src="${p.img}" alt="${p.name}" loading="eager">`
-    : `<div class="slide-img-placeholder"><i class="fas ${p.fallbackIcon || 'fa-utensils'}"></i></div>`;
+    ? `<img class="slide-banner-img" src="${p.img}" alt="${p.name}" loading="eager">`
+    : `<div class="slide-banner-placeholder"><i class="fas ${p.fallbackIcon || 'fa-utensils'}"></i></div>`;
 
   return `
-    <div class="carousel-slide">
-      <div class="slide-inner">
-        <div class="slide-img-wrap">${imgHTML}</div>
-        <div class="slide-content">
+    <div class="carousel-slide" onclick="scrollToCategory('${cat}', ${p.id})" role="button" tabindex="0" aria-label="${p.name}">
+      <div class="slide-banner">
+        ${imgHTML}
+        <div class="slide-banner-overlay"></div>
+        <div class="slide-banner-content">
           <span class="slide-badge slide-badge-${p.cBadge}">${p.cLabel}</span>
           <h2 class="slide-name">${p.name}</h2>
           <div class="slide-price">R$ ${fmt(p.price)}</div>
           <p class="slide-desc">${p.desc}</p>
-          <div class="slide-actions">
-            <button class="slide-btn-add" onclick="addToCart(${p.id})">
-              <i class="fas fa-plus"></i> Adicionar
-            </button>
-            <button class="slide-btn-detail" onclick="scrollToProduct(${p.id})">
-              <i class="fas fa-eye"></i> Ver detalhes
-            </button>
-          </div>
         </div>
       </div>
     </div>`;
@@ -915,19 +918,29 @@ function setupCarouselTouch() {
   wrap.addEventListener('mouseleave', () => { carousel.dragging = false; });
 }
 
-function scrollToProduct(id) {
-  state.cat    = 'all';
+function scrollToCategory(cat, productId) {
+  state.cat    = cat;
   state.search = '';
-  document.querySelectorAll('.cat-chip').forEach((c, i) => c.classList.toggle('active', i === 0));
+
+  document.querySelectorAll('.cat-chip').forEach(chip => {
+    const matches = chip.getAttribute('onclick')?.includes(`'${cat}'`);
+    chip.classList.toggle('active', !!matches);
+  });
+
   const searchEl = el('search-input');
   if (searchEl) searchEl.value = '';
+
   renderProducts();
+
   setTimeout(() => {
-    const card = document.querySelector(`.product-card[data-id="${id}"]`);
-    if (card) {
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      card.style.outline = '3px solid var(--primary)';
-      setTimeout(() => { card.style.outline = ''; }, 1800);
+    const card   = document.querySelector(`.product-card[data-id="${productId}"]`);
+    const target = card || el('products-grid');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (card) {
+        card.style.outline = '3px solid var(--primary)';
+        setTimeout(() => { card.style.outline = ''; }, 1800);
+      }
     }
   }, 120);
 }
