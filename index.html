@@ -33,6 +33,19 @@
       </div>
     </header>
 
+    <section class="hero-carousel" id="hero-carousel">
+      <div class="carousel-track-wrap" id="carousel-track-wrap">
+        <div class="carousel-track" id="carousel-track"></div>
+      </div>
+      <button class="carousel-arrow carousel-prev" onclick="prevSlide()" aria-label="Anterior">
+        <i class="fas fa-chevron-left"></i>
+      </button>
+      <button class="carousel-arrow carousel-next" onclick="nextSlide()" aria-label="Próximo">
+        <i class="fas fa-chevron-right"></i>
+      </button>
+      <div class="carousel-dots" id="carousel-dots"></div>
+    </section>
+
     <div class="search-top-bar">
       <div class="search-wrap">
         <i class="fas fa-search search-ico"></i>
@@ -48,19 +61,6 @@
         >
       </div>
     </div>
-
-    <section class="hero-carousel" id="hero-carousel">
-      <div class="carousel-track-wrap" id="carousel-track-wrap">
-        <div class="carousel-track" id="carousel-track"></div>
-      </div>
-      <button class="carousel-arrow carousel-prev" onclick="prevSlide()" aria-label="Anterior">
-        <i class="fas fa-chevron-left"></i>
-      </button>
-      <button class="carousel-arrow carousel-next" onclick="nextSlide()" aria-label="Próximo">
-        <i class="fas fa-chevron-right"></i>
-      </button>
-      <div class="carousel-dots" id="carousel-dots"></div>
-    </section>
 
     <section class="menu-section">
       <div class="menu-inner">
@@ -505,6 +505,50 @@
       </button>
     </div>
   </aside>
+
+  <!-- ===================== PÁGINA DE DETALHES ===================== -->
+  <div class="product-page" id="product-page">
+
+    <div class="pp-hero" id="pp-hero">
+      <button class="pp-back" onclick="closeProductPage()" aria-label="Voltar">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <div class="pp-badge-slot" id="pp-badge-slot"></div>
+    </div>
+
+    <div class="pp-body">
+      <div class="pp-info">
+        <h1 class="pp-name" id="pp-name"></h1>
+        <div class="pp-price" id="pp-price"></div>
+        <p class="pp-desc" id="pp-desc"></p>
+        <span class="pp-cat-tag" id="pp-cat-tag"></span>
+      </div>
+
+      <div class="pp-qty-row">
+        <span class="pp-row-label">Quantidade</span>
+        <div class="pp-qty">
+          <button class="pp-qty-btn" onclick="ppChangeQty(-1)" aria-label="Diminuir">
+            <i class="fas fa-minus"></i>
+          </button>
+          <span class="pp-qty-val" id="pp-qty-val">1</span>
+          <button class="pp-qty-btn" onclick="ppChangeQty(1)" aria-label="Aumentar">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="pp-obs-wrap">
+        <label class="pp-obs-label" for="pp-obs">Alguma observação?</label>
+        <textarea id="pp-obs" class="form-textarea" placeholder="Ex: sem cebola, bem passado, molho à parte..." rows="3"></textarea>
+      </div>
+
+      <button class="btn-primary btn-full btn-lg" id="pp-add-btn" onclick="ppAddToCart()">
+        <i class="fas fa-plus"></i> Adicionar ao carrinho
+      </button>
+    </div>
+
+  </div>
+  <!-- fim product-page -->
 
   <!-- ===================== TELA DE PESQUISA ===================== -->
   <div class="search-page" id="search-page">

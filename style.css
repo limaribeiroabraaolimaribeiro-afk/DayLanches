@@ -371,6 +371,180 @@ a { text-decoration: none; color: inherit; }
 }
 
 /* ═══════════════════════════════════════════
+   PÁGINA DE DETALHES DO PRODUTO
+═══════════════════════════════════════════ */
+.product-page {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
+}
+.product-page.open { transform: translateY(0); }
+
+.pp-hero {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  background: #f0f0f0;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.pp-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+.pp-hero-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f3f3f3, #e5e5e5);
+  color: #ccc;
+  font-size: 5rem;
+}
+
+.pp-back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.50);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .88rem;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background var(--transition);
+  font-family: inherit;
+}
+.pp-back:hover { background: rgba(0,0,0,.7); }
+
+.pp-badge-slot {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+}
+.pp-badge-slot .badge { position: static; font-size: .7rem; }
+
+.pp-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pp-info { display: flex; flex-direction: column; gap: 6px; }
+
+.pp-name {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+  margin: 0;
+}
+.pp-price {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--primary);
+  line-height: 1;
+}
+.pp-desc {
+  font-size: .88rem;
+  color: var(--text-med);
+  line-height: 1.6;
+  margin: 0;
+}
+.pp-cat-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: #f5f5f5;
+  padding: 4px 10px;
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.pp-qty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f9f9f9;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.pp-row-label {
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.pp-qty {
+  display: flex;
+  align-items: center;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: 24px;
+  overflow: hidden;
+}
+.pp-qty-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: .9rem;
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: background var(--transition), color var(--transition);
+  font-family: inherit;
+}
+.pp-qty-btn:hover  { background: var(--primary-light); color: var(--primary); }
+.pp-qty-btn:active { background: var(--border); }
+.pp-qty-val {
+  min-width: 36px;
+  text-align: center;
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pp-obs-wrap { display: flex; flex-direction: column; gap: 8px; }
+.pp-obs-label { font-size: .9rem; font-weight: 700; color: var(--text); }
+
+@media (min-width: 640px) {
+  .pp-hero { height: 320px; }
+  .pp-name { font-size: 1.6rem; }
+  .pp-price { font-size: 1.75rem; }
+}
+@media (min-width: 1024px) {
+  .pp-hero { height: 380px; }
+  .pp-body { padding: 28px 24px 40px; max-width: 680px; margin: 0 auto; width: 100%; }
+}
+
+/* ═══════════════════════════════════════════
    TELA DE PESQUISA
 ═══════════════════════════════════════════ */
 .search-page {
@@ -790,6 +964,7 @@ a { text-decoration: none; color: inherit; }
   border: 1px solid var(--border);
   display: flex; flex-direction: column;
   transition: transform .2s ease, box-shadow .2s ease;
+  cursor: pointer;
 }
 .product-card:hover {
   transform: translateY(-3px);

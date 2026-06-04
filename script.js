@@ -183,6 +183,7 @@ const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 }; /* Cupons válidos (demo) */
    3. NAVEGAÇÃO
 ────────────────────────────────────────── */
 function navigateTo(page) {
+  if (ppProductId) closeProductPage();
   if (spOpen) closeSearchPage();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
@@ -409,17 +410,17 @@ function buildProductCard(p) {
     : `<div class="card-img-placeholder"><i class="fas ${p.fallbackIcon || 'fa-utensils'}"></i><span>Foto em breve</span></div>`;
 
   const ctrlHTML = qty > 0
-    ? `<div class="qty-ctrl" id="ctrl-${p.id}">
+    ? `<div class="qty-ctrl" id="ctrl-${p.id}" onclick="event.stopPropagation()">
         <button class="qty-btn" onclick="changeQty(${p.id},-1)" aria-label="Diminuir"><i class="fas fa-minus"></i></button>
         <span class="qty-val">${qty}</span>
         <button class="qty-btn" onclick="addToCart(${p.id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
       </div>`
-    : `<button class="btn-add" id="ctrl-${p.id}" onclick="addToCart(${p.id})">
+    : `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})">
         <i class="fas fa-plus"></i> Adicionar
       </button>`;
 
   return `
-    <div class="product-card" data-id="${p.id}">
+    <div class="product-card" data-id="${p.id}" onclick="openProductPage(${p.id})">
       <div class="card-img-wrap">
         ${imgHTML}
         ${badgeHTML}
@@ -444,13 +445,13 @@ function refreshProductCard(id) {
   if (!ctrl) return;
 
   if (qty > 0) {
-    ctrl.outerHTML = `<div class="qty-ctrl" id="ctrl-${id}">
+    ctrl.outerHTML = `<div class="qty-ctrl" id="ctrl-${id}" onclick="event.stopPropagation()">
       <button class="qty-btn" onclick="changeQty(${id},-1)" aria-label="Diminuir"><i class="fas fa-minus"></i></button>
       <span class="qty-val">${qty}</span>
       <button class="qty-btn" onclick="addToCart(${id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
     </div>`;
   } else {
-    ctrl.outerHTML = `<button class="btn-add" id="ctrl-${id}" onclick="addToCart(${id})">
+    ctrl.outerHTML = `<button class="btn-add" id="ctrl-${id}" onclick="event.stopPropagation();addToCart(${id})">
       <i class="fas fa-plus"></i> Adicionar
     </button>`;
   }
@@ -783,6 +784,97 @@ function sendWhatsApp() {
   );
 
   window.open(`https://wa.me/5547991559926?text=${msg}`, '_blank');
+}
+
+/* ──────────────────────────────────────────
+   PÁGINA DE DETALHES DO PRODUTO
+────────────────────────────────────────── */
+let ppProductId = null;
+let ppQty = 1;
+
+const PP_CAT_LABELS = {
+  acai: '🍇 Açaí', artesanais: '🥩 Artesanais',
+  combos: '🎁 Combos', porcoes: '🍟 Porções',
+  hamburguer: '🍔 Hambúrguer', hotdog: '🌭 Hot Dogs',
+  bebidas: '🥤 Bebidas',
+};
+
+function openProductPage(id) {
+  const p = PRODUCTS.find(p => p.id === id);
+  if (!p) return;
+  ppProductId = id;
+  ppQty = 1;
+
+  /* Imagem */
+  const hero = el('pp-hero');
+  const existingMedia = hero.querySelector('.pp-hero-img, .pp-hero-placeholder');
+  if (existingMedia) existingMedia.remove();
+
+  if (p.img) {
+    const img = document.createElement('img');
+    img.className = 'pp-hero-img';
+    img.src = p.img;
+    img.alt = p.name;
+    hero.insertBefore(img, hero.firstChild);
+  } else {
+    const ph = document.createElement('div');
+    ph.className = 'pp-hero-placeholder';
+    ph.innerHTML = `<i class="fas ${p.fallbackIcon || 'fa-utensils'}"></i>`;
+    hero.insertBefore(ph, hero.firstChild);
+  }
+
+  /* Badge */
+  const badgeMap = { mais: ['badge-mais','Mais pedido'], novo: ['badge-novo','Novo'], combo: ['badge-combo','3 adicionais grátis'], dest: ['badge-dest','Destaque'] };
+  const slot = el('pp-badge-slot');
+  if (slot) slot.innerHTML = p.badges.length ? `<span class="badge ${badgeMap[p.badges[0]][0]}">${badgeMap[p.badges[0]][1]}</span>` : '';
+
+  /* Textos */
+  el('pp-name').textContent  = p.name;
+  el('pp-price').textContent = `R$ ${fmt(p.price)}`;
+  el('pp-desc').textContent  = p.desc;
+  el('pp-cat-tag').textContent = PP_CAT_LABELS[p.cat] || p.cat;
+  el('pp-qty-val').textContent = ppQty;
+
+  /* Obs */
+  const obs = el('pp-obs');
+  if (obs) obs.value = '';
+
+  const page = el('product-page');
+  if (page) { page.classList.add('open'); document.body.style.overflow = 'hidden'; }
+}
+
+function closeProductPage() {
+  const page = el('product-page');
+  if (page) page.classList.remove('open');
+  if (!state.cartOpen && !spOpen) document.body.style.overflow = '';
+  ppProductId = null;
+}
+
+function ppChangeQty(delta) {
+  ppQty = Math.max(1, ppQty + delta);
+  el('pp-qty-val').textContent = ppQty;
+}
+
+function ppAddToCart() {
+  if (!ppProductId) return;
+  const p = PRODUCTS.find(p => p.id === ppProductId);
+  if (!p) return;
+
+  const existing = state.cart.find(c => c.id === ppProductId);
+  if (existing) {
+    existing.qty += ppQty;
+  } else {
+    state.cart.push({ ...p, qty: ppQty });
+  }
+
+  saveCart();
+  refreshCartCount();
+  refreshProductCard(ppProductId);
+  renderCartItems();
+
+  const obs = el('pp-obs')?.value.trim();
+  showToast(obs ? `${p.name} adicionado! (${obs})` : `${p.name} adicionado!`);
+  closeProductPage();
 }
 
 /* ──────────────────────────────────────────
@@ -1188,10 +1280,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cardSec) cardSec.style.display = 'none';
   if (cashSec) cashSec.style.display = 'none';
 
-  /* Keyboard: ESC fecha pesquisa ou carrinho */
+  /* Keyboard: ESC fecha detalhes, pesquisa ou carrinho */
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      if (spOpen)          closeSearchPage();
+      if (ppProductId)         closeProductPage();
+      else if (spOpen)         closeSearchPage();
       else if (state.cartOpen) closeCart();
     }
   });
