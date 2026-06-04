@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Day Lanches — Cardápio Digital</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== PÁGINA: CATÁLOGO ===================== -->
+  <div id="page-catalog" class="page active">
+
+    <header class="header header-dark">
+      <div class="header-inner">
+        <button class="btn-icon" onclick="toggleMenu()" aria-label="Menu">
+          <i class="fas fa-bars"></i>
+        </button>
+        <a href="#" class="logo" onclick="return false">
+          <span class="logo-day">Day</span>
+          <span class="logo-lanches">Lanches</span>
+          <i class="fas fa-burger logo-burger"></i>
+        </a>
+        <button class="btn-icon btn-cart-wrap" onclick="openCart()" aria-label="Carrinho">
+          <i class="fas fa-shopping-cart"></i>
+          <span class="cart-badge" id="cart-count" style="display:none">0</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="hero-text">
+          <h1>Seu lanche favorito,<br><em class="hero-highlight">mais rápido</em> e com<br>visual profissional</h1>
+          <p class="hero-sub">Ingredientes selecionados, sabor que conquista.</p>
+          <div class="hero-features">
+            <div class="hero-feat"><i class="fas fa-bolt"></i><span>Receba rápido</span></div>
+            <div class="hero-feat"><i class="fas fa-seedling"></i><span>Ingredientes frescos</span></div>
+            <div class="hero-feat"><i class="fas fa-shield-halved"></i><span>Pagamento seguro</span></div>
+          </div>
+        </div>
+        <div class="hero-img-wrap">
+          <img
+            src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&h=500&fit=crop&q=85"
+            alt="Hambúrguer artesanal"
+            class="hero-img"
+            loading="eager"
+          >
+        </div>
+      </div>
+    </section>
+
+    <section class="menu-section">
+      <div class="menu-inner">
+
+        <div class="search-wrap">
+          <i class="fas fa-search search-ico"></i>
+          <input
+            type="search"
+            id="search-input"
+            class="search-input"
+            placeholder="Buscar produto..."
+            oninput="handleSearch(this.value)"
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="cats-scroll-wrap">
+          <div class="cats-scroll" id="cats-scroll">
+            <button class="cat-chip active" onclick="filterCat('all', this)"><i class="fas fa-th-large"></i> Todos</button>
+            <button class="cat-chip" onclick="filterCat('acai', this)">🍇 Açaí</button>
+            <button class="cat-chip" onclick="filterCat('artesanais', this)">🥩 Artesanais</button>
+            <button class="cat-chip" onclick="filterCat('combos', this)">🎁 Combos</button>
+            <button class="cat-chip" onclick="filterCat('porcoes', this)">🍟 Porções</button>
+            <button class="cat-chip" onclick="filterCat('hamburguer', this)">🍔 Hambúrguer</button>
+            <button class="cat-chip" onclick="filterCat('hotdog', this)">🌭 Hot Dogs</button>
+            <button class="cat-chip" onclick="filterCat('bebidas', this)">🥤 Bebidas</button>
+          </div>
+        </div>
+
+        <div class="products-section">
+          <h2 class="section-title" id="section-title">
+            <i class="fas fa-star"></i> Destaques do cardápio
+          </h2>
+          <div class="products-grid" id="products-grid">
+            <!-- Preenchido via JavaScript -->
+          </div>
+          <div class="empty-state" id="empty-state" style="display:none">
+            <i class="fas fa-search"></i>
+            <p>Nenhum produto encontrado</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="wa-bar">
+      <a href="https://wa.me/5547991559926" target="_blank" rel="noopener" class="wa-bar-link">
+        <i class="fab fa-whatsapp wa-icon"></i>
+        <div class="wa-bar-text">
+          <span class="wa-label">Fale conosco no WhatsApp</span>
+          <span class="wa-number">(47) 99155-9926</span>
+        </div>
+        <i class="fas fa-chevron-right wa-arrow"></i>
+      </a>
+    </div>
+
+  </div>
+  <!-- fim page-catalog -->
+
+
+  <!-- ===================== PÁGINA: ENTREGA ===================== -->
+  <div id="page-delivery" class="page">
+
+    <header class="header header-light">
+      <div class="header-inner">
+        <button class="btn-icon btn-back" onclick="navigateTo('catalog')" aria-label="Voltar">
+          <i class="fas fa-arrow-left"></i>
+        </button>
+        <a href="#" class="logo logo-dark" onclick="return false">
+          <span class="logo-day-dark">Day</span>
+          <span class="logo-lanches-dark">Lanches</span>
+        </a>
+        <div class="header-secure">
+          <i class="fas fa-shield-halved"></i>
+          <span>100% Seguro</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="checkout-wrap">
+      <div class="steps" id="steps-delivery">
+        <div class="step done"><div class="step-dot"><i class="fas fa-check"></i></div><span>Carrinho</span></div>
+        <div class="step-line done"></div>
+        <div class="step active"><div class="step-dot">2</div><span>Entrega</span></div>
+        <div class="step-line"></div>
+        <div class="step"><div class="step-dot">3</div><span>Pagamento</span></div>
+        <div class="step-line"></div>
+        <div class="step"><div class="step-dot">4</div><span>Confirmação</span></div>
+      </div>
+
+      <div class="ck-card">
+        <h3 class="ck-card-title"><i class="fas fa-motorcycle"></i> Tipo de entrega</h3>
+        <div class="delivery-opts">
+          <label class="delivery-opt" id="opt-delivery">
+            <input type="radio" name="dtype" value="delivery" checked onchange="setDeliveryType(this.value)">
+            <div class="opt-inner">
+              <i class="fas fa-motorcycle opt-ico"></i>
+              <div>
+                <strong>Entrega</strong>
+                <small>30 a 45 min &nbsp;•&nbsp; R$ 6,00</small>
+              </div>
+              <i class="fas fa-check opt-check"></i>
+            </div>
+          </label>
+          <label class="delivery-opt" id="opt-pickup">
+            <input type="radio" name="dtype" value="pickup" onchange="setDeliveryType(this.value)">
+            <div class="opt-inner">
+              <i class="fas fa-store opt-ico"></i>
+              <div>
+                <strong>Retirada no local</strong>
+                <small>Grátis &nbsp;•&nbsp; ~15 min</small>
+              </div>
+              <i class="fas fa-check opt-check"></i>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="ck-card">
+        <h3 class="ck-card-title"><i class="fas fa-user"></i> Seus dados</h3>
+        <div class="form-group">
+          <label class="form-label">Nome completo *</label>
+          <input type="text" id="f-name" class="form-input" placeholder="Ex: Maria da Silva" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">WhatsApp *</label>
+          <input type="tel" id="f-phone" class="form-input" placeholder="(47) 99999-9999" autocomplete="tel">
+        </div>
+      </div>
+
+      <div class="ck-card" id="address-block">
+        <h3 class="ck-card-title"><i class="fas fa-location-dot"></i> Endereço de entrega</h3>
+        <div class="form-row">
+          <div class="form-group fg-2">
+            <label class="form-label">Rua / Avenida *</label>
+            <input type="text" id="f-street" class="form-input" placeholder="Rua, Avenida...">
+          </div>
+          <div class="form-group fg-1">
+            <label class="form-label">Número *</label>
+            <input type="text" id="f-number" class="form-input" placeholder="Nº">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group fg-1">
+            <label class="form-label">Bairro</label>
+            <input type="text" id="f-hood" class="form-input" placeholder="Bairro">
+          </div>
+          <div class="form-group fg-1">
+            <label class="form-label">Complemento</label>
+            <input type="text" id="f-comp" class="form-input" placeholder="Apto, Bloco...">
+          </div>
+        </div>
+      </div>
+
+      <div class="ck-card">
+        <h3 class="ck-card-title"><i class="fas fa-comment-dots"></i> Observações</h3>
+        <textarea id="f-notes" class="form-textarea" placeholder="Ex: sem cebola, ponto da carne, portão azul..." rows="3"></textarea>
+      </div>
+
+      <div id="delivery-error" class="form-error" style="display:none">
+        <i class="fas fa-circle-exclamation"></i> Preencha todos os campos obrigatórios.
+      </div>
+
+      <button class="btn-primary btn-full btn-lg" onclick="goToPayment()">
+        Continuar para pagamento <i class="fas fa-arrow-right"></i>
+      </button>
+    </div>
+
+  </div>
+  <!-- fim page-delivery -->
+
+
+  <!-- ===================== PÁGINA: PAGAMENTO ===================== -->
+  <div id="page-payment" class="page">
+
+    <header class="header header-light">
+      <div class="header-inner">
+        <button class="btn-icon btn-back" onclick="navigateTo('delivery')" aria-label="Voltar">
+          <i class="fas fa-arrow-left"></i>
+        </button>
+        <a href="#" class="logo logo-dark" onclick="return false">
+          <span class="logo-day-dark">Day</span>
+          <span class="logo-lanches-dark">Lanches</span>
+        </a>
+        <div class="header-secure">
+          <i class="fas fa-shield-halved"></i>
+          <span>100% Seguro</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="checkout-wrap">
+      <div class="steps">
+        <div class="step done"><div class="step-dot"><i class="fas fa-check"></i></div><span>Carrinho</span></div>
+        <div class="step-line done"></div>
+        <div class="step done"><div class="step-dot"><i class="fas fa-check"></i></div><span>Entrega</span></div>
+        <div class="step-line done"></div>
+        <div class="step active"><div class="step-dot">3</div><span>Pagamento</span></div>
+        <div class="step-line"></div>
+        <div class="step"><div class="step-dot">4</div><span>Confirmação</span></div>
+      </div>
+
+      <div class="ck-card">
+        <div class="ck-card-row">
+          <h3 class="ck-card-title"><i class="fas fa-receipt"></i> Resumo do pedido</h3>
+          <button class="btn-link-sm" onclick="openCart()">Ver itens</button>
+        </div>
+        <div id="pay-items-list"></div>
+        <div class="summary-line"><span>Subtotal</span><span id="pay-subtotal">R$ 0,00</span></div>
+        <div class="summary-line"><span>Taxa de entrega</span><span id="pay-fee" class="txt-primary">R$ 6,00</span></div>
+        <div class="summary-line summary-total">
+          <strong>Total do pedido</strong>
+          <strong id="pay-total" class="txt-primary">R$ 0,00</strong>
+        </div>
+      </div>
+
+      <div class="ck-card" id="pay-address-card">
+        <div class="ck-card-row">
+          <h3 class="ck-card-title"><i class="fas fa-location-dot"></i> Entrega</h3>
+          <button class="btn-link-sm" onclick="navigateTo('delivery')">Editar</button>
+        </div>
+        <p id="pay-address-txt" class="info-txt"></p>
+        <p class="eta-txt"><i class="fas fa-clock"></i> Entrega estimada: <strong>30 a 45 min</strong></p>
+      </div>
+
+      <div class="ck-card">
+        <div class="ck-card-row">
+          <h3 class="ck-card-title"><i class="fab fa-whatsapp"></i> Contato para atualização do pedido</h3>
+          <button class="btn-link-sm" onclick="navigateTo('delivery')">Editar</button>
+        </div>
+        <p id="pay-phone-txt" class="info-txt"></p>
+      </div>
+
+      <div class="ck-card">
+        <h3 class="ck-card-title"><i class="fas fa-tag"></i> Cupom de desconto</h3>
+        <div class="coupon-row">
+          <input type="text" id="coupon-input" class="form-input coupon-field" placeholder="Digite seu cupom">
+          <button class="btn-primary btn-sm" onclick="applyCoupon()">Aplicar</button>
+        </div>
+        <div id="coupon-msg"></div>
+      </div>
+
+      <div class="ck-card">
+        <h3 class="ck-card-title"><i class="fas fa-credit-card"></i> Forma de pagamento</h3>
+        <div class="pay-methods">
+          <label class="pay-method" id="pm-pix">
+            <input type="radio" name="paymethod" value="pix" checked onchange="selectPayMethod('pix')">
+            <div class="pm-inner">
+              <div class="pm-icon pm-pix-ico"><i class="fas fa-qrcode"></i></div>
+              <div class="pm-text"><strong>PIX</strong><small>Aprovação na hora</small></div>
+            </div>
+          </label>
+          <label class="pay-method" id="pm-card">
+            <input type="radio" name="paymethod" value="card" onchange="selectPayMethod('card')">
+            <div class="pm-inner">
+              <div class="pm-icon pm-card-ico"><i class="fas fa-credit-card"></i></div>
+              <div class="pm-text"><strong>Cartão</strong><small>Crédito ou Débito</small></div>
+            </div>
+          </label>
+          <label class="pay-method" id="pm-cash">
+            <input type="radio" name="paymethod" value="cash" onchange="selectPayMethod('cash')">
+            <div class="pm-inner">
+              <div class="pm-icon pm-cash-ico"><i class="fas fa-money-bill-wave"></i></div>
+              <div class="pm-text"><strong>Dinheiro</strong><small>Na entrega</small></div>
+            </div>
+          </label>
+        </div>
+
+        <!-- PIX SECTION -->
+        <div id="pix-section">
+          <div class="pix-top-row">
+            <div class="pix-badge"><i class="fas fa-qrcode"></i> PAGAMENTO VIA PIX</div>
+            <div class="pix-auto-badge"><i class="fas fa-bolt"></i> Confirmação automática</div>
+          </div>
+          <p class="pix-subtitle">Aprovação automática e imediata</p>
+          <div class="pix-body">
+            <div class="pix-qr-col">
+              <div class="pix-qr-border">
+                <canvas id="qr-canvas" width="150" height="150"></canvas>
+              </div>
+              <p class="qr-label">Escaneie o QR Code</p>
+              <p class="qr-sub">Abra o app do seu banco e escaneie o código ao lado.</p>
+            </div>
+            <div class="pix-code-col">
+              <p class="pix-copy-label">Ou copie e cole o código PIX</p>
+              <div class="pix-code-box" id="pix-code">00020126580014br.gov.bcb.pix0136e54f63-4d1b-9c2d-7e8f9a8b1c2d52040000530398650212BRL59130DayLanches6008LuizAlves62070503***6304A1B2</div>
+              <button class="btn-copy-pix" id="btn-copy-pix" onclick="copyPix()">
+                <i class="fas fa-copy"></i> Copiar código
+              </button>
+            </div>
+          </div>
+          <!-- status da simulação -->
+          <div class="pix-progress" id="pix-progress">
+            <div class="pp-step pp-waiting" id="pp-1">
+              <span class="pp-icon"><i class="fas fa-circle-notch fa-spin"></i></span>
+              <span>Aguardando pagamento</span>
+            </div>
+            <div class="pp-step" id="pp-2">
+              <span class="pp-icon"><i class="fas fa-check-circle"></i></span>
+              <span>Pagamento confirmado automaticamente</span>
+            </div>
+            <div class="pp-step" id="pp-3">
+              <span class="pp-icon"><i class="fas fa-fire"></i></span>
+              <span>Pedido enviado para produção 🍔</span>
+            </div>
+          </div>
+
+          <!-- NOTA TÉCNICA: integração real com gateway de pagamento -->
+          <!--
+            ═══════════════════════════════════════════════════════════
+            INTEGRAÇÃO PIX REAL — INSTRUÇÕES PARA O DESENVOLVEDOR
+            ═══════════════════════════════════════════════════════════
+            Para substituir a simulação por pagamento real:
+
+            1. Escolha um gateway:
+               - Mercado Pago: https://www.mercadopago.com.br/developers
+               - Efí (Gerencianet): https://efi.com.br
+               - PagSeguro, Asaas, PicPay etc.
+
+            2. No BACKEND (Node.js / PHP / Python):
+               POST /api/criar-cobranca-pix
+               → Chama a API do gateway com: valor, descrição, chave PIX
+               ← Recebe: qrcode (base64), qrcode_text (copia-e-cola), txid
+
+            3. Retorne o qrcode e qrcode_text para o front-end
+               e substitua o canvas/código fictício pelos dados reais.
+
+            4. Configure um WEBHOOK no gateway:
+               Quando pagamento for confirmado → POST /api/webhook-pix
+               → Atualiza status do pedido no banco de dados
+               → Notifica o front-end via SSE ou WebSocket
+
+            5. O front-end escuta o evento e redireciona para confirmação.
+            ═══════════════════════════════════════════════════════════
+          -->
+        </div>
+
+        <!-- CARTÃO SECTION -->
+        <div id="card-section" class="pay-alt-section hidden">
+          <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <p>Pagamento com cartão na entrega. Informe ao entregador o valor total: <strong id="card-total-txt">R$ 0,00</strong></p>
+          </div>
+        </div>
+
+        <!-- DINHEIRO SECTION -->
+        <div id="cash-section" class="pay-alt-section hidden">
+          <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <p>Pagamento em dinheiro na entrega.</p>
+          </div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">Precisa de troco? Troco para:</label>
+            <input type="text" id="f-troco" class="form-input" placeholder="Ex: R$ 100,00">
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary btn-full btn-lg" onclick="confirmOrder()">
+        Confirmar pedido <i class="fas fa-check"></i>
+      </button>
+
+      <div class="trust-bar">
+        <div class="trust-item"><i class="fas fa-check-circle"></i><span>Confirmação automática</span></div>
+        <div class="trust-item"><i class="fas fa-map-location-dot"></i><span>Pedido rastreável</span></div>
+        <div class="trust-item"><i class="fab fa-whatsapp"></i><span>Atendimento rápido</span></div>
+      </div>
+    </div>
+
+  </div>
+  <!-- fim page-payment -->
+
+
+  <!-- ===================== PÁGINA: CONFIRMAÇÃO ===================== -->
+  <div id="page-confirmation" class="page">
+    <div class="confirm-wrap">
+      <div class="confirm-icon-wrap">
+        <div class="confirm-icon"><i class="fas fa-check"></i></div>
+      </div>
+      <h1 class="confirm-title">Pedido confirmado com sucesso!</h1>
+      <p class="confirm-order-num">Pedido <strong id="confirm-num">#00000</strong></p>
+
+      <div class="timeline">
+        <div class="tl-item tl-done">
+          <div class="tl-dot"><i class="fas fa-check"></i></div>
+          <div class="tl-content">
+            <strong>Pagamento aprovado</strong>
+            <span>Sua transação foi confirmada</span>
+          </div>
+        </div>
+        <div class="tl-item tl-done">
+          <div class="tl-dot"><i class="fas fa-fire"></i></div>
+          <div class="tl-content">
+            <strong>Pedido enviado para produção</strong>
+            <span>Estamos preparando com carinho</span>
+          </div>
+        </div>
+        <div class="tl-item tl-pending">
+          <div class="tl-dot"><i class="fas fa-motorcycle"></i></div>
+          <div class="tl-content">
+            <strong>Previsão de entrega</strong>
+            <span>30 a 45 minutos</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ck-card confirm-summary">
+        <h3 class="ck-card-title">Resumo do pedido</h3>
+        <div id="confirm-items-list"></div>
+        <div class="summary-total">
+          <strong>Total pago</strong>
+          <strong id="confirm-total-val" class="txt-primary">R$ 0,00</strong>
+        </div>
+      </div>
+
+      <button class="btn-whatsapp btn-full btn-lg" onclick="sendWhatsApp()">
+        <i class="fab fa-whatsapp"></i> Enviar pedido pelo WhatsApp
+      </button>
+
+      <button class="btn-secondary btn-full" onclick="navigateTo('catalog')">
+        <i class="fas fa-home"></i> Voltar ao cardápio
+      </button>
+    </div>
+  </div>
+  <!-- fim page-confirmation -->
+
+
+  <!-- ===================== CART SIDEBAR ===================== -->
+  <div class="cart-overlay" id="cart-overlay" onclick="closeCart()"></div>
+  <aside class="cart-sidebar" id="cart-sidebar" aria-label="Carrinho">
+    <div class="cart-hd">
+      <h2><i class="fas fa-shopping-cart"></i> Seu pedido</h2>
+      <button class="btn-icon btn-close-cart" onclick="closeCart()" aria-label="Fechar carrinho">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="cart-body" id="cart-body">
+      <div class="cart-empty" id="cart-empty">
+        <i class="fas fa-shopping-basket"></i>
+        <p>Seu carrinho está vazio</p>
+        <small>Adicione produtos para continuar</small>
+      </div>
+      <div id="cart-items-list"></div>
+    </div>
+    <div class="cart-ft" id="cart-ft" style="display:none">
+      <div class="cart-line"><span>Subtotal</span><span id="cart-sub">R$ 0,00</span></div>
+      <div class="cart-line"><span>Taxa de entrega</span><span id="cart-fee-txt" class="txt-primary">R$ 6,00</span></div>
+      <div class="cart-line cart-line-total">
+        <strong>Total</strong>
+        <strong id="cart-total" class="txt-primary">R$ 0,00</strong>
+      </div>
+      <button class="btn-primary btn-full btn-lg" onclick="goToCheckout()">
+        Finalizar pedido <i class="fas fa-arrow-right"></i>
+      </button>
+    </div>
+  </aside>
+
+</div><!-- fim #app -->
+
+<script src="script.js"></script>
+</body>
+</html>
