@@ -167,26 +167,15 @@ a { text-decoration: none; color: inherit; }
 ═══════════════════════════════════════════ */
 /* Barra de busca acima do carrossel */
 .search-top-bar {
-  background: linear-gradient(135deg, #111 0%, #1a1a1a 100%);
-  padding: 10px 16px 12px;
-  border-bottom: 1px solid #222;
+  background: var(--white);
+  padding: 10px 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
 }
 .search-top-bar .search-wrap {
-  margin: 0 auto;
+  margin: 0;
   max-width: 1200px;
-}
-.search-top-bar .search-input {
-  background: #fff;
-  border-color: transparent;
-  box-shadow: 0 2px 8px rgba(0,0,0,.35);
-  color: var(--text);
-}
-.search-top-bar .search-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(255,107,0,.18), 0 2px 8px rgba(0,0,0,.3);
-}
-.search-top-bar .search-ico {
-  color: #888;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .hero-carousel {
