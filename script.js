@@ -14,7 +14,7 @@ const PRODUCTS = [
     name: 'Açaí 300ml',
     desc: 'Açaí de 300ml com leite em pó e leite condensado',
     price: 25.00,
-    img: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/25539500/pexels-photo-25539500.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: [],
   },
   {
@@ -22,7 +22,7 @@ const PRODUCTS = [
     name: 'Açaí 500ml',
     desc: 'Cremoso, geladinho e perfeito para qualquer hora',
     price: 30.00,
-    img: 'https://images.unsplash.com/photo-1628557044797-f21a177c37ec?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/11094181/pexels-photo-11094181.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: ['mais'],
   },
   {
@@ -30,7 +30,7 @@ const PRODUCTS = [
     name: 'Combo Açaí 500ML',
     desc: 'Açaí 500ml + 3 adicionais grátis para você montar',
     price: 35.00,
-    img: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/25539500/pexels-photo-25539500.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: ['combo'],
   },
   /* ── ADICIONAIS AÇAÍ (produtos da loja) ── */
@@ -49,7 +49,7 @@ const PRODUCTS = [
     name: 'OREO',
     desc: 'Crocante e irresistível para seu açaí',
     price: 5.00,
-    img: null, /* trocar pela foto real */
+    img: 'https://images.pexels.com/photos/14283899/pexels-photo-14283899.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     fallbackIcon: 'fa-cookie',
     fallbackLabel: 'OREO',
     badges: ['mais'],
@@ -59,7 +59,7 @@ const PRODUCTS = [
     name: 'Paçoquinha',
     desc: 'O sabor tradicional que todo mundo ama',
     price: 1.00,
-    img: null, /* trocar pela foto real */
+    img: 'https://images.pexels.com/photos/5865653/pexels-photo-5865653.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     fallbackIcon: 'fa-square',
     fallbackLabel: 'Paçoquinha',
     badges: [],
@@ -69,7 +69,7 @@ const PRODUCTS = [
     name: 'Pirulito',
     desc: 'Docinho que alegra qualquer momento',
     price: 0.50,
-    img: null, /* trocar pela foto real */
+    img: 'https://images.pexels.com/photos/10562792/pexels-photo-10562792.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     fallbackIcon: 'fa-candy-cane',
     fallbackLabel: 'Pirulito',
     badges: [],
@@ -80,7 +80,7 @@ const PRODUCTS = [
     name: 'Burguer Duplo',
     desc: 'Dois hamburgers suculentos com queijo derretido',
     price: 20.00,
-    img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/8162589/pexels-photo-8162589.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: [],
   },
   /* ── ARTESANAIS ── */
@@ -89,7 +89,7 @@ const PRODUCTS = [
     name: 'X-Burger',
     desc: 'Hambúrguer artesanal com queijo, alface e tomate',
     price: 18.00,
-    img: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/4628466/pexels-photo-4628466.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: ['mais'],
   },
   {
@@ -97,7 +97,7 @@ const PRODUCTS = [
     name: 'X-Salada',
     desc: 'Hambúrguer com mix de folhas e molho especial',
     price: 24.00,
-    img: 'https://images.unsplash.com/photo-1550317138-10000687a72b?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/4628466/pexels-photo-4628466.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: [],
   },
   {
@@ -105,7 +105,7 @@ const PRODUCTS = [
     name: 'X-Bacon',
     desc: 'Carne artesanal com bacon crocante e cheddar',
     price: 32.00,
-    img: 'https://images.unsplash.com/photo-1553979459-d2229ba7433b?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/6088519/pexels-photo-6088519.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: ['dest'],
   },
   /* ── HOT DOGS ── */
@@ -131,7 +131,7 @@ const PRODUCTS = [
     name: 'Fritas 500g',
     desc: 'Porção de batata frita crocante e dourada',
     price: 32.00,
-    img: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/36570988/pexels-photo-36570988.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: ['mais'],
   },
   {
@@ -139,7 +139,7 @@ const PRODUCTS = [
     name: 'Fritas Bacon & Cheddar',
     desc: 'Fritas com bacon crocante, cheddar e cebolinha',
     price: 49.00,
-    img: 'https://images.unsplash.com/photo-1585109649139-366815a0d713?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/37121076/pexels-photo-37121076.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: ['dest'],
   },
   /* ── BEBIDAS ── */
@@ -148,7 +148,7 @@ const PRODUCTS = [
     name: 'Coca-Cola 2L',
     desc: 'Gelada, perfeita para acompanhar seu pedido',
     price: 16.00,
-    img: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&h=300&fit=crop&q=80',
+    img: 'https://images.pexels.com/photos/26791689/pexels-photo-26791689.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
     badges: [],
   },
 ];
@@ -415,7 +415,7 @@ function buildProductCard(p) {
         <button class="qty-btn" onclick="addToCart(${p.id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
       </div>`
     : `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})" aria-label="Adicionar ${p.name}">
-        <i class="fas fa-plus"></i>
+        <i class="fas fa-cart-plus"></i>
       </button>`;
 
   return `
@@ -451,7 +451,7 @@ function refreshProductCard(id) {
     </div>`;
   } else {
     ctrl.outerHTML = `<button class="btn-add" id="ctrl-${id}" onclick="event.stopPropagation();addToCart(${id})" aria-label="Adicionar">
-      <i class="fas fa-plus"></i>
+      <i class="fas fa-cart-plus"></i>
     </button>`;
   }
 }
@@ -1017,7 +1017,7 @@ function buildSpResultCard(p) {
         <div class="card-footer">
           <span class="card-price">R$ ${fmt(p.price)}</span>
           <button class="btn-add" onclick="event.stopPropagation();addToCart(${p.id});showToast('${safeN} adicionado!')" aria-label="Adicionar">
-            <i class="fas fa-plus"></i>
+            <i class="fas fa-cart-plus"></i>
           </button>
         </div>
       </div>
