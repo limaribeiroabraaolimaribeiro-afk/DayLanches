@@ -809,7 +809,10 @@ const carousel = {
 function initCarousel() {
   const track  = el('carousel-track');
   const dotsEl = el('carousel-dots');
-  if (!track || !dotsEl) return;
+  if (!track || !dotsEl) {
+    setTimeout(initCarousel, 200);
+    return;
+  }
 
   const slides = CAROUSEL_IDS.map(id => {
     const p    = PRODUCTS.find(p => p.id === id);

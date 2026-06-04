@@ -169,6 +169,7 @@ a { text-decoration: none; color: inherit; }
   position: relative;
   background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 60%, #2a1500 100%);
   overflow: hidden;
+  min-height: 260px;
 }
 .hero-carousel::before {
   content: '';
@@ -182,6 +183,7 @@ a { text-decoration: none; color: inherit; }
 .carousel-track-wrap {
   overflow: hidden;
   width: 100%;
+  min-height: 260px;
   cursor: grab;
   -webkit-user-select: none;
   user-select: none;
@@ -1178,6 +1180,7 @@ a { text-decoration: none; color: inherit; }
 ═══════════════════════════════════════════ */
 @media (min-width: 640px) {
   /* carousel tablet */
+  .hero-carousel, .carousel-track-wrap { min-height: 300px; }
   .slide-inner { padding: 36px 60px 56px 24px; gap: 24px; min-height: 300px; }
   .slide-img-wrap { flex: 0 0 180px; }
   .slide-img, .slide-img-placeholder { width: 172px; height: 172px; }
@@ -1199,6 +1202,7 @@ a { text-decoration: none; color: inherit; }
 ═══════════════════════════════════════════ */
 @media (min-width: 1024px) {
   /* carousel desktop */
+  .hero-carousel, .carousel-track-wrap { min-height: 350px; }
   .slide-inner { padding: 48px 80px 68px 40px; gap: 40px; min-height: 350px; }
   .slide-img-wrap { flex: 0 0 270px; }
   .slide-img, .slide-img-placeholder { width: 260px; height: 260px; }
