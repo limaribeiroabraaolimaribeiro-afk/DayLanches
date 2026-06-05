@@ -1112,6 +1112,11 @@ function goToCheckout() {
     showToast('Adicione produtos ao carrinho primeiro');
     return;
   }
+  if (!getStoreStatus().isOpen) {
+    const modal = el('closed-modal');
+    if (modal) modal.style.display = 'flex';
+    return;
+  }
   closeCart();
   navigateTo('delivery');
 }
@@ -1898,8 +1903,101 @@ function fmt(n) {
 function el(id) {
   return document.getElementById(id);
 }
+/* ──────────────────────────────────────────
+   HORÁRIO DE ATENDIMENTO
+────────────────────────────────────────── */
+function getStoreStatus() {
+  const now   = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'long',
+    hour:    '2-digit',
+    minute:  '2-digit',
+    hour12:  false,
+  }).formatToParts(now);
+
+  const DAY_MAP = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
+  const wdText  = parts.find(p => p.type === 'weekday')?.value ?? '';
+  const weekday = DAY_MAP[wdText] ?? -1;
+  const hour    = Number(parts.find(p => p.type === 'hour')?.value   ?? 0);
+  const minute  = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
+
+  const cur        = hour * 60 + minute;
+  const OPEN_DAYS  = [0, 3, 4, 5, 6]; // Dom, Qua, Qui, Sex, Sáb
+  const isOpenDay  = OPEN_DAYS.includes(weekday);
+  const isOpenTime = cur >= 17 * 60 + 30 && cur < 23 * 60;
+
+  return { isOpen: isOpenDay && isOpenTime };
+}
+
+function updateStoreStatus() {
+  const { isOpen } = getStoreStatus();
+  const banner = el('store-status-banner');
+  const badge  = el('menu-status-badge');
+  const txt    = el('menu-status-text');
+
+  if (banner) {
+    banner.style.display = 'flex';
+    banner.className = 'store-banner ' + (isOpen ? 'open' : 'closed');
+    banner.innerHTML = isOpen
+      ? `<i class="fas fa-circle-check store-banner-ico"></i>
+         <div class="store-banner-text">
+           <strong>Estamos abertos agora</strong>
+           <span>Atendimento até às 23:00.</span>
+         </div>`
+      : `<i class="fas fa-clock store-banner-ico"></i>
+         <div class="store-banner-text">
+           <strong>Estamos fechados no momento</strong>
+           <span>Nosso atendimento é de quarta a domingo, das 17:30 às 23:00.</span>
+         </div>`;
+  }
+
+  if (badge && txt) {
+    badge.className   = 'menu-status-badge ' + (isOpen ? 'open' : 'closed');
+    txt.textContent   = isOpen ? 'Aberto agora' : 'Fechado agora';
+  }
+}
+
+/* ──────────────────────────────────────────
+   MENU DRAWER
+────────────────────────────────────────── */
 function toggleMenu() {
-  showToast('Menu em breve!');
+  const drawer = el('menu-drawer');
+  if (drawer?.classList.contains('open')) closeMenu();
+  else openMenu();
+}
+
+function openMenu() {
+  const drawer  = el('menu-drawer');
+  const overlay = el('menu-overlay');
+  if (!drawer) return;
+  updateStoreStatus();
+  drawer.classList.add('open');
+  overlay?.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMenu() {
+  const drawer  = el('menu-drawer');
+  const overlay = el('menu-overlay');
+  drawer?.classList.remove('open');
+  overlay?.classList.remove('open');
+  if (!state.cartOpen && !spOpen && !ppProductId) document.body.style.overflow = '';
+}
+
+/* ──────────────────────────────────────────
+   MODAL: LOJA FECHADA
+────────────────────────────────────────── */
+function confirmClosedCheckout() {
+  const modal = el('closed-modal');
+  if (modal) modal.style.display = 'none';
+  closeCart();
+  navigateTo('delivery');
+}
+
+function cancelClosedCheckout() {
+  const modal = el('closed-modal');
+  if (modal) modal.style.display = 'none';
 }
 function handleCardImgError(img, icon) {
   const wrap = img.parentNode;
@@ -1919,6 +2017,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updateCartBar();
   renderProducts();
   initCarousel();
+  updateStoreStatus();
+  setInterval(updateStoreStatus, 60000);
 
   /* Pre-fill: apenas nome para demonstração */
   setTimeout(() => {
@@ -1954,3 +2054,8 @@ window.closeTrocoModalOutside  = closeTrocoModalOutside;
 window.confirmCashPayment      = confirmCashPayment;
 window.ppToggleAddon           = ppToggleAddon;
 window.spChooseProduct         = spChooseProduct;
+window.toggleMenu              = toggleMenu;
+window.openMenu                = openMenu;
+window.closeMenu               = closeMenu;
+window.confirmClosedCheckout   = confirmClosedCheckout;
+window.cancelClosedCheckout    = cancelClosedCheckout;

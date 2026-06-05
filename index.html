@@ -65,6 +65,9 @@
     <section class="menu-section">
       <div class="menu-inner">
 
+        <!-- BANNER STATUS DA LOJA -->
+        <div id="store-status-banner" style="display:none"></div>
+
         <div class="cats-scroll-wrap">
           <div class="cats-scroll" id="cats-scroll">
             <button class="cat-chip active" onclick="filterCat('all', this)"><i class="fas fa-th-large"></i> Todos</button>
@@ -569,8 +572,57 @@
   </div>
   <!-- fim troco-modal -->
 
+  <!-- ===================== MENU DRAWER ===================== -->
+  <div class="menu-overlay" id="menu-overlay" onclick="closeMenu()"></div>
+  <div class="menu-drawer" id="menu-drawer">
+    <div class="menu-drawer-hd">
+      <div class="logo">
+        <span class="logo-day-dark">Day</span><span class="logo-lanches-dark">Lanches</span>
+      </div>
+      <button class="btn-icon" onclick="closeMenu()" aria-label="Fechar menu">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="menu-drawer-body">
+      <div class="menu-status-row">
+        <span class="menu-status-badge" id="menu-status-badge">
+          <span class="menu-status-dot"></span>
+          <span id="menu-status-text">Verificando...</span>
+        </span>
+      </div>
+      <div class="menu-hours-card">
+        <div class="menu-hours-title"><i class="fas fa-clock"></i> Horário de atendimento</div>
+        <div class="menu-hours-row">
+          <span class="menu-hours-day">Quarta a domingo</span>
+          <span class="menu-hours-time-badge">17:30 – 23:00</span>
+        </div>
+        <div class="menu-hours-row">
+          <span class="menu-hours-day">Segunda e terça</span>
+          <span class="menu-hours-closed-badge">Fechado</span>
+        </div>
+      </div>
+      <a href="https://wa.me/554791559926" target="_blank" rel="noopener" class="menu-wa-link">
+        <i class="fab fa-whatsapp"></i> Falar no WhatsApp
+      </a>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL: LOJA FECHADA ===================== -->
+  <div class="closed-modal-overlay" id="closed-modal" style="display:none">
+    <div class="closed-modal-box">
+      <div class="closed-modal-icon"><i class="fas fa-store-slash"></i></div>
+      <h3 class="closed-modal-title">Loja fechada no momento</h3>
+      <p class="closed-modal-text">Seu pedido pode ser montado e enviado, mas o atendimento será feito no próximo horário de funcionamento.</p>
+      <p class="closed-modal-hours"><i class="fas fa-clock"></i> Quarta a domingo, 17:30 às 23:00</p>
+      <div class="closed-modal-btns">
+        <button class="btn-secondary" onclick="cancelClosedCheckout()">Cancelar</button>
+        <button class="btn-primary"   onclick="confirmClosedCheckout()">Enviar mesmo assim</button>
+      </div>
+    </div>
+  </div>
+
 </div><!-- fim #app -->
 
-<script src="script.js?v=7"></script>
+<script src="script.js?v=8"></script>
 </body>
 </html>
