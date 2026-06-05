@@ -1301,3 +1301,16 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('%c🍔 Day Lanches — Cardápio Digital', 'color:#FF6B00;font-size:16px;font-weight:bold;');
   console.log('%cProtótipo demonstrativo • Desenvolvido para apresentação comercial', 'color:#888');
 });
+
+/* Expõe funções usadas em onclick do HTML no escopo global */
+window.handlePixPayment        = handlePixPayment;
+window.handleCardPayment       = handleCardPayment;
+window.handleCashPayment       = handleCashPayment;
+window.openPixPage             = openPixPage;
+window.closePixPage            = closePixPage;
+window.copyPixKey              = copyPixKey;
+window.sendWhatsAppPixContact  = sendWhatsAppPixContact;
+window.openTrocoModal          = openTrocoModal;
+window.closeTrocoModal         = closeTrocoModal;
+window.closeTrocoModalOutside  = closeTrocoModalOutside;
+window.confirmCashPayment      = confirmCashPayment;
