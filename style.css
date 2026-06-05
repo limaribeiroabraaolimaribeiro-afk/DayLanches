@@ -534,6 +534,20 @@ a { text-decoration: none; color: inherit; }
 .pp-obs-wrap { display: flex; flex-direction: column; gap: 8px; }
 .pp-obs-label { font-size: .9rem; font-weight: 700; color: var(--text); }
 
+/* Botão principal da página de detalhes — bem visível no mobile */
+#pp-add-btn {
+  min-height: 56px;
+  height: auto;
+  padding: 16px 20px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  border-radius: 16px;
+  gap: 10px;
+  box-shadow: 0 6px 20px rgba(255,107,0,.32);
+  letter-spacing: .2px;
+}
+#pp-add-btn:active { transform: scale(.97); }
+
 @media (min-width: 640px) {
   .pp-hero { height: 320px; }
   .pp-name { font-size: 1.6rem; }
