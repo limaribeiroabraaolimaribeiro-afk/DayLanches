@@ -469,6 +469,39 @@ const PRODUCTS = [
     img: 'https://penielvicfalls.com/wp-content/uploads/2024/09/Heineken-zero-1024x1024.jpeg',
     badges: [],
   },
+  /* ── SALGADINHOS ── */
+  {
+    id: 56, cat: 'salgadinhos',
+    name: 'Salgadinho Quero S. Mais',
+    desc: 'Salgadinho crocante para acompanhar seu pedido',
+    price: 2.50,
+    img: 'https://ac9d37e35c0a3dbcbeefb2c0db18e07b.cdn.bubble.io/f1726700761916x375871732471283000/SalgadosHero.webp?ignore_imgix',
+    badges: [],
+  },
+  {
+    id: 57, cat: 'salgadinhos',
+    name: 'Salgadinho Nacho',
+    desc: 'Nachos crocantes e cheios de sabor',
+    price: 5.00,
+    img: 'https://static.itdg.com.br/images/auto-auto/258b003211e5e4925693b5dfac1d6ca6/nachos-4-ingredientes.jpg',
+    badges: [],
+  },
+  {
+    id: 58, cat: 'salgadinhos',
+    name: 'Salgadinho Batata',
+    desc: 'Salgadinho sabor batata, crocante e saboroso',
+    price: 5.00,
+    img: 'https://paulistaoatacadista.vtexassets.com/arquivos/ids/377999/SalgadinhoBatataLaysClassica70g1.jpg?v=638469844938770000',
+    badges: [],
+  },
+  {
+    id: 59, cat: 'salgadinhos',
+    name: 'Salgadinho Bacon',
+    desc: 'Salgadinho sabor bacon, perfeito para beliscar',
+    price: 5.00,
+    img: 'https://d21wiczbqxib04.cloudfront.net/w4q2-fCq48EEKLo9GFSi45JRXx8=/fit-in/600x0/filters:fill(FFFFFF):background_color(white)/https://osuper-ecommerce-koch.s3.sa-east-1.amazonaws.com/bb49cb09-SalgadinhodeBaconNabeli100G_69318.jpeg',
+    badges: [],
+  },
 ];
 
 const ACAI_CUSTOM_PRODUCT_IDS = [1, 2, 3];
@@ -949,6 +982,7 @@ function renderProducts() {
     hamburguer: '🍔 Hambúrguer',
     hotdog: '🌭 Hot Dogs',
     bebidas: '🥤 Bebidas',
+    salgadinhos: '🥨 Salgadinhos',
   };
 
   const q = state.search.toLowerCase().trim();
@@ -1260,7 +1294,7 @@ const PP_CAT_LABELS = {
   acai: '🍇 Açaí', artesanais: '🥩 Artesanais',
   combos: '🎁 Combos', porcoes: '🍟 Porções',
   hamburguer: '🍔 Hambúrguer', hotdog: '🌭 Hot Dogs',
-  bebidas: '🥤 Bebidas',
+  bebidas: '🥤 Bebidas', salgadinhos: '🥨 Salgadinhos',
 };
 
 function getPpProduct() {
