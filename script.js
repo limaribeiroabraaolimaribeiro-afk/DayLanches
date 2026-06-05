@@ -256,15 +256,10 @@ function selectAndProceed(method) {
     return;
   }
 
-  state.payMethod   = method;
-  state.orderId     = Math.floor(Math.random() * 90000) + 10000;
-
-  if (method === 'pix') {
-    openPixPage();
-  } else {
-    sendWhatsApp();
-    navigateTo('confirmation');
-  }
+  state.payMethod = method;
+  state.orderId   = Math.floor(Math.random() * 90000) + 10000;
+  sendWhatsApp();
+  navigateTo('confirmation');
 }
 
 function openPixPage() {
@@ -884,7 +879,7 @@ function sendWhatsApp() {
     (f.notes ? `\n\n📝 *Observações:*\n${f.notes}` : '') +
     locTxt;
 
-  window.open(`https://wa.me/5547991559926?text=${encodeURIComponent(message)}`, '_blank');
+  window.open(`https://wa.me/554797483342?text=${encodeURIComponent(message)}`, '_blank');
 }
 
 /* ──────────────────────────────────────────
