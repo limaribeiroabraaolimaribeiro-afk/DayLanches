@@ -374,17 +374,18 @@ a { text-decoration: none; color: inherit; }
    PÁGINA DE DETALHES DO PRODUTO
 ═══════════════════════════════════════════ */
 .product-page {
+  display: none;
   position: fixed;
   inset: 0;
   z-index: 300;
   background: var(--white);
-  display: flex;
   flex-direction: column;
-  transform: translateY(100%);
-  transition: transform .3s cubic-bezier(.4,0,.2,1);
   overflow: hidden;
 }
-.product-page.open { transform: translateY(0); }
+.product-page.open {
+  display: flex;
+  animation: pixSlideIn .3s cubic-bezier(.4,0,.2,1) both;
+}
 
 .pp-hero {
   position: relative;
@@ -562,17 +563,18 @@ a { text-decoration: none; color: inherit; }
    TELA DE PESQUISA
 ═══════════════════════════════════════════ */
 .search-page {
+  display: none;
   position: fixed;
   inset: 0;
   z-index: 300;
   background: #f5f5f5;
-  display: flex;
   flex-direction: column;
-  transform: translateY(100%);
-  transition: transform .3s cubic-bezier(.4,0,.2,1);
   overflow: hidden;
 }
-.search-page.open { transform: translateY(0); }
+.search-page.open {
+  display: flex;
+  animation: pixSlideIn .3s cubic-bezier(.4,0,.2,1) both;
+}
 
 /* Header da tela de pesquisa */
 .search-page-hd {
@@ -1154,17 +1156,22 @@ a { text-decoration: none; color: inherit; }
    TELA DE PAGAMENTO PIX
 ═══════════════════════════════════════════ */
 .pix-page {
+  display: none;
   position: fixed;
   inset: 0;
   z-index: 300;
   background: var(--bg-page);
-  display: flex;
   flex-direction: column;
-  transform: translateY(100%);
-  transition: transform .3s cubic-bezier(.4,0,.2,1);
   overflow: hidden;
 }
-.pix-page.open { transform: translateY(0); }
+.pix-page.open {
+  display: flex;
+  animation: pixSlideIn .3s cubic-bezier(.4,0,.2,1) both;
+}
+@keyframes pixSlideIn {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
 
 .pix-page-hd {
   display: flex;
