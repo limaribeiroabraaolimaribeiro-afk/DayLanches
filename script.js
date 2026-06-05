@@ -525,7 +525,7 @@ const state = {
   search:      '',
   deliveryType: 'delivery',  /* delivery | pickup */
   form: {
-    name: '', notes: ''
+    name: '', notes: '', neighborhood: '',
   },
   geo: { lat: null, lon: null, link: '', routeLink: '', distanceKm: null },
   payMethod:   '',
@@ -535,30 +535,17 @@ const state = {
   orderId:     null,
 };
 
-/* Localização da loja: R. Faustino Martini, 160 - Rio do Peixe, Luiz Alves - SC */
-const STORE_LAT = -26.740269;
-const STORE_LON = -48.846655;
-const DELIVERY_PRICE_PER_KM = 2.50;
+/* Fretes por bairro — altere os valores aqui quando necessário */
+const DELIVERY_BY_NEIGHBORHOOD = {
+  'Rio do Peixe':      6,
+  'Centro':            8,
+  'Vila do Salto':     10,
+  'Ribeirão do Padre': 12,
+  'Braço Serafim':     15,
+  'Outro bairro':      0,
+};
 
-const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 }; /* Cupons válidos (demo) */
-
-function calculateDistanceKm(lat1, lon1, lat2, lon2) {
-  const R    = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a    =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function calculateDeliveryFee() {
-  if (state.deliveryType === 'pickup') return 0;
-  if (!state.geo.lat || !state.geo.lon) return 0;
-  const dist = calculateDistanceKm(STORE_LAT, STORE_LON, Number(state.geo.lat), Number(state.geo.lon));
-  return Math.ceil(dist * DELIVERY_PRICE_PER_KM);
-}
+const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
 
 /* ── CONFIGURAÇÕES DA LOJA ── */
 // Trocar pelo número real no formato internacional (sem + e sem espaços)
@@ -579,6 +566,11 @@ function navigateTo(page) {
 
   if (page === 'delivery') {
     state.geo = { lat: null, lon: null, link: '', routeLink: '', distanceKm: null };
+    state.form.neighborhood = '';
+    const sel = el('f-neighborhood');
+    if (sel) sel.value = '';
+    const notice = el('outro-bairro-notice');
+    if (notice) notice.style.display = 'none';
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
     const stat = el('geo-status');
@@ -600,7 +592,17 @@ function goBack() {
 function setDeliveryType(type) {
   state.deliveryType = type;
   const geoCard = el('geo-card');
+  const nhCard  = el('neighborhood-card');
   if (geoCard) geoCard.style.display = type === 'pickup' ? 'none' : 'block';
+  if (nhCard)  nhCard.style.display  = type === 'pickup' ? 'none' : 'block';
+  if (type === 'pickup') {
+    state.form.neighborhood = '';
+    const sel = el('f-neighborhood');
+    if (sel) sel.value = '';
+    const notice = el('outro-bairro-notice');
+    if (notice) notice.style.display = 'none';
+  }
+  updateCartBar();
 }
 
 function requestGeoLocation() {
@@ -616,13 +618,11 @@ function requestGeoLocation() {
 
   navigator.geolocation.getCurrentPosition(
     pos => {
-      const lat         = pos.coords.latitude.toFixed(6);
-      const lon         = pos.coords.longitude.toFixed(6);
-      const link        = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-      const routeLink   = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-      const distanceKm  = calculateDistanceKm(STORE_LAT, STORE_LON, Number(lat), Number(lon));
-      const fee         = Math.ceil(distanceKm * DELIVERY_PRICE_PER_KM);
-      state.geo = { lat, lon, link, routeLink, distanceKm };
+      const lat       = pos.coords.latitude.toFixed(6);
+      const lon       = pos.coords.longitude.toFixed(6);
+      const link      = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      const routeLink = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+      state.geo = { lat, lon, link, routeLink, distanceKm: null };
 
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
       if (stat) {
@@ -632,15 +632,10 @@ function requestGeoLocation() {
             <i class="fas fa-check-circle"></i>
             <span>Localização adicionada com sucesso!</span>
           </div>
-          <div class="geo-fee-info">
-            <span><i class="fas fa-route"></i> Distância aproximada: <strong>${distanceKm.toFixed(1).replace('.', ',')} km</strong></span>
-            <span><i class="fas fa-motorcycle"></i> Frete: <strong>R$ ${fmt(fee)}</strong></span>
-          </div>
           <a href="${link}" target="_blank" rel="noopener" class="geo-map-link">
             <i class="fas fa-map-location-dot"></i> Abrir no mapa
           </a>`;
       }
-      updateCartBar();
       showToast('Localização adicionada com sucesso!');
     },
     err => {
@@ -829,7 +824,24 @@ function getSubtotal() {
 }
 
 function getDeliveryFee() {
-  return calculateDeliveryFee();
+  if (state.deliveryType === 'pickup') return 0;
+  const bairro = state.form.neighborhood;
+  if (!bairro || bairro === 'Outro bairro') return 0;
+  return DELIVERY_BY_NEIGHBORHOOD[bairro] || 0;
+}
+
+function feeDisplay() {
+  if (state.deliveryType === 'pickup') return 'Grátis';
+  if (state.form.neighborhood === 'Outro bairro') return 'A combinar';
+  const fee = getDeliveryFee();
+  return fee > 0 ? `R$ ${fmt(fee)}` : 'Grátis';
+}
+
+function handleNeighborhoodChange(val) {
+  state.form.neighborhood = val;
+  const notice = el('outro-bairro-notice');
+  if (notice) notice.style.display = val === 'Outro bairro' ? 'block' : 'none';
+  updateCartBar();
 }
 
 function getTotal() {
@@ -969,7 +981,7 @@ function renderCartItems() {
   document.getElementById('cart-sub').textContent   = `R$ ${fmt(sub)}`;
   document.getElementById('cart-total').textContent = `R$ ${fmt(total)}`;
   const feeTxt = document.getElementById('cart-fee-txt');
-  if (feeTxt) feeTxt.textContent = fee > 0 ? `R$ ${fmt(fee)}` : 'Grátis';
+  if (feeTxt) feeTxt.textContent = feeDisplay();
 }
 
 function refreshCartCount() {
@@ -1169,17 +1181,21 @@ function goToPayment() {
   }
   errBox.style.display = 'none';
 
-  if (state.deliveryType === 'delivery' && !state.geo.lat) {
-    showToast('Para calcular o frete, permita o acesso à localização.');
-    el('btn-geo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
+  if (state.deliveryType === 'delivery') {
+    if (!state.form.neighborhood) {
+      showToast('Selecione seu bairro para calcular o frete.');
+      el('f-neighborhood')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (!state.geo.lat) {
+      showToast('Para entrega, envie sua localização para facilitar a entrega.');
+      el('btn-geo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
   }
 
-  state.form = {
-    name,
-    notes: el('f-notes')?.value.trim() || '',
-  };
-
+  state.form.name  = name;
+  state.form.notes = el('f-notes')?.value.trim() || '';
   navigateTo('payment');
 }
 
@@ -1194,7 +1210,7 @@ function updatePaymentPage() {
   const tot  = Math.max(0, sub - disc + fee);
 
   el('pay-subtotal').textContent = `R$ ${fmt(sub)}`;
-  el('pay-fee').textContent      = fee > 0 ? `R$ ${fmt(fee)}` : 'Grátis';
+  el('pay-fee').textContent      = feeDisplay();
   el('pay-total').textContent    = `R$ ${fmt(tot)}`;
 
   /* Items preview */
@@ -1209,7 +1225,8 @@ function updatePaymentPage() {
   if (state.deliveryType === 'pickup') {
     if (addrTxt) addrTxt.textContent = 'Retirada no local — R. Faustino Martini, 160, Luiz Alves - SC';
   } else if (state.geo.lat) {
-    if (addrTxt) addrTxt.innerHTML = `<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Localização enviada — Abrir no mapa</a>`;
+    const bairroInfo = state.form.neighborhood ? ` • ${state.form.neighborhood}` : '';
+    if (addrTxt) addrTxt.innerHTML = `<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Localização enviada${bairroInfo} — Abrir no mapa</a>`;
   } else {
     if (addrTxt) addrTxt.textContent = 'Localização não informada';
   }
@@ -1270,7 +1287,7 @@ function updateConfirmationPage() {
   if (items) {
     items.innerHTML = state.cart.map(i =>
       `<div class="summary-line"><span>${i.qty}x ${i.name}${buildSummaryAddonsHTML(i)}</span><span>R$ ${fmt(getItemTotal(i))}</span></div>`
-    ).join('') + `<div class="summary-line"><span>Taxa de entrega</span><span>${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}</span></div>`;
+    ).join('') + `<div class="summary-line"><span>Taxa de entrega</span><span>${feeDisplay()}</span></div>`;
   }
   el('confirm-total-val').textContent = `R$ ${fmt(total)}`;
 
@@ -1306,16 +1323,17 @@ function sendWhatsApp() {
     locTxt = '';
   } else {
     tipoEntrega = 'Entrega';
+    const bairro   = state.form.neighborhood || 'Não informado';
+    const freteTxt = state.form.neighborhood === 'Outro bairro'
+      ? 'A combinar pelo WhatsApp'
+      : (getDeliveryFee() > 0 ? `R$ ${fmt(getDeliveryFee())}` : 'Grátis');
+    locTxt = `\n\n🏘️ *Bairro:* ${bairro}\n🏍️ *Frete:* ${freteTxt}`;
     if (state.geo.lat) {
-      const distTxt = state.geo.distanceKm != null
-        ? `\n\n📏 *Distância aproximada:* ${state.geo.distanceKm.toFixed(1).replace('.', ',')} km`
-        : '';
-      locTxt =
+      locTxt +=
         `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
-        `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}` +
-        distTxt;
+        `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`;
     } else {
-      locTxt = '\n\n📍 Localização não informada';
+      locTxt += '\n\n📍 Localização não informada';
     }
   }
 
@@ -2106,3 +2124,4 @@ window.openMenu                = openMenu;
 window.closeMenu               = closeMenu;
 window.confirmClosedCheckout   = confirmClosedCheckout;
 window.cancelClosedCheckout    = cancelClosedCheckout;
+window.handleNeighborhoodChange = handleNeighborhoodChange;

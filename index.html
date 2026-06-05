@@ -168,7 +168,7 @@
               <i class="fas fa-motorcycle opt-ico"></i>
               <div>
                 <strong>Entrega</strong>
-                <small>30 a 45 min &nbsp;•&nbsp; R$ 6,00</small>
+                <small>30 a 45 min &nbsp;•&nbsp; Valor por bairro</small>
               </div>
               <i class="fas fa-check opt-check"></i>
             </div>
@@ -195,20 +195,32 @@
         </div>
       </div>
 
+      <div class="ck-card" id="neighborhood-card">
+        <h3 class="ck-card-title"><i class="fas fa-map-marker-alt"></i> Bairro de entrega</h3>
+        <div class="form-group">
+          <label class="form-label">Bairro *</label>
+          <select id="f-neighborhood" class="form-input form-select" onchange="handleNeighborhoodChange(this.value)">
+            <option value="">Selecione seu bairro</option>
+            <option value="Rio do Peixe">Rio do Peixe — R$ 6,00</option>
+            <option value="Centro">Centro — R$ 8,00</option>
+            <option value="Vila do Salto">Vila do Salto — R$ 10,00</option>
+            <option value="Ribeirão do Padre">Ribeirão do Padre — R$ 12,00</option>
+            <option value="Braço Serafim">Braço Serafim — R$ 15,00</option>
+            <option value="Outro bairro">Outro bairro — combinar pelo WhatsApp</option>
+          </select>
+        </div>
+        <div id="outro-bairro-notice" class="outro-bairro-notice" style="display:none">
+          <i class="fas fa-info-circle"></i>
+          Para outro bairro, o valor da entrega será combinado pelo WhatsApp.
+        </div>
+      </div>
+
       <div class="ck-card" id="geo-card">
         <h3 class="ck-card-title"><i class="fas fa-location-dot"></i> Localização de entrega</h3>
         <button class="btn-geo" id="btn-geo" onclick="requestGeoLocation()" type="button">
           <i class="fas fa-location-dot"></i> Usar minha localização atual
         </button>
-        <div id="geo-status" style="display:none">
-          <div class="geo-success">
-            <i class="fas fa-check-circle"></i>
-            <span>Localização adicionada com sucesso!</span>
-          </div>
-          <a id="geo-link" href="#" target="_blank" rel="noopener" class="geo-map-link">
-            <i class="fas fa-map-location-dot"></i> Abrir no mapa
-          </a>
-        </div>
+        <div id="geo-status" style="display:none"></div>
       </div>
 
       <div class="ck-card">
