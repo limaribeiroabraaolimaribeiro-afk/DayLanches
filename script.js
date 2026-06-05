@@ -36,9 +36,9 @@ const PRODUCTS = [
   {
     id: 47, cat: 'combos',
     name: 'Combo Promo',
-    desc: 'Combo promocional especial por tempo limitado',
+    desc: 'X-Burger + batata por preço especial, só hoje',
     price: 29.99,
-    img: '',
+    img: "images/combo-promo.png",
     fallbackIcon: 'fa-tags',
     fallbackLabel: 'Promo',
     badges: ['novo'],
