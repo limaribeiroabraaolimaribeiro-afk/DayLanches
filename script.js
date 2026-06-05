@@ -197,8 +197,13 @@ function navigateTo(page) {
   }
   if (page === 'payment') {
     updatePaymentPage();
-    startPixSimulation();
-    drawQRCode();
+    /* startPixSimulation só é chamado quando usuário seleciona PIX */
+    /* drawQRCode removido — QR Code não é mais exibido */
+    /* Inicializa botão conforme método atual */
+    const btn = el('confirm-order-btn');
+    if (btn && state.payMethod !== 'pix') {
+      btn.innerHTML = '<i class="fab fa-whatsapp"></i> Enviar pedido pelo WhatsApp';
+    }
   }
   if (page === 'confirmation') {
     updateConfirmationPage();
@@ -573,25 +578,28 @@ function goToPayment() {
 ────────────────────────────────────────── */
 function selectPayMethod(method) {
   state.payMethod = method;
-  clearInterval(state._pixTimer);
   state.payStatus = 'idle';
 
-  /* Remove active style from all */
   document.querySelectorAll('.pay-method').forEach(m => m.classList.remove('active'));
   document.getElementById('pm-' + method)?.classList.add('active');
 
-  /* Show/hide sections */
   el('pix-section').style.display  = method === 'pix'  ? 'block' : 'none';
   el('card-section').style.display = method === 'card' ? 'block' : 'none';
   el('cash-section').style.display = method === 'cash' ? 'block' : 'none';
 
+  /* Botão confirmar muda conforme método */
+  const btn = el('confirm-order-btn');
+  if (btn) {
+    if (method === 'pix') {
+      btn.innerHTML = 'Confirmar pedido <i class="fas fa-check"></i>';
+    } else {
+      btn.innerHTML = '<i class="fab fa-whatsapp"></i> Enviar pedido pelo WhatsApp';
+    }
+  }
+
   if (method === 'card') {
     const tot = el('card-total-txt');
     if (tot) tot.textContent = `R$ ${fmt(getTotal())}`;
-  }
-  if (method === 'pix') {
-    startPixSimulation();
-    drawQRCode();
   }
 }
 
@@ -710,7 +718,24 @@ function copyPix() {
 function confirmOrder() {
   if (state.cart.length === 0) return;
   state.orderId = Math.floor(Math.random() * 90000) + 10000;
+
+  if (state.payMethod !== 'pix') {
+    /* Cartão ou Dinheiro: envia direto para o WhatsApp */
+    sendWhatsApp();
+  }
+
   navigateTo('confirmation');
+}
+
+function sendWhatsAppPixContact() {
+  const f   = state.form;
+  const msg = encodeURIComponent(
+    `🍔 *Day Lanches — Pagamento PIX*\n\n` +
+    `*Cliente:* ${f.name}\n` +
+    `*Total:* R$ ${fmt(getTotal())}\n\n` +
+    `Realizei o pagamento via PIX e aguardo a confirmação do pedido.`
+  );
+  window.open(`https://wa.me/5547991559926?text=${msg}`, '_blank');
 }
 
 /* ──────────────────────────────────────────
@@ -816,6 +841,8 @@ function sendWhatsApp() {
     localTxt = '🛵 Entrega — localização não informada';
   }
 
+  const troco = state.payMethod === 'cash' ? el('f-troco')?.value.trim() : '';
+
   const msg = encodeURIComponent(
     `🍔 *Pedido Day Lanches* 🍔\n` +
     `*Pedido nº ${state.orderId}*\n\n` +
@@ -824,8 +851,9 @@ function sendWhatsApp() {
     `*Subtotal:* R$ ${fmt(getSubtotal())}\n` +
     `*Taxa de entrega:* ${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}\n` +
     `*Total:* R$ ${fmt(getTotal())}\n\n` +
-    `*Pagamento:* ${payLabels[state.payMethod] || state.payMethod}\n` +
-    `*Entrega:* ${localTxt}` +
+    `*Pagamento:* ${payLabels[state.payMethod] || state.payMethod}` +
+    (troco ? `\n*Troco para:* ${troco}` : '') +
+    `\n*Entrega:* ${localTxt}` +
     (f.notes ? `\n\n*Observações:* ${f.notes}` : '')
   );
 

@@ -318,67 +318,26 @@
           <div class="pix-top-row">
             <div class="pix-badge"><i class="fas fa-qrcode"></i> PAGAMENTO VIA PIX</div>
           </div>
-          <p class="pix-subtitle">Após confirmar o pagamento, o pedido será liberado.</p>
-          <div class="pix-body">
-            <div class="pix-qr-col">
-              <div class="pix-qr-border">
-                <canvas id="qr-canvas" width="150" height="150"></canvas>
-              </div>
-              <p class="qr-label">Escaneie o QR Code</p>
-              <p class="qr-sub">Abra o app do seu banco e escaneie o código ao lado.</p>
-            </div>
-            <div class="pix-code-col">
-              <p class="pix-copy-label">Ou copie e cole o código PIX</p>
-              <div class="pix-code-box" id="pix-code">00020126580014br.gov.bcb.pix0136e54f63-4d1b-9c2d-7e8f9a8b1c2d52040000530398650212BRL59130DayLanches6008LuizAlves62070503***6304A1B2</div>
-              <button class="btn-copy-pix" id="btn-copy-pix" onclick="copyPix()">
-                <i class="fas fa-copy"></i> Copiar código
-              </button>
-            </div>
+          <p class="pix-subtitle">Copie o código PIX abaixo e faça o pagamento no app do seu banco.</p>
+          <p class="pix-copy-label">Código PIX — copia e cola</p>
+          <div class="pix-code-box" id="pix-code">00020126580014br.gov.bcb.pix0136e54f63-4d1b-9c2d-7e8f9a8b1c2d52040000530398650212BRL59130DayLanches6008LuizAlves62070503***6304A1B2</div>
+          <button class="btn-copy-pix" id="btn-copy-pix" onclick="copyPix()">
+            <i class="fas fa-copy"></i> Copiar código PIX
+          </button>
+          <div class="pix-waiting-status">
+            <i class="fas fa-circle-notch fa-spin"></i>
+            <span>Aguardando confirmação do pagamento</span>
           </div>
-          <!-- Status PIX — confirmação real via webhook Mercado Pago -->
-          <div class="pix-progress" id="pix-progress">
-            <div class="pp-step pp-waiting" id="pp-1">
-              <span class="pp-icon"><i class="fas fa-circle-notch fa-spin"></i></span>
-              <span>Aguardando confirmação do pagamento PIX</span>
-            </div>
-            <div class="pp-step" id="pp-2">
-              <span class="pp-icon"><i class="fas fa-check-circle"></i></span>
-              <span>Pagamento confirmado pelo banco</span>
-            </div>
-            <div class="pp-step" id="pp-3">
-              <span class="pp-icon"><i class="fas fa-fire"></i></span>
-              <span>Pedido em produção</span>
-            </div>
-          </div>
-
-          <!-- NOTA TÉCNICA: integração real com gateway de pagamento -->
           <!--
-            ═══════════════════════════════════════════════════════════
-            INTEGRAÇÃO PIX REAL — INSTRUÇÕES PARA O DESENVOLVEDOR
-            ═══════════════════════════════════════════════════════════
-            Para substituir a simulação por pagamento real:
-
-            1. Escolha um gateway:
-               - Mercado Pago: https://www.mercadopago.com.br/developers
-               - Efí (Gerencianet): https://efi.com.br
-               - PagSeguro, Asaas, PicPay etc.
-
-            2. No BACKEND (Node.js / PHP / Python):
-               POST /api/criar-cobranca-pix
-               → Chama a API do gateway com: valor, descrição, chave PIX
-               ← Recebe: qrcode (base64), qrcode_text (copia-e-cola), txid
-
-            3. Retorne o qrcode e qrcode_text para o front-end
-               e substitua o canvas/código fictício pelos dados reais.
-
-            4. Configure um WEBHOOK no gateway:
-               Quando pagamento for confirmado → POST /api/webhook-pix
-               → Atualiza status do pedido no banco de dados
-               → Notifica o front-end via SSE ou WebSocket
-
-            5. O front-end escuta o evento e redireciona para confirmação.
-            ═══════════════════════════════════════════════════════════
+            Futuramente integrar com Mercado Pago:
+            1. Criar pagamento PIX no backend via API
+            2. Gerar código copia-e-cola real (qrcode_text)
+            3. Receber confirmação via webhook POST /api/webhook-pix
+            4. Só marcar como pago quando status === "approved"
           -->
+          <button class="btn-wapp-pix" onclick="sendWhatsAppPixContact()">
+            <i class="fab fa-whatsapp"></i> Entrar em contato pelo WhatsApp
+          </button>
         </div>
 
         <!-- CARTÃO SECTION -->
@@ -402,7 +361,7 @@
         </div>
       </div>
 
-      <button class="btn-primary btn-full btn-lg" onclick="confirmOrder()">
+      <button class="btn-primary btn-full btn-lg" id="confirm-order-btn" onclick="confirmOrder()">
         Confirmar pedido <i class="fas fa-check"></i>
       </button>
 
