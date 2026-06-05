@@ -1207,6 +1207,21 @@ a { text-decoration: none; color: inherit; }
 }
 .geo-map-link:hover { text-decoration: underline; }
 
+.geo-fee-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--primary-light);
+  border: 1.5px solid #FFD5B5;
+  border-radius: var(--radius-sm);
+  font-size: .83rem;
+  color: var(--text-med);
+}
+.geo-fee-info strong { color: var(--primary-dark); }
+.geo-fee-info i { margin-right: 4px; color: var(--primary); }
+
 /* ═══════════════════════════════════════════
    BOTÕES DE FORMA DE PAGAMENTO
 ═══════════════════════════════════════════ */

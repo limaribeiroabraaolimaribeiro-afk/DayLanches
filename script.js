@@ -527,7 +527,7 @@ const state = {
   form: {
     name: '', notes: ''
   },
-  geo: { lat: null, lon: null, link: '', routeLink: '' },
+  geo: { lat: null, lon: null, link: '', routeLink: '', distanceKm: null },
   payMethod:   '',
   payStatus:   'idle',     /* idle | waiting | confirmed | production */
   couponApplied: false,
@@ -535,8 +535,30 @@ const state = {
   orderId:     null,
 };
 
-const DELIVERY_FEE = 6.00;
+/* Localização da loja: R. Faustino Martini, 160 - Rio do Peixe, Luiz Alves - SC */
+const STORE_LAT = -26.740269;
+const STORE_LON = -48.846655;
+const DELIVERY_PRICE_PER_KM = 2.50;
+
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 }; /* Cupons válidos (demo) */
+
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  const R    = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a    =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calculateDeliveryFee() {
+  if (state.deliveryType === 'pickup') return 0;
+  if (!state.geo.lat || !state.geo.lon) return 0;
+  const dist = calculateDistanceKm(STORE_LAT, STORE_LON, Number(state.geo.lat), Number(state.geo.lon));
+  return Math.ceil(dist * DELIVERY_PRICE_PER_KM);
+}
 
 /* ── CONFIGURAÇÕES DA LOJA ── */
 // Trocar pelo número real no formato internacional (sem + e sem espaços)
@@ -556,7 +578,7 @@ function navigateTo(page) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   if (page === 'delivery') {
-    state.geo = { lat: null, lon: null, link: '', routeLink: '' };
+    state.geo = { lat: null, lon: null, link: '', routeLink: '', distanceKm: null };
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
     const stat = el('geo-status');
@@ -594,16 +616,31 @@ function requestGeoLocation() {
 
   navigator.geolocation.getCurrentPosition(
     pos => {
-      const lat       = pos.coords.latitude.toFixed(6);
-      const lon       = pos.coords.longitude.toFixed(6);
-      const link      = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-      const routeLink = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-      state.geo = { lat, lon, link, routeLink };
+      const lat         = pos.coords.latitude.toFixed(6);
+      const lon         = pos.coords.longitude.toFixed(6);
+      const link        = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      const routeLink   = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+      const distanceKm  = calculateDistanceKm(STORE_LAT, STORE_LON, Number(lat), Number(lon));
+      const fee         = Math.ceil(distanceKm * DELIVERY_PRICE_PER_KM);
+      state.geo = { lat, lon, link, routeLink, distanceKm };
 
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
-      if (stat) stat.style.display = 'block';
-      const geoLink = el('geo-link');
-      if (geoLink) geoLink.href = link;
+      if (stat) {
+        stat.style.display = 'block';
+        stat.innerHTML = `
+          <div class="geo-success">
+            <i class="fas fa-check-circle"></i>
+            <span>Localização adicionada com sucesso!</span>
+          </div>
+          <div class="geo-fee-info">
+            <span><i class="fas fa-route"></i> Distância aproximada: <strong>${distanceKm.toFixed(1).replace('.', ',')} km</strong></span>
+            <span><i class="fas fa-motorcycle"></i> Frete: <strong>R$ ${fmt(fee)}</strong></span>
+          </div>
+          <a href="${link}" target="_blank" rel="noopener" class="geo-map-link">
+            <i class="fas fa-map-location-dot"></i> Abrir no mapa
+          </a>`;
+      }
+      updateCartBar();
       showToast('Localização adicionada com sucesso!');
     },
     err => {
@@ -792,7 +829,7 @@ function getSubtotal() {
 }
 
 function getDeliveryFee() {
-  return state.deliveryType === 'pickup' ? 0 : DELIVERY_FEE;
+  return calculateDeliveryFee();
 }
 
 function getTotal() {
@@ -1132,6 +1169,12 @@ function goToPayment() {
   }
   errBox.style.display = 'none';
 
+  if (state.deliveryType === 'delivery' && !state.geo.lat) {
+    showToast('Para calcular o frete, permita o acesso à localização.');
+    el('btn-geo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
   state.form = {
     name,
     notes: el('f-notes')?.value.trim() || '',
@@ -1264,9 +1307,13 @@ function sendWhatsApp() {
   } else {
     tipoEntrega = 'Entrega';
     if (state.geo.lat) {
+      const distTxt = state.geo.distanceKm != null
+        ? `\n\n📏 *Distância aproximada:* ${state.geo.distanceKm.toFixed(1).replace('.', ',')} km`
+        : '';
       locTxt =
         `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
-        `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`;
+        `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}` +
+        distTxt;
     } else {
       locTxt = '\n\n📍 Localização não informada';
     }
