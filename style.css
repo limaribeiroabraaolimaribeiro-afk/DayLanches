@@ -1815,6 +1815,27 @@ a { text-decoration: none; color: inherit; }
   border-top: 2px solid var(--border);
 }
 
+.confirm-pay-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .84rem;
+  font-weight: 600;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+.confirm-pay-note-pix {
+  background: #FFFBEB;
+  border-color: #FDE68A;
+  color: #92400E;
+}
+.confirm-pay-note-ok {
+  background: var(--success-bg);
+  border-color: #BBF7D0;
+  color: var(--success-dark);
+}
+
 /* ═══════════════════════════════════════════
    BUTTONS
 ═══════════════════════════════════════════ */
@@ -1863,6 +1884,58 @@ a { text-decoration: none; color: inherit; }
   transition: color var(--transition);
 }
 .btn-link-sm:hover { color: var(--primary-dark); }
+
+/* ═══════════════════════════════════════════
+   MODAL: TROCO
+═══════════════════════════════════════════ */
+.troco-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(3px);
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn .2s ease;
+}
+
+.troco-box {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp .25s ease both;
+}
+
+.troco-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.troco-title i { color: var(--success); }
+
+.troco-sub {
+  font-size: .88rem;
+  color: var(--text-med);
+  margin-top: -6px;
+}
+
+.troco-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.troco-btns .btn-secondary { flex: 1; }
+.troco-btns .btn-whatsapp  { flex: 2; }
 
 /* ═══════════════════════════════════════════
    TOAST NOTIFICATION

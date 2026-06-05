@@ -290,17 +290,17 @@
       <div class="ck-card">
         <h3 class="ck-card-title"><i class="fas fa-credit-card"></i> Forma de pagamento</h3>
         <div class="pay-methods-new">
-          <button class="pay-method-btn" onclick="selectAndProceed('pix')">
+          <button class="pay-method-btn" onclick="handlePixPayment()">
             <div class="pm-icon pm-pix-ico"><i class="fas fa-qrcode"></i></div>
-            <div class="pm-text"><strong>PIX</strong><small>Copiar código e pagar</small></div>
+            <div class="pm-text"><strong>PIX</strong><small>Copiar chave e pagar</small></div>
             <i class="fas fa-chevron-right pay-method-arrow"></i>
           </button>
-          <button class="pay-method-btn" onclick="selectAndProceed('card')">
+          <button class="pay-method-btn" onclick="handleCardPayment()">
             <div class="pm-icon pm-card-ico"><i class="fas fa-credit-card"></i></div>
             <div class="pm-text"><strong>Cartão</strong><small>Débito ou crédito na entrega</small></div>
             <i class="fas fa-chevron-right pay-method-arrow"></i>
           </button>
-          <button class="pay-method-btn" onclick="selectAndProceed('cash')">
+          <button class="pay-method-btn" onclick="handleCashPayment()">
             <div class="pm-icon pm-cash-ico"><i class="fas fa-money-bill-wave"></i></div>
             <div class="pm-text"><strong>Dinheiro</strong><small>Pagamento na entrega</small></div>
             <i class="fas fa-chevron-right pay-method-arrow"></i>
@@ -309,9 +309,9 @@
       </div>
 
       <div class="trust-bar">
-        <div class="trust-item"><i class="fas fa-check-circle"></i><span>Confirmação automática</span></div>
-        <div class="trust-item"><i class="fas fa-map-location-dot"></i><span>Pedido rastreável</span></div>
-        <div class="trust-item"><i class="fab fa-whatsapp"></i><span>Atendimento rápido</span></div>
+        <div class="trust-item"><i class="fab fa-whatsapp"></i><span>Pedido via WhatsApp</span></div>
+        <div class="trust-item"><i class="fas fa-map-location-dot"></i><span>Localização enviada</span></div>
+        <div class="trust-item"><i class="fas fa-bolt"></i><span>Atendimento rápido</span></div>
       </div>
     </div>
 
@@ -329,28 +329,24 @@
       <div style="width:40px"></div>
     </div>
     <div class="pix-page-body">
-      <div class="pix-top-row">
-        <div class="pix-badge"><i class="fas fa-qrcode"></i> PAGAMENTO VIA PIX</div>
-      </div>
-      <p class="pix-subtitle">Copie o código PIX abaixo e faça o pagamento no app do seu banco.</p>
-      <p class="pix-copy-label">Código PIX — copia e cola</p>
-      <div class="pix-code-box" id="pix-code">00020126580014br.gov.bcb.pix0136e54f63-4d1b-9c2d-7e8f9a8b1c2d52040000530398650212BRL59130DayLanches6008LuizAlves62070503***6304A1B2</div>
-      <button class="btn-copy-pix" id="btn-copy-pix" onclick="copyPix()">
-        <i class="fas fa-copy"></i> Copiar código PIX
+      <p class="pix-subtitle">Faça o pagamento e envie o comprovante pelo WhatsApp.</p>
+      <p class="pix-copy-label">Chave PIX da loja</p>
+      <div class="pix-code-box" id="pix-key-display"></div>
+      <button class="btn-copy-pix" id="btn-copy-pix" onclick="copyPixKey()">
+        <i class="fas fa-copy"></i> Copiar chave PIX
       </button>
       <div class="pix-waiting-status">
-        <i class="fas fa-circle-notch fa-spin"></i>
-        <span>Aguardando confirmação do pagamento</span>
+        <i class="fas fa-clock"></i>
+        <span>Aguardando envio do comprovante</span>
       </div>
-      <!--
-        Futuramente integrar com Mercado Pago:
-        1. Criar pagamento PIX no backend via API
-        2. Gerar código copia-e-cola real (qrcode_text)
-        3. Receber confirmação via webhook POST /api/webhook-pix
-        4. Só marcar como pago quando status === "approved"
-      -->
+      <!-- Futuramente:
+           integrar Mercado Pago,
+           gerar PIX real,
+           receber webhook,
+           confirmar pagamento automaticamente,
+           e criar painel ADM para acompanhar pedidos. -->
       <button class="btn-wapp-pix" onclick="sendWhatsAppPixContact()">
-        <i class="fab fa-whatsapp"></i> Entrar em contato pelo WhatsApp
+        <i class="fab fa-whatsapp"></i> Enviar comprovante pelo WhatsApp
       </button>
     </div>
   </div>
@@ -363,32 +359,33 @@
       <div class="confirm-icon-wrap">
         <div class="confirm-icon"><i class="fas fa-check"></i></div>
       </div>
-      <h1 class="confirm-title">Pedido confirmado com sucesso!</h1>
+      <h1 class="confirm-title">Pedido enviado para o WhatsApp!</h1>
       <p class="confirm-order-num">Pedido <strong id="confirm-num">#00000</strong></p>
 
       <div class="timeline">
         <div class="tl-item tl-done">
           <div class="tl-dot"><i class="fas fa-check"></i></div>
           <div class="tl-content">
-            <strong>Pagamento aprovado</strong>
-            <span>Sua transação foi confirmada</span>
+            <strong>Pedido montado com sucesso</strong>
+            <span>Seus itens foram confirmados</span>
           </div>
         </div>
         <div class="tl-item tl-done">
-          <div class="tl-dot"><i class="fas fa-fire"></i></div>
+          <div class="tl-dot"><i class="fab fa-whatsapp"></i></div>
           <div class="tl-content">
-            <strong>Pedido enviado para produção</strong>
-            <span>Estamos preparando com carinho</span>
+            <strong>Enviado para atendimento</strong>
+            <span>Mensagem enviada para a loja</span>
           </div>
         </div>
         <div class="tl-item tl-pending">
-          <div class="tl-dot"><i class="fas fa-motorcycle"></i></div>
+          <div class="tl-dot"><i class="fas fa-clock"></i></div>
           <div class="tl-content">
-            <strong>Previsão de entrega</strong>
-            <span>30 a 45 minutos</span>
+            <strong>Aguarde a confirmação da loja</strong>
+            <span>A loja irá responder em breve</span>
           </div>
         </div>
       </div>
+      <div id="confirm-pay-note" class="confirm-pay-note"></div>
 
       <div class="ck-card confirm-summary">
         <h3 class="ck-card-title">Resumo do pedido</h3>
@@ -552,6 +549,23 @@
 
   </div>
   <!-- fim search-page -->
+
+  <!-- ===================== MODAL: TROCO ===================== -->
+  <div class="troco-overlay" id="troco-modal" style="display:none" onclick="closeTrocoModalOutside(event)">
+    <div class="troco-box">
+      <h3 class="troco-title"><i class="fas fa-money-bill-wave"></i> Pagamento em Dinheiro</h3>
+      <p class="troco-sub">Precisa de troco?</p>
+      <label class="form-label" for="troco-input">Troco para quanto? <span class="txt-muted">(opcional)</span></label>
+      <input type="number" id="troco-input" class="form-input" placeholder="Ex: 50" min="0" step="1">
+      <div class="troco-btns">
+        <button class="btn-secondary" onclick="closeTrocoModal()">Cancelar</button>
+        <button class="btn-whatsapp" onclick="confirmCashPayment()">
+          <i class="fab fa-whatsapp"></i> Enviar pedido
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- fim troco-modal -->
 
 </div><!-- fim #app -->
 

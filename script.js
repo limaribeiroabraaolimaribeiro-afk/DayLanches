@@ -177,6 +177,12 @@ const state = {
 const DELIVERY_FEE = 6.00;
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 }; /* Cupons válidos (demo) */
 
+/* ── CONFIGURAÇÕES DA LOJA ── */
+// Trocar pelo número real no formato internacional (sem + e sem espaços)
+const STORE_WHATSAPP = "554797483342";
+// Trocar pela chave PIX real da loja (celular, CPF, email ou chave aleatória)
+const PIX_KEY = "47997483342";
+
 /* ──────────────────────────────────────────
    3. NAVEGAÇÃO
 ────────────────────────────────────────── */
@@ -248,21 +254,66 @@ function requestGeoLocation() {
   );
 }
 
-function selectAndProceed(method) {
-  /* Validação: entrega requer localização */
+function handlePixPayment() {
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para entrega, use o botão de localização antes de continuar.');
     navigateTo('delivery');
     return;
   }
+  state.payMethod = 'pix';
+  state.orderId   = Math.floor(Math.random() * 90000) + 10000;
+  openPixPage();
+}
 
-  state.payMethod = method;
+function handleCardPayment() {
+  if (state.deliveryType === 'delivery' && !state.geo.lat) {
+    showToast('Para entrega, use o botão de localização antes de continuar.');
+    navigateTo('delivery');
+    return;
+  }
+  state.payMethod = 'card';
   state.orderId   = Math.floor(Math.random() * 90000) + 10000;
   sendWhatsApp();
   navigateTo('confirmation');
 }
 
+function handleCashPayment() {
+  if (state.deliveryType === 'delivery' && !state.geo.lat) {
+    showToast('Para entrega, use o botão de localização antes de continuar.');
+    navigateTo('delivery');
+    return;
+  }
+  openTrocoModal();
+}
+
+function openTrocoModal() {
+  const modal = el('troco-modal');
+  if (modal) { modal.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+  const inp = el('troco-input');
+  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 100); }
+}
+
+function closeTrocoModal() {
+  const modal = el('troco-modal');
+  if (modal) modal.style.display = 'none';
+  if (!state.cartOpen && !spOpen) document.body.style.overflow = '';
+}
+
+function closeTrocoModalOutside(e) {
+  if (e.target === el('troco-modal')) closeTrocoModal();
+}
+
+function confirmCashPayment() {
+  state.payMethod = 'cash';
+  state.orderId   = state.orderId || Math.floor(Math.random() * 90000) + 10000;
+  closeTrocoModal();
+  sendWhatsApp();
+  navigateTo('confirmation');
+}
+
 function openPixPage() {
+  const keyEl = el('pix-key-display');
+  if (keyEl) keyEl.textContent = PIX_KEY;
   const page = el('pix-page');
   if (page) { page.classList.add('open'); document.body.style.overflow = 'hidden'; }
 }
@@ -595,32 +646,6 @@ function goToPayment() {
 /* ──────────────────────────────────────────
    9. PAGAMENTO
 ────────────────────────────────────────── */
-function selectPayMethod(method) {
-  state.payMethod = method;
-  state.payStatus = 'idle';
-
-  document.querySelectorAll('.pay-method').forEach(m => m.classList.remove('active'));
-  document.getElementById('pm-' + method)?.classList.add('active');
-
-  el('pix-section').style.display  = method === 'pix'  ? 'block' : 'none';
-  el('card-section').style.display = method === 'card' ? 'block' : 'none';
-  el('cash-section').style.display = method === 'cash' ? 'block' : 'none';
-
-  /* Botão confirmar muda conforme método */
-  const btn = el('confirm-order-btn');
-  if (btn) {
-    if (method === 'pix') {
-      btn.innerHTML = 'Confirmar pedido <i class="fas fa-check"></i>';
-    } else {
-      btn.innerHTML = '<i class="fab fa-whatsapp"></i> Enviar pedido pelo WhatsApp';
-    }
-  }
-
-  if (method === 'card') {
-    const tot = el('card-total-txt');
-    if (tot) tot.textContent = `R$ ${fmt(getTotal())}`;
-  }
-}
 
 function updatePaymentPage() {
   const sub  = getSubtotal();
@@ -670,156 +695,29 @@ function applyCoupon() {
 }
 
 /* ──────────────────────────────────────────
-   10. SIMULAÇÃO DE PAGAMENTO PIX
-       Para pagamento real: integrar com Mercado Pago,
-       Efí/Gerencianet ou similar via webhook backend.
+   10. PAGAMENTO — PIX
 ────────────────────────────────────────── */
-function startPixSimulation() {
-  clearInterval(state._pixTimer);
-  resetPixProgress();
-  setPixStep('waiting');
-
-  // Futuramente integrar com Mercado Pago:
-  // 1. Criar pagamento PIX no backend → receber qrcode e txid reais
-  // 2. Receber webhook POST /api/webhook-pix do Mercado Pago
-  // 3. Verificar body.action === 'payment.updated' && body.data.status === 'approved'
-  // 4. Só então atualizar pedido para "Pago" via SSE ou WebSocket ao front-end
-}
-
-function resetPixProgress() {
-  const pp1 = el('pp-1'), pp2 = el('pp-2'), pp3 = el('pp-3');
-  if (!pp1) return;
-  pp1.className = 'pp-step'; pp2.className = 'pp-step'; pp3.className = 'pp-step';
-  pp1.querySelector('.pp-icon').innerHTML = '<i class="fas fa-clock"></i>';
-  pp2.querySelector('.pp-icon').innerHTML = '<i class="fas fa-check-circle"></i>';
-  pp3.querySelector('.pp-icon').innerHTML = '<i class="fas fa-fire"></i>';
-}
-
-function setPixStep(step) {
-  state.payStatus = step;
-  const pp1 = el('pp-1'), pp2 = el('pp-2'), pp3 = el('pp-3');
-  if (!pp1) return;
-
-  if (step === 'waiting') {
-    pp1.className = 'pp-step pp-waiting';
-    pp1.querySelector('.pp-icon').innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
-  }
-  if (step === 'confirmed') {
-    pp1.className = 'pp-step pp-confirmed';
-    pp1.querySelector('.pp-icon').innerHTML = '<i class="fas fa-check-circle"></i>';
-    pp2.className = 'pp-step pp-confirmed';
-    pp2.querySelector('.pp-icon').innerHTML = '<i class="fas fa-check-circle"></i>';
-  }
-  if (step === 'production') {
-    pp3.className = 'pp-step pp-production';
-    pp3.querySelector('.pp-icon').innerHTML = '<i class="fas fa-fire"></i>';
-    // Removido: auto-confirmação por tempo
-    // Pagamento só confirma via webhook real do Mercado Pago
-  }
-}
-
-function autoConfirm() {
-  if (state.page === 'payment') confirmOrder();
-}
-
-function copyPix() {
-  const code = el('pix-code').textContent;
-  navigator.clipboard.writeText(code).catch(() => {});
+function copyPixKey() {
+  navigator.clipboard.writeText(PIX_KEY).catch(() => {});
   const btn = el('btn-copy-pix');
   btn.classList.add('copied');
   btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
   setTimeout(() => {
     btn.classList.remove('copied');
-    btn.innerHTML = '<i class="fas fa-copy"></i> Copiar código';
+    btn.innerHTML = '<i class="fas fa-copy"></i> Copiar chave PIX';
   }, 2500);
 }
 
-function confirmOrder() {
-  if (state.cart.length === 0) return;
-  state.orderId = Math.floor(Math.random() * 90000) + 10000;
-
-  if (state.payMethod !== 'pix') {
-    /* Cartão ou Dinheiro: envia direto para o WhatsApp */
-    sendWhatsApp();
-  }
-
-  navigateTo('confirmation');
-}
-
 function sendWhatsAppPixContact() {
-  /* Envia a mensagem completa do pedido (mesmo formato do cartão/dinheiro) */
   sendWhatsApp();
 }
 
-/* ──────────────────────────────────────────
-   11. QR CODE (canvas — demonstração visual)
-       Para QR Code real: usar a imagem retornada
-       pelo gateway de pagamento (Mercado Pago etc.)
-────────────────────────────────────────── */
-function drawQRCode() {
-  const canvas = el('qr-canvas');
-  if (!canvas) return;
-  const ctx  = canvas.getContext('2d');
-  const size = canvas.width;
-  const MOD  = 29;
-  const CELL = Math.floor(size / MOD);
-
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = '#000';
-
-  /* Finder patterns nos 3 cantos */
-  drawFinder(ctx, 0, 0, CELL);
-  drawFinder(ctx, (MOD - 7) * CELL, 0, CELL);
-  drawFinder(ctx, 0, (MOD - 7) * CELL, CELL);
-
-  /* Timing patterns */
-  for (let i = 8; i < MOD - 8; i++) {
-    if (i % 2 === 0) {
-      ctx.fillRect(i * CELL, 6 * CELL, CELL, CELL);
-      ctx.fillRect(6 * CELL, i * CELL, CELL, CELL);
-    }
-  }
-
-  /* Alignment pattern */
-  const ap = Math.floor(MOD / 2);
-  drawAlign(ctx, ap * CELL, ap * CELL, CELL);
-
-  /* Módulos de dados (pseudo-aleatório determinístico) */
-  let r = 0xDEADBEEF;
-  const rng = () => { r ^= r << 13; r ^= r >> 17; r ^= r << 5; return (r >>> 0) / 0x100000000; };
-
-  for (let row = 0; row < MOD; row++) {
-    for (let col = 0; col < MOD; col++) {
-      if (isReserved(row, col, MOD, ap)) continue;
-      if (rng() > 0.48) {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
-      }
-    }
-  }
-}
-
-function drawFinder(ctx, x, y, c) {
-  ctx.fillStyle = '#000'; ctx.fillRect(x, y, 7*c, 7*c);
-  ctx.fillStyle = '#fff'; ctx.fillRect(x+c, y+c, 5*c, 5*c);
-  ctx.fillStyle = '#000'; ctx.fillRect(x+2*c, y+2*c, 3*c, 3*c);
-}
-
-function drawAlign(ctx, x, y, c) {
-  ctx.fillStyle = '#000'; ctx.fillRect(x-2*c, y-2*c, 5*c, 5*c);
-  ctx.fillStyle = '#fff'; ctx.fillRect(x-c, y-c, 3*c, 3*c);
-  ctx.fillStyle = '#000'; ctx.fillRect(x, y, c, c);
-}
-
-function isReserved(r, c, MOD, ap) {
-  if (r < 9 && c < 9) return true;
-  if (r < 9 && c >= MOD-8) return true;
-  if (r >= MOD-8 && c < 9) return true;
-  if (r === 6 || c === 6) return true;
-  if (Math.abs(r - ap) <= 2 && Math.abs(c - ap) <= 2) return true;
-  return false;
-}
+// Futuramente:
+// integrar Mercado Pago,
+// gerar PIX real,
+// receber webhook,
+// confirmar pagamento automaticamente,
+// e criar painel ADM para acompanhar pedidos.
 
 /* ──────────────────────────────────────────
    12. CONFIRMAÇÃO
@@ -835,6 +733,17 @@ function updateConfirmationPage() {
     ).join('') + `<div class="summary-line"><span>Taxa de entrega</span><span>${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}</span></div>`;
   }
   el('confirm-total-val').textContent = `R$ ${fmt(total)}`;
+
+  const noteEl = el('confirm-pay-note');
+  if (noteEl) {
+    if (state.payMethod === 'pix') {
+      noteEl.innerHTML = '<i class="fas fa-circle-info"></i> Após o pagamento, envie o comprovante pelo WhatsApp.';
+      noteEl.className = 'confirm-pay-note confirm-pay-note-pix';
+    } else {
+      noteEl.innerHTML = '<i class="fas fa-circle-check"></i> A loja irá confirmar seu pedido pelo WhatsApp.';
+      noteEl.className = 'confirm-pay-note confirm-pay-note-ok';
+    }
+  }
 }
 
 /* ──────────────────────────────────────────
@@ -848,7 +757,7 @@ function sendWhatsApp() {
     card: 'Cartão na entrega/retirada',
     cash: 'Dinheiro na entrega/retirada',
   };
-  const troco = state.payMethod === 'cash' ? (el('f-troco')?.value.trim() || '') : '';
+  const troco = state.payMethod === 'cash' ? (el('troco-input')?.value.trim() || '') : '';
 
   /* Tipo e localização */
   let tipoEntrega, locTxt;
@@ -879,7 +788,7 @@ function sendWhatsApp() {
     (f.notes ? `\n\n📝 *Observações:*\n${f.notes}` : '') +
     locTxt;
 
-  window.open(`https://wa.me/554797483342?text=${encodeURIComponent(message)}`, '_blank');
+  window.open(`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
 }
 
 /* ──────────────────────────────────────────
@@ -1381,7 +1290,8 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Keyboard: ESC fecha telas abertas em ordem de prioridade */
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      if (el('pix-page')?.classList.contains('open')) closePixPage();
+      if (el('troco-modal')?.style.display === 'flex') closeTrocoModal();
+      else if (el('pix-page')?.classList.contains('open')) closePixPage();
       else if (ppProductId)         closeProductPage();
       else if (spOpen)              closeSearchPage();
       else if (state.cartOpen)      closeCart();
