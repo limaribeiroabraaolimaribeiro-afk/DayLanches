@@ -1498,6 +1498,7 @@ function ppAddToCart() {
 
   saveCart();
   refreshCartCount();
+  updateCartBar();
   refreshProductCard(ppProductId);
   renderCartItems();
 
