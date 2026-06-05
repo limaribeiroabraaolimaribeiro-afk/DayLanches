@@ -220,7 +220,7 @@ const PRODUCTS = [
     name: 'Del Valle',
     desc: 'Suco Del Valle gelado, vários sabores',
     price: 7.00,
-    img: 'https://arede.jgracia.com.br/www/i2929x241121.png',
+    img: 'https://andinacocacola.vtexassets.com/arquivos/ids/158622-800-auto?aspect=true&height=auto&v=639094449084230000&width=800',
     badges: [],
   },
   {
@@ -228,7 +228,7 @@ const PRODUCTS = [
     name: 'Guaraná',
     desc: 'Guaraná Antarctica gelado e refrescante',
     price: 6.00,
-    img: 'https://img.cdndsgni.com/preview/11046561.jpg',
+    img: 'https://drogariacristina.com.br/BACKOFFICE/Uploads/Produto/Normal/7891991000826.jpg',
     badges: [],
   },
   {

@@ -924,13 +924,17 @@ a { text-decoration: none; color: inherit; }
 }
 .product-card:hover .card-img-wrap img { transform: scale(1.05); }
 
-/* Coca-Cola: garrafa vertical usa contain para não cortar */
-.product-card[data-id="16"] .card-img-wrap img {
+/* Garrafas/latas verticais usam contain para não cortar */
+.product-card[data-id="16"] .card-img-wrap img,
+.product-card[data-id="25"] .card-img-wrap img,
+.product-card[data-id="26"] .card-img-wrap img {
   object-fit: contain;
   background: #fff;
-  padding: 6px;
+  padding: 8px;
 }
-.product-card[data-id="16"] .card-img-wrap img:hover { transform: scale(1.04); }
+.product-card[data-id="16"] .card-img-wrap img:hover,
+.product-card[data-id="25"] .card-img-wrap img:hover,
+.product-card[data-id="26"] .card-img-wrap img:hover { transform: scale(1.04); }
 
 .card-img-placeholder {
   width: 100%; height: 100%;
