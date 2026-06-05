@@ -289,81 +289,24 @@
 
       <div class="ck-card">
         <h3 class="ck-card-title"><i class="fas fa-credit-card"></i> Forma de pagamento</h3>
-        <div class="pay-methods">
-          <label class="pay-method" id="pm-pix">
-            <input type="radio" name="paymethod" value="pix" checked onchange="selectPayMethod('pix')">
-            <div class="pm-inner">
-              <div class="pm-icon pm-pix-ico"><i class="fas fa-qrcode"></i></div>
-              <div class="pm-text"><strong>PIX</strong><small>Aprovação na hora</small></div>
-            </div>
-          </label>
-          <label class="pay-method" id="pm-card">
-            <input type="radio" name="paymethod" value="card" onchange="selectPayMethod('card')">
-            <div class="pm-inner">
-              <div class="pm-icon pm-card-ico"><i class="fas fa-credit-card"></i></div>
-              <div class="pm-text"><strong>Cartão</strong><small>Crédito ou Débito</small></div>
-            </div>
-          </label>
-          <label class="pay-method" id="pm-cash">
-            <input type="radio" name="paymethod" value="cash" onchange="selectPayMethod('cash')">
-            <div class="pm-inner">
-              <div class="pm-icon pm-cash-ico"><i class="fas fa-money-bill-wave"></i></div>
-              <div class="pm-text"><strong>Dinheiro</strong><small>Na entrega</small></div>
-            </div>
-          </label>
-        </div>
-
-        <!-- PIX SECTION -->
-        <div id="pix-section">
-          <div class="pix-top-row">
-            <div class="pix-badge"><i class="fas fa-qrcode"></i> PAGAMENTO VIA PIX</div>
-          </div>
-          <p class="pix-subtitle">Copie o código PIX abaixo e faça o pagamento no app do seu banco.</p>
-          <p class="pix-copy-label">Código PIX — copia e cola</p>
-          <div class="pix-code-box" id="pix-code">00020126580014br.gov.bcb.pix0136e54f63-4d1b-9c2d-7e8f9a8b1c2d52040000530398650212BRL59130DayLanches6008LuizAlves62070503***6304A1B2</div>
-          <button class="btn-copy-pix" id="btn-copy-pix" onclick="copyPix()">
-            <i class="fas fa-copy"></i> Copiar código PIX
+        <div class="pay-methods-new">
+          <button class="pay-method-btn" onclick="selectAndProceed('pix')">
+            <div class="pm-icon pm-pix-ico"><i class="fas fa-qrcode"></i></div>
+            <div class="pm-text"><strong>PIX</strong><small>Copiar código e pagar</small></div>
+            <i class="fas fa-chevron-right pay-method-arrow"></i>
           </button>
-          <div class="pix-waiting-status">
-            <i class="fas fa-circle-notch fa-spin"></i>
-            <span>Aguardando confirmação do pagamento</span>
-          </div>
-          <!--
-            Futuramente integrar com Mercado Pago:
-            1. Criar pagamento PIX no backend via API
-            2. Gerar código copia-e-cola real (qrcode_text)
-            3. Receber confirmação via webhook POST /api/webhook-pix
-            4. Só marcar como pago quando status === "approved"
-          -->
-          <button class="btn-wapp-pix" onclick="sendWhatsAppPixContact()">
-            <i class="fab fa-whatsapp"></i> Entrar em contato pelo WhatsApp
+          <button class="pay-method-btn" onclick="selectAndProceed('card')">
+            <div class="pm-icon pm-card-ico"><i class="fas fa-credit-card"></i></div>
+            <div class="pm-text"><strong>Cartão</strong><small>Débito ou crédito na entrega</small></div>
+            <i class="fas fa-chevron-right pay-method-arrow"></i>
           </button>
-        </div>
-
-        <!-- CARTÃO SECTION -->
-        <div id="card-section" class="pay-alt-section hidden">
-          <div class="info-box">
-            <i class="fas fa-info-circle"></i>
-            <p>Pagamento com cartão na entrega. Informe ao entregador o valor total: <strong id="card-total-txt">R$ 0,00</strong></p>
-          </div>
-        </div>
-
-        <!-- DINHEIRO SECTION -->
-        <div id="cash-section" class="pay-alt-section hidden">
-          <div class="info-box">
-            <i class="fas fa-info-circle"></i>
-            <p>Pagamento em dinheiro na entrega.</p>
-          </div>
-          <div class="form-group" style="margin-top:12px">
-            <label class="form-label">Precisa de troco? Troco para:</label>
-            <input type="text" id="f-troco" class="form-input" placeholder="Ex: R$ 100,00">
-          </div>
+          <button class="pay-method-btn" onclick="selectAndProceed('cash')">
+            <div class="pm-icon pm-cash-ico"><i class="fas fa-money-bill-wave"></i></div>
+            <div class="pm-text"><strong>Dinheiro</strong><small>Pagamento na entrega</small></div>
+            <i class="fas fa-chevron-right pay-method-arrow"></i>
+          </button>
         </div>
       </div>
-
-      <button class="btn-primary btn-full btn-lg" id="confirm-order-btn" onclick="confirmOrder()">
-        Confirmar pedido <i class="fas fa-check"></i>
-      </button>
 
       <div class="trust-bar">
         <div class="trust-item"><i class="fas fa-check-circle"></i><span>Confirmação automática</span></div>
@@ -374,6 +317,44 @@
 
   </div>
   <!-- fim page-payment -->
+
+
+  <!-- ===================== TELA: PAGAMENTO PIX ===================== -->
+  <div class="pix-page" id="pix-page">
+    <div class="pix-page-hd">
+      <button class="btn-icon pix-page-back" onclick="closePixPage()" aria-label="Voltar">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <h2 class="pix-page-title">Pagamento via PIX</h2>
+      <div style="width:40px"></div>
+    </div>
+    <div class="pix-page-body">
+      <div class="pix-top-row">
+        <div class="pix-badge"><i class="fas fa-qrcode"></i> PAGAMENTO VIA PIX</div>
+      </div>
+      <p class="pix-subtitle">Copie o código PIX abaixo e faça o pagamento no app do seu banco.</p>
+      <p class="pix-copy-label">Código PIX — copia e cola</p>
+      <div class="pix-code-box" id="pix-code">00020126580014br.gov.bcb.pix0136e54f63-4d1b-9c2d-7e8f9a8b1c2d52040000530398650212BRL59130DayLanches6008LuizAlves62070503***6304A1B2</div>
+      <button class="btn-copy-pix" id="btn-copy-pix" onclick="copyPix()">
+        <i class="fas fa-copy"></i> Copiar código PIX
+      </button>
+      <div class="pix-waiting-status">
+        <i class="fas fa-circle-notch fa-spin"></i>
+        <span>Aguardando confirmação do pagamento</span>
+      </div>
+      <!--
+        Futuramente integrar com Mercado Pago:
+        1. Criar pagamento PIX no backend via API
+        2. Gerar código copia-e-cola real (qrcode_text)
+        3. Receber confirmação via webhook POST /api/webhook-pix
+        4. Só marcar como pago quando status === "approved"
+      -->
+      <button class="btn-wapp-pix" onclick="sendWhatsAppPixContact()">
+        <i class="fab fa-whatsapp"></i> Entrar em contato pelo WhatsApp
+      </button>
+    </div>
+  </div>
+  <!-- fim pix-page -->
 
 
   <!-- ===================== PÁGINA: CONFIRMAÇÃO ===================== -->

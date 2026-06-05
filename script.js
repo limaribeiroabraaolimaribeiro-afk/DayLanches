@@ -167,7 +167,7 @@ const state = {
     name: '', notes: ''
   },
   geo: { lat: null, lon: null, link: '' },
-  payMethod:   'pix',
+  payMethod:   '',
   payStatus:   'idle',     /* idle | waiting | confirmed | production */
   couponApplied: false,
   discount:    0,
@@ -197,13 +197,6 @@ function navigateTo(page) {
   }
   if (page === 'payment') {
     updatePaymentPage();
-    /* startPixSimulation só é chamado quando usuário seleciona PIX */
-    /* drawQRCode removido — QR Code não é mais exibido */
-    /* Inicializa botão conforme método atual */
-    const btn = el('confirm-order-btn');
-    if (btn && state.payMethod !== 'pix') {
-      btn.innerHTML = '<i class="fab fa-whatsapp"></i> Enviar pedido pelo WhatsApp';
-    }
   }
   if (page === 'confirmation') {
     updateConfirmationPage();
@@ -252,6 +245,31 @@ function requestGeoLocation() {
     },
     { timeout: 10000, enableHighAccuracy: true }
   );
+}
+
+function selectAndProceed(method) {
+  state.payMethod = method;
+
+  if (method === 'pix') {
+    state.orderId = Math.floor(Math.random() * 90000) + 10000;
+    openPixPage();
+  } else {
+    /* Cartão ou Dinheiro → WhatsApp direto */
+    state.orderId = Math.floor(Math.random() * 90000) + 10000;
+    sendWhatsApp();
+    navigateTo('confirmation');
+  }
+}
+
+function openPixPage() {
+  const page = el('pix-page');
+  if (page) { page.classList.add('open'); document.body.style.overflow = 'hidden'; }
+}
+
+function closePixPage() {
+  const page = el('pix-page');
+  if (page) page.classList.remove('open');
+  if (!state.cartOpen && !spOpen) document.body.style.overflow = '';
 }
 
 /* ──────────────────────────────────────────
@@ -1356,20 +1374,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const fn = el('f-name'); if (fn && !fn.value) fn.value = 'Maria da Silva';
   }, 200);
 
-  /* Inicializa seção de pagamento PIX visível */
-  const pixSec  = el('pix-section');
-  const cardSec = el('card-section');
-  const cashSec = el('cash-section');
-  if (pixSec)  pixSec.style.display  = 'block';
-  if (cardSec) cardSec.style.display = 'none';
-  if (cashSec) cashSec.style.display = 'none';
-
-  /* Keyboard: ESC fecha detalhes, pesquisa ou carrinho */
+  /* Keyboard: ESC fecha telas abertas em ordem de prioridade */
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      if (ppProductId)         closeProductPage();
-      else if (spOpen)         closeSearchPage();
-      else if (state.cartOpen) closeCart();
+      if (el('pix-page')?.classList.contains('open')) closePixPage();
+      else if (ppProductId)         closeProductPage();
+      else if (spOpen)              closeSearchPage();
+      else if (state.cartOpen)      closeCart();
     }
   });
 
