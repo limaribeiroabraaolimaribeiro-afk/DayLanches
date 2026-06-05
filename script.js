@@ -14,23 +14,23 @@ const PRODUCTS = [
     name: 'Açaí 300ml',
     desc: 'Açaí de 300ml com leite em pó e leite condensado',
     price: 25.00,
-    img: 'https://images.pexels.com/photos/25539500/pexels-photo-25539500.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
+    img: 'https://tse4.mm.bing.net/th/id/OIP.SADHoFyzV3n_a67qeGZ_4gHaHa?w=1800&h=1800&rs=1&pid=ImgDetMain&o=7&rm=3',
     badges: [],
   },
   {
     id: 2, cat: 'acai',
     name: 'Açaí 500ml',
-    desc: 'Cremoso, geladinho e perfeito para qualquer hora',
+    desc: 'Açaí cremoso e geladinho para qualquer hora',
     price: 30.00,
-    img: 'https://images.pexels.com/photos/11094181/pexels-photo-11094181.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
+    img: 'https://static-images.ifood.com.br/pratos/aaf06696-490e-41fd-b22f-d24d20697363/202404291400_5845_i.jpg',
     badges: ['mais'],
   },
   {
-    id: 3, cat: 'combos',
-    name: 'Combo Açaí 500ML',
-    desc: 'Açaí 500ml + 3 adicionais grátis para você montar',
+    id: 3, cat: 'acai',
+    name: 'Combo Açaí 500ml',
+    desc: 'Combo mais pedido: Açaí 500ml com 3 adicionais grátis',
     price: 35.00,
-    img: 'https://images.pexels.com/photos/25539500/pexels-photo-25539500.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop',
+    img: 'https://alphagel.com.br/wp-content/uploads/2022/04/post_thumbnail-a4af202467328269ce55eb0921bfd1d9.jpeg',
     badges: ['combo'],
   },
   {
@@ -69,6 +69,7 @@ const PRODUCTS = [
     fallbackIcon: 'fa-candy-cane',
     fallbackLabel: 'Freegells',
     badges: ['novo'],
+    isAddon: true,
   },
   {
     id: 5, cat: 'acai',
@@ -79,6 +80,7 @@ const PRODUCTS = [
     fallbackIcon: 'fa-cookie',
     fallbackLabel: 'OREO',
     badges: ['mais'],
+    isAddon: true,
   },
   {
     id: 6, cat: 'acai',
@@ -89,6 +91,7 @@ const PRODUCTS = [
     fallbackIcon: 'fa-square',
     fallbackLabel: 'Paçoquinha',
     badges: [],
+    isAddon: true,
   },
   {
     id: 7, cat: 'acai',
@@ -99,6 +102,7 @@ const PRODUCTS = [
     fallbackIcon: 'fa-candy-cane',
     fallbackLabel: 'Pirulito',
     badges: [],
+    isAddon: true,
   },
   /* ── HAMBÚRGUER ── */
   {
@@ -467,6 +471,16 @@ const PRODUCTS = [
   },
 ];
 
+const ACAI_CUSTOM_PRODUCT_IDS = [1, 2, 3];
+const ACAI_COMBO_PRODUCT_ID = 3;
+const ACAI_COMBO_FREE_LIMIT = 3;
+const ACAI_ADDONS = [
+  { id: 'freegells', name: 'Freegells', price: 2.50 },
+  { id: 'oreo', name: 'OREO', price: 5.00 },
+  { id: 'pacoquinha', name: 'Paçoquinha', price: 1.00 },
+  { id: 'pirulito', name: 'Pirulito', price: 0.50 },
+];
+
 /* ──────────────────────────────────────────
    2. ESTADO DA APLICAÇÃO
 ────────────────────────────────────────── */
@@ -641,20 +655,70 @@ function closePixPage() {
 /* ──────────────────────────────────────────
    4. CARRINHO
 ────────────────────────────────────────── */
+function isAcaiCustomProduct(productOrId) {
+  const id = typeof productOrId === 'object' ? productOrId.id : productOrId;
+  return ACAI_CUSTOM_PRODUCT_IDS.includes(Number(id));
+}
+
+function getBaseCartKey(id) {
+  return `p${id}_base`;
+}
+
+function getCartItemKey(item) {
+  return item.cartKey || getBaseCartKey(item.id);
+}
+
+function getItemUnitPrice(item) {
+  return Number(item.price || item.unitPrice || item.basePrice || 0);
+}
+
+function getItemTotal(item) {
+  return getItemUnitPrice(item) * item.qty;
+}
+
+function findCartItem(ref) {
+  const refStr = String(ref);
+  return state.cart.find(i => getCartItemKey(i) === refStr)
+    || state.cart.find(i => String(i.id) === refStr);
+}
+
+function createCartItem(product, qty = 1, addons = []) {
+  const unitPrice = product.price + addons.reduce((sum, addon) => sum + addon.price, 0);
+  const addonKey = addons.length
+    ? addons.map(addon => `${addon.id}${addon.free ? 'f' : 'p'}`).join('_')
+    : 'base';
+
+  return {
+    ...product,
+    qty,
+    basePrice: product.price,
+    price: unitPrice,
+    addons,
+    cartKey: `p${product.id}_${addonKey}`,
+  };
+}
+
 function getCartQty(id) {
-  const item = state.cart.find(i => i.id === id);
-  return item ? item.qty : 0;
+  return state.cart
+    .filter(i => i.id === id)
+    .reduce((sum, item) => sum + item.qty, 0);
 }
 
 function addToCart(id) {
   const product = PRODUCTS.find(p => p.id === id);
   if (!product) return;
 
-  const existing = state.cart.find(i => i.id === id);
+  if (isAcaiCustomProduct(product)) {
+    openProductPage(id);
+    return;
+  }
+
+  const item = createCartItem(product);
+  const existing = state.cart.find(i => getCartItemKey(i) === item.cartKey);
   if (existing) {
     existing.qty++;
   } else {
-    state.cart.push({ ...product, qty: 1 });
+    state.cart.push(item);
   }
   saveCart();
   refreshCartCount();
@@ -664,31 +728,34 @@ function addToCart(id) {
   showToast(`${product.name} adicionado!`);
 }
 
-function changeQty(id, delta) {
-  const item = state.cart.find(i => i.id === id);
+function changeQty(ref, delta) {
+  const item = findCartItem(ref);
   if (!item) return;
+  const key = getCartItemKey(item);
   item.qty += delta;
   if (item.qty <= 0) {
-    state.cart = state.cart.filter(i => i.id !== id);
+    state.cart = state.cart.filter(i => getCartItemKey(i) !== key);
   }
   saveCart();
   refreshCartCount();
   updateCartBar();
-  refreshProductCard(id);
+  refreshProductCard(item.id);
   renderCartItems();
 }
 
-function removeFromCart(id) {
-  state.cart = state.cart.filter(i => i.id !== id);
+function removeFromCart(ref) {
+  const item = findCartItem(ref);
+  const key = item ? getCartItemKey(item) : String(ref);
+  state.cart = state.cart.filter(i => getCartItemKey(i) !== key);
   saveCart();
   refreshCartCount();
   updateCartBar();
-  refreshProductCard(id);
+  if (item) refreshProductCard(item.id);
   renderCartItems();
 }
 
 function getSubtotal() {
-  return state.cart.reduce((s, i) => s + i.price * i.qty, 0);
+  return state.cart.reduce((s, i) => s + getItemTotal(i), 0);
 }
 
 function getDeliveryFee() {
@@ -702,10 +769,30 @@ function getTotal() {
 function saveCart() {
   try { localStorage.setItem('daylanches_cart', JSON.stringify(state.cart)); } catch(e) {}
 }
+
+function normalizeCartItem(item) {
+  const product = PRODUCTS.find(p => p.id === item.id);
+  if (!product) return item;
+
+  const addons = (item.addons || []).map(addon => {
+    const cfg = ACAI_ADDONS.find(a => a.id === addon.id);
+    const basePrice = cfg ? cfg.price : Number(addon.basePrice || addon.price || 0);
+    return {
+      id: addon.id,
+      name: cfg ? cfg.name : addon.name,
+      basePrice,
+      price: addon.free ? 0 : basePrice,
+      free: !!addon.free,
+    };
+  });
+
+  return createCartItem(product, Number(item.qty || 1), addons);
+}
+
 function loadCart() {
   try {
     const saved = localStorage.getItem('daylanches_cart');
-    if (saved) state.cart = JSON.parse(saved);
+    if (saved) state.cart = JSON.parse(saved).map(normalizeCartItem);
   } catch(e) {}
 }
 
@@ -727,6 +814,43 @@ function closeCart() {
   document.body.style.overflow = '';
 }
 
+function buildCartAddonsHTML(item) {
+  if (!item.addons || item.addons.length === 0) return '';
+
+  const free = item.addons.filter(addon => addon.free).map(addon => addon.name);
+  const paid = item.addons.filter(addon => !addon.free).map(addon => addon.name);
+  const rows = [];
+
+  if (free.length) rows.push(`<div class="ci-addons">Adicionais grátis: ${free.join(', ')}</div>`);
+  if (paid.length) rows.push(`<div class="ci-addons">Adicionais: ${paid.join(', ')}</div>`);
+
+  return rows.join('');
+}
+
+function getAddonGroups(item) {
+  const addons = item.addons || [];
+  return {
+    free: addons.filter(addon => addon.free).map(addon => addon.name),
+    paid: addons.filter(addon => !addon.free).map(addon => addon.name),
+  };
+}
+
+function buildSummaryAddonsHTML(item) {
+  const { free, paid } = getAddonGroups(item);
+  const rows = [];
+  if (free.length) rows.push(`Adicionais grátis: ${free.join(', ')}`);
+  if (paid.length) rows.push(`Adicionais: ${paid.join(', ')}`);
+  return rows.length ? `<small class="summary-addons">${rows.join('<br>')}</small>` : '';
+}
+
+function buildWhatsAppItemText(item) {
+  const { free, paid } = getAddonGroups(item);
+  let text = `• ${item.qty}x ${item.name} — R$ ${fmt(getItemTotal(item))}`;
+  if (free.length) text += `\n  Adicionais grátis: ${free.join(', ')}`;
+  if (paid.length) text += `\n  Adicionais: ${paid.join(', ')}`;
+  return text;
+}
+
 function renderCartItems() {
   const list    = document.getElementById('cart-items-list');
   const empty   = document.getElementById('cart-empty');
@@ -741,28 +865,32 @@ function renderCartItems() {
   empty.style.display = 'none';
   footer.style.display = 'block';
 
-  list.innerHTML = state.cart.map(item => `
-    <div class="cart-item">
-      ${item.img
-        ? `<img class="ci-img" src="${item.img}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'">`
-        : `<div class="ci-img" style="display:flex;align-items:center;justify-content:center;background:#f3f3f3;border-radius:8px"><i class="fas ${item.fallbackIcon || 'fa-utensils'}" style="color:#aaa;font-size:1.3rem"></i></div>`
-      }
-      <div class="ci-info">
-        <div class="ci-name">${item.name}</div>
-        <div class="ci-price">R$ ${fmt(item.price)}</div>
-        <div class="ci-controls">
-          <button class="ci-btn minus-btn" onclick="changeQty(${item.id}, -1)" aria-label="Diminuir">
-            <i class="fas ${item.qty === 1 ? 'fa-trash' : 'fa-minus'}"></i>
-          </button>
-          <span class="ci-qty">${item.qty}</span>
-          <button class="ci-btn" onclick="changeQty(${item.id}, 1)" aria-label="Aumentar">
-            <i class="fas fa-plus"></i>
-          </button>
+  list.innerHTML = state.cart.map(item => {
+    const key = getCartItemKey(item);
+    return `
+      <div class="cart-item">
+        ${item.img
+          ? `<img class="ci-img" src="${item.img}" alt="${item.name}" loading="lazy" onerror="this.style.display='none'">`
+          : `<div class="ci-img" style="display:flex;align-items:center;justify-content:center;background:#f3f3f3;border-radius:8px"><i class="fas ${item.fallbackIcon || 'fa-utensils'}" style="color:#aaa;font-size:1.3rem"></i></div>`
+        }
+        <div class="ci-info">
+          <div class="ci-name">${item.name}</div>
+          <div class="ci-price">R$ ${fmt(getItemUnitPrice(item))}</div>
+          ${buildCartAddonsHTML(item)}
+          <div class="ci-controls">
+            <button class="ci-btn minus-btn" onclick="changeQty('${key}', -1)" aria-label="Diminuir">
+              <i class="fas ${item.qty === 1 ? 'fa-trash' : 'fa-minus'}"></i>
+            </button>
+            <span class="ci-qty">${item.qty}</span>
+            <button class="ci-btn" onclick="changeQty('${key}', 1)" aria-label="Aumentar">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
         </div>
+        <div class="ci-total">R$ ${fmt(getItemTotal(item))}</div>
       </div>
-      <div class="ci-total">R$ ${fmt(item.price * item.qty)}</div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   const sub   = getSubtotal();
   const fee   = getDeliveryFee();
@@ -825,6 +953,7 @@ function renderProducts() {
 
   const q = state.search.toLowerCase().trim();
   const filtered = PRODUCTS.filter(p => {
+    if (p.isAddon) return false;
     const matchCat    = state.cat === 'all' || p.cat === state.cat;
     const matchSearch = !q || p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q);
     return matchCat && matchSearch;
@@ -846,6 +975,24 @@ function renderProducts() {
   grid.innerHTML = filtered.map(p => buildProductCard(p)).join('');
 }
 
+function buildProductControl(p, qty) {
+  if (isAcaiCustomProduct(p)) {
+    return `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();openProductPage(${p.id})" aria-label="Escolher adicionais de ${p.name}">
+      <i class="fas fa-sliders"></i> Escolher
+    </button>`;
+  }
+
+  return qty > 0
+    ? `<div class="qty-ctrl" id="ctrl-${p.id}" onclick="event.stopPropagation()">
+        <button class="qty-btn" onclick="changeQty(${p.id},-1)" aria-label="Diminuir"><i class="fas fa-minus"></i></button>
+        <span class="qty-val">${qty}</span>
+        <button class="qty-btn" onclick="addToCart(${p.id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
+      </div>`
+    : `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})" aria-label="Adicionar ${p.name}">
+        <i class="fas fa-cart-plus"></i> Adicionar
+      </button>`;
+}
+
 function buildProductCard(p) {
   const qty = getCartQty(p.id);
   const badgeMap = {
@@ -863,15 +1010,7 @@ function buildProductCard(p) {
     ? `<img src="${p.img}" alt="${p.name}" loading="lazy" onerror="handleCardImgError(this,'${icon}')">`
     : `<div class="card-img-placeholder"><i class="fas ${icon}"></i><span>Foto em breve</span></div>`;
 
-  const ctrlHTML = qty > 0
-    ? `<div class="qty-ctrl" id="ctrl-${p.id}" onclick="event.stopPropagation()">
-        <button class="qty-btn" onclick="changeQty(${p.id},-1)" aria-label="Diminuir"><i class="fas fa-minus"></i></button>
-        <span class="qty-val">${qty}</span>
-        <button class="qty-btn" onclick="addToCart(${p.id})" aria-label="Aumentar"><i class="fas fa-plus"></i></button>
-      </div>`
-    : `<button class="btn-add" id="ctrl-${p.id}" onclick="event.stopPropagation();addToCart(${p.id})" aria-label="Adicionar ${p.name}">
-        <i class="fas fa-cart-plus"></i> Adicionar
-      </button>`;
+  const ctrlHTML = buildProductControl(p, qty);
 
   return `
     <div class="product-card" data-id="${p.id}" onclick="openProductPage(${p.id})">
@@ -897,6 +1036,11 @@ function refreshProductCard(id) {
   const qty = getCartQty(id);
   const ctrl = card.querySelector(`#ctrl-${id}`);
   if (!ctrl) return;
+
+  if (isAcaiCustomProduct(p)) {
+    ctrl.outerHTML = buildProductControl(p, qty);
+    return;
+  }
 
   if (qty > 0) {
     ctrl.outerHTML = `<div class="qty-ctrl" id="ctrl-${id}" onclick="event.stopPropagation()">
@@ -1043,7 +1187,7 @@ function updateConfirmationPage() {
   const total = getTotal();
   if (items) {
     items.innerHTML = state.cart.map(i =>
-      `<div class="summary-line"><span>${i.qty}x ${i.name}</span><span>R$ ${fmt(i.price * i.qty)}</span></div>`
+      `<div class="summary-line"><span>${i.qty}x ${i.name}${buildSummaryAddonsHTML(i)}</span><span>R$ ${fmt(getItemTotal(i))}</span></div>`
     ).join('') + `<div class="summary-line"><span>Taxa de entrega</span><span>${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}</span></div>`;
   }
   el('confirm-total-val').textContent = `R$ ${fmt(total)}`;
@@ -1065,7 +1209,7 @@ function updateConfirmationPage() {
 ────────────────────────────────────────── */
 function sendWhatsApp() {
   const f         = state.form;
-  const items     = state.cart.map(i => `• ${i.qty}x ${i.name} — R$ ${fmt(i.price * i.qty)}`).join('\n');
+  const items     = state.cart.map(i => buildWhatsAppItemText(i)).join('\n');
   const payLabels = {
     pix:  'PIX',
     card: 'Cartão na entrega/retirada',
@@ -1110,6 +1254,7 @@ function sendWhatsApp() {
 ────────────────────────────────────────── */
 let ppProductId = null;
 let ppQty = 1;
+let ppSelectedAddons = [];
 
 const PP_CAT_LABELS = {
   acai: '🍇 Açaí', artesanais: '🥩 Artesanais',
@@ -1118,11 +1263,137 @@ const PP_CAT_LABELS = {
   bebidas: '🥤 Bebidas',
 };
 
+function getPpProduct() {
+  return PRODUCTS.find(p => p.id === ppProductId);
+}
+
+function ensurePpAddonsSection() {
+  let wrap = el('pp-addons-wrap');
+  if (wrap) return wrap;
+
+  wrap = document.createElement('div');
+  wrap.className = 'pp-addons-wrap';
+  wrap.id = 'pp-addons-wrap';
+  wrap.style.display = 'none';
+  wrap.innerHTML = `
+    <div class="pp-addons-head">
+      <div>
+        <h2>Adicionais</h2>
+        <p id="pp-addons-subtitle"></p>
+      </div>
+      <span id="pp-addons-count"></span>
+    </div>
+    <div class="pp-addons-list" id="pp-addons-list"></div>
+    <div class="pp-addons-note" id="pp-addons-note"></div>
+  `;
+
+  const qtyRow = document.querySelector('.pp-qty-row');
+  if (qtyRow) qtyRow.insertAdjacentElement('afterend', wrap);
+  return wrap;
+}
+
+function getPpSelectedAddons(product) {
+  const freeLimit = product?.id === ACAI_COMBO_PRODUCT_ID ? ACAI_COMBO_FREE_LIMIT : 0;
+  return ppSelectedAddons
+    .map((id, index) => {
+      const addon = ACAI_ADDONS.find(a => a.id === id);
+      if (!addon) return null;
+      const free = index < freeLimit;
+      return {
+        ...addon,
+        basePrice: addon.price,
+        price: free ? 0 : addon.price,
+        free,
+      };
+    })
+    .filter(Boolean);
+}
+
+function getPpUnitPrice(product) {
+  if (!product) return 0;
+  return product.price + getPpSelectedAddons(product).reduce((sum, addon) => sum + addon.price, 0);
+}
+
+function updatePpAddButton() {
+  const p = getPpProduct();
+  const btn = el('pp-add-btn');
+  if (!p || !btn) return;
+  btn.innerHTML = `<i class="fas fa-plus"></i> Adicionar ao carrinho — R$ ${fmt(getPpUnitPrice(p) * ppQty)}`;
+}
+
+function renderPpAddons(product) {
+  const wrap = ensurePpAddonsSection();
+  if (!wrap) return;
+
+  if (!isAcaiCustomProduct(product)) {
+    wrap.style.display = 'none';
+    updatePpAddButton();
+    return;
+  }
+
+  const isCombo = product.id === ACAI_COMBO_PRODUCT_ID;
+  const selectedAddons = getPpSelectedAddons(product);
+  const freeCount = selectedAddons.filter(addon => addon.free).length;
+  const paidCount = selectedAddons.length - freeCount;
+
+  wrap.style.display = 'flex';
+  el('pp-addons-subtitle').textContent = isCombo
+    ? 'Escolha até 3 adicionais grátis. Seleções extras são cobradas.'
+    : 'Monte seu açaí com os adicionais que quiser.';
+  el('pp-addons-count').textContent = isCombo
+    ? `${freeCount}/${ACAI_COMBO_FREE_LIMIT} grátis`
+    : `${selectedAddons.length} selecionado${selectedAddons.length === 1 ? '' : 's'}`;
+
+  el('pp-addons-list').innerHTML = ACAI_ADDONS.map(addon => {
+    const selectedIndex = ppSelectedAddons.indexOf(addon.id);
+    const selected = selectedIndex !== -1;
+    const free = isCombo && selected && selectedIndex < ACAI_COMBO_FREE_LIMIT;
+    const priceLabel = free ? 'Grátis' : `R$ ${fmt(addon.price)}`;
+    return `
+      <button
+        type="button"
+        class="pp-addon${selected ? ' selected' : ''}"
+        onclick="ppToggleAddon('${addon.id}')"
+        aria-pressed="${selected ? 'true' : 'false'}"
+      >
+        <span class="pp-addon-check"><i class="fas fa-check"></i></span>
+        <span class="pp-addon-name">${addon.name}</span>
+        <span class="pp-addon-price">${priceLabel}</span>
+      </button>
+    `;
+  }).join('');
+
+  const note = el('pp-addons-note');
+  if (note) {
+    if (isCombo && selectedAddons.length > ACAI_COMBO_FREE_LIMIT) {
+      note.textContent = `${freeCount} adicionais grátis e ${paidCount} adicional${paidCount === 1 ? '' : 'is'} cobrado${paidCount === 1 ? '' : 's'} no total.`;
+    } else if (isCombo) {
+      note.textContent = 'Os 3 primeiros adicionais selecionados não alteram o preço do combo.';
+    } else {
+      const addTotal = selectedAddons.reduce((sum, addon) => sum + addon.price, 0);
+      note.textContent = addTotal > 0 ? `Adicionais somam R$ ${fmt(addTotal)} ao produto.` : 'Selecione para adicionar ao seu açaí.';
+    }
+  }
+
+  updatePpAddButton();
+}
+
+function ppToggleAddon(addonId) {
+  const idx = ppSelectedAddons.indexOf(addonId);
+  if (idx === -1) {
+    ppSelectedAddons.push(addonId);
+  } else {
+    ppSelectedAddons.splice(idx, 1);
+  }
+  renderPpAddons(getPpProduct());
+}
+
 function openProductPage(id) {
   const p = PRODUCTS.find(p => p.id === id);
   if (!p) return;
   ppProductId = id;
   ppQty = 1;
+  ppSelectedAddons = [];
 
   /* Imagem */
   const hero = el('pp-hero');
@@ -1158,6 +1429,8 @@ function openProductPage(id) {
   const obs = el('pp-obs');
   if (obs) obs.value = '';
 
+  renderPpAddons(p);
+
   const page = el('product-page');
   if (page) { page.classList.add('open'); document.body.style.overflow = 'hidden'; }
 }
@@ -1167,11 +1440,13 @@ function closeProductPage() {
   if (page) page.classList.remove('open');
   if (!state.cartOpen && !spOpen) document.body.style.overflow = '';
   ppProductId = null;
+  ppSelectedAddons = [];
 }
 
 function ppChangeQty(delta) {
   ppQty = Math.max(1, ppQty + delta);
   el('pp-qty-val').textContent = ppQty;
+  updatePpAddButton();
 }
 
 function ppAddToCart() {
@@ -1179,11 +1454,12 @@ function ppAddToCart() {
   const p = PRODUCTS.find(p => p.id === ppProductId);
   if (!p) return;
 
-  const existing = state.cart.find(c => c.id === ppProductId);
+  const item = createCartItem(p, ppQty, getPpSelectedAddons(p));
+  const existing = state.cart.find(c => getCartItemKey(c) === item.cartKey);
   if (existing) {
     existing.qty += ppQty;
   } else {
-    state.cart.push({ ...p, qty: ppQty });
+    state.cart.push(item);
   }
 
   saveCart();
@@ -1328,6 +1604,14 @@ function buildSpResultCard(p) {
   const imgHTML = p.img
     ? `<img src="${p.img}" alt="${p.name}" loading="lazy" onerror="handleCardImgError(this,'${icon}')">`
     : `<div class="card-img-placeholder"><i class="fas ${icon}"></i></div>`;
+  const btnHTML = isAcaiCustomProduct(p)
+    ? `<button class="btn-add" onclick="event.stopPropagation();spChooseProduct(${p.id})" aria-label="Escolher adicionais">
+        <i class="fas fa-sliders"></i> Escolher
+      </button>`
+    : `<button class="btn-add" onclick="event.stopPropagation();addToCart(${p.id});showToast('${safeN} adicionado!')" aria-label="Adicionar">
+        <i class="fas fa-cart-plus"></i> Adicionar
+      </button>`;
+
   return `
     <div class="product-card" onclick="spSelectProduct(${p.id})">
       <div class="card-img-wrap">${imgHTML}</div>
@@ -1336,9 +1620,7 @@ function buildSpResultCard(p) {
         <p class="card-desc">${p.desc}</p>
         <div class="card-footer">
           <span class="card-price">R$ ${fmt(p.price)}</span>
-          <button class="btn-add" onclick="event.stopPropagation();addToCart(${p.id});showToast('${safeN} adicionado!')" aria-label="Adicionar">
-            <i class="fas fa-cart-plus"></i> Adicionar
-          </button>
+          ${btnHTML}
         </div>
       </div>
     </div>`;
@@ -1350,7 +1632,7 @@ function renderSpResults(q) {
   if (!list || !noRes) return;
   const ql = q.toLowerCase();
   const filtered = PRODUCTS.filter(p =>
-    p.name.toLowerCase().includes(ql) || p.desc.toLowerCase().includes(ql)
+    !p.isAddon && (p.name.toLowerCase().includes(ql) || p.desc.toLowerCase().includes(ql))
   );
   if (!filtered.length) {
     list.innerHTML = '';
@@ -1385,6 +1667,13 @@ function spSelectProduct(id) {
     const p = PRODUCTS.find(p => p.id === id);
     scrollToCategory(p ? p.cat : 'all', id);
   }, 320);
+}
+
+function spChooseProduct(id) {
+  const term = el('sp-input')?.value.trim();
+  if (term) saveSpHistory(term);
+  closeSearchPage();
+  setTimeout(() => openProductPage(id), 320);
 }
 
 /* ──────────────────────────────────────────
@@ -1628,3 +1917,5 @@ window.openTrocoModal          = openTrocoModal;
 window.closeTrocoModal         = closeTrocoModal;
 window.closeTrocoModalOutside  = closeTrocoModalOutside;
 window.confirmCashPayment      = confirmCashPayment;
+window.ppToggleAddon           = ppToggleAddon;
+window.spChooseProduct         = spChooseProduct;
