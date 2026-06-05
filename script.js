@@ -166,7 +166,7 @@ const state = {
   form: {
     name: '', notes: ''
   },
-  geo: { lat: null, lon: null, link: '' },
+  geo: { lat: null, lon: null, link: '', routeLink: '' },
   payMethod:   '',
   payStatus:   'idle',     /* idle | waiting | confirmed | production */
   couponApplied: false,
@@ -189,7 +189,7 @@ function navigateTo(page) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   if (page === 'delivery') {
-    state.geo = { lat: null, lon: null, link: '' };
+    state.geo = { lat: null, lon: null, link: '', routeLink: '' };
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
     const stat = el('geo-status');
@@ -227,10 +227,11 @@ function requestGeoLocation() {
 
   navigator.geolocation.getCurrentPosition(
     pos => {
-      const lat  = pos.coords.latitude.toFixed(6);
-      const lon  = pos.coords.longitude.toFixed(6);
-      const link = `https://www.google.com/maps?q=${lat},${lon}`;
-      state.geo  = { lat, lon, link };
+      const lat       = pos.coords.latitude.toFixed(6);
+      const lon       = pos.coords.longitude.toFixed(6);
+      const link      = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      const routeLink = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+      state.geo = { lat, lon, link, routeLink };
 
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
       if (stat) stat.style.display = 'block';
@@ -248,14 +249,19 @@ function requestGeoLocation() {
 }
 
 function selectAndProceed(method) {
-  state.payMethod = method;
+  /* Validação: entrega requer localização */
+  if (state.deliveryType === 'delivery' && !state.geo.lat) {
+    showToast('Para entrega, use o botão de localização antes de continuar.');
+    navigateTo('delivery');
+    return;
+  }
+
+  state.payMethod   = method;
+  state.orderId     = Math.floor(Math.random() * 90000) + 10000;
 
   if (method === 'pix') {
-    state.orderId = Math.floor(Math.random() * 90000) + 10000;
     openPixPage();
   } else {
-    /* Cartão ou Dinheiro → WhatsApp direto */
-    state.orderId = Math.floor(Math.random() * 90000) + 10000;
     sendWhatsApp();
     navigateTo('confirmation');
   }
@@ -746,14 +752,8 @@ function confirmOrder() {
 }
 
 function sendWhatsAppPixContact() {
-  const f   = state.form;
-  const msg = encodeURIComponent(
-    `🍔 *Day Lanches — Pagamento PIX*\n\n` +
-    `*Cliente:* ${f.name}\n` +
-    `*Total:* R$ ${fmt(getTotal())}\n\n` +
-    `Realizei o pagamento via PIX e aguardo a confirmação do pedido.`
-  );
-  window.open(`https://wa.me/5547991559926?text=${msg}`, '_blank');
+  /* Envia a mensagem completa do pedido (mesmo formato do cartão/dinheiro) */
+  sendWhatsApp();
 }
 
 /* ──────────────────────────────────────────
@@ -846,36 +846,45 @@ function updateConfirmationPage() {
    13. WHATSAPP
 ────────────────────────────────────────── */
 function sendWhatsApp() {
-  const f     = state.form;
-  const items = state.cart.map(i => `• ${i.qty}x ${i.name} — R$ ${fmt(i.price * i.qty)}`).join('\n');
-  const payLabels = { pix: 'PIX ✅', card: 'Cartão 💳', cash: 'Dinheiro 💵' };
+  const f         = state.form;
+  const items     = state.cart.map(i => `• ${i.qty}x ${i.name} — R$ ${fmt(i.price * i.qty)}`).join('\n');
+  const payLabels = {
+    pix:  'PIX',
+    card: 'Cartão na entrega/retirada',
+    cash: 'Dinheiro na entrega/retirada',
+  };
+  const troco = state.payMethod === 'cash' ? (el('f-troco')?.value.trim() || '') : '';
 
-  let localTxt;
+  /* Tipo e localização */
+  let tipoEntrega, locTxt;
   if (state.deliveryType === 'pickup') {
-    localTxt = '🏪 Retirada no local — R. Faustino Martini, 160, Luiz Alves - SC';
-  } else if (state.geo.lat) {
-    localTxt = `🛵 Entrega\n📍 Localização: ${state.geo.link}`;
+    tipoEntrega = 'Retirada no local';
+    locTxt = '';
   } else {
-    localTxt = '🛵 Entrega — localização não informada';
+    tipoEntrega = 'Entrega';
+    if (state.geo.lat) {
+      locTxt =
+        `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
+        `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`;
+    } else {
+      locTxt = '\n\n📍 Localização não informada';
+    }
   }
 
-  const troco = state.payMethod === 'cash' ? el('f-troco')?.value.trim() : '';
+  const message =
+    `Olá, Day Lanches! Quero fazer um pedido.\n\n` +
+    `👤 *Nome:* ${f.name}\n\n` +
+    `📦 *Tipo do pedido:* ${tipoEntrega}\n\n` +
+    `🛒 *Pedido:*\n${items}\n\n` +
+    `💰 *Subtotal:* R$ ${fmt(getSubtotal())}\n` +
+    `🚚 *Taxa de entrega:* ${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}\n` +
+    `💰 *Total:* R$ ${fmt(getTotal())}\n\n` +
+    `💳 *Forma de pagamento:* ${payLabels[state.payMethod] || state.payMethod}` +
+    (troco ? `\n💵 *Troco para:* R$ ${troco}` : '') +
+    (f.notes ? `\n\n📝 *Observações:*\n${f.notes}` : '') +
+    locTxt;
 
-  const msg = encodeURIComponent(
-    `🍔 *Pedido Day Lanches* 🍔\n` +
-    `*Pedido nº ${state.orderId}*\n\n` +
-    `*Cliente:* ${f.name}\n\n` +
-    `*Itens:*\n${items}\n\n` +
-    `*Subtotal:* R$ ${fmt(getSubtotal())}\n` +
-    `*Taxa de entrega:* ${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}\n` +
-    `*Total:* R$ ${fmt(getTotal())}\n\n` +
-    `*Pagamento:* ${payLabels[state.payMethod] || state.payMethod}` +
-    (troco ? `\n*Troco para:* ${troco}` : '') +
-    `\n*Entrega:* ${localTxt}` +
-    (f.notes ? `\n\n*Observações:* ${f.notes}` : '')
-  );
-
-  window.open(`https://wa.me/5547991559926?text=${msg}`, '_blank');
+  window.open(`https://wa.me/5547991559926?text=${encodeURIComponent(message)}`, '_blank');
 }
 
 /* ──────────────────────────────────────────
