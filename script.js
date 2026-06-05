@@ -537,12 +537,41 @@ const state = {
 
 /* Fretes por bairro — altere os valores aqui quando necessário */
 const DELIVERY_BY_NEIGHBORHOOD = {
-  'Rio do Peixe':      6,
   'Centro':            8,
   'Vila do Salto':     10,
-  'Ribeirão do Padre': 12,
+  'Dom Bosco':         8,
+  'Braço Paula Ramos': 15,
   'Braço Serafim':     15,
-  'Outro bairro':      0,
+  'Alto Serafim':      18,
+  'Braço Dauer':       15,
+  'Braço Francês':     15,
+  'Braço Joaquim':     15,
+  'Braço Costa':       15,
+  'Braço Bugre':       15,
+  'Braço da Onça':     18,
+  'Alto Máximo':       18,
+  'Baixo Máximo':      15,
+  'Braço Comprido':    15,
+  'Braço Miguel':      15,
+  'Alto Braço Miguel': 18,
+  'Braço Cunha':       15,
+  'Braço Elza':        12,
+  'Braço Freimann':    15,
+  'Ribeirão do Padre': 12,
+  'Braço Belga':       15,
+  'Boa Vista':         12,
+  'Vila Nova':         10,
+  'Baixo Canoas':      15,
+  'Rio Canoas':        15,
+  'Braço Arataca':     18,
+  'Braço Gavião':      18,
+  'Serrinha':          18,
+  'Rio Novo':          15,
+  'Rio do Peixe':       6,
+  'Laranjeiras':       15,
+  'Garuva':            18,
+  'Garuvinha':         18,
+  'Outro bairro':       0,
 };
 
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
@@ -571,6 +600,8 @@ function navigateTo(page) {
     if (sel) sel.value = '';
     const notice = el('outro-bairro-notice');
     if (notice) notice.style.display = 'none';
+    const feeDisp = el('neighborhood-fee-display');
+    if (feeDisp) feeDisp.style.display = 'none';
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
     const stat = el('geo-status');
@@ -601,6 +632,8 @@ function setDeliveryType(type) {
     if (sel) sel.value = '';
     const notice = el('outro-bairro-notice');
     if (notice) notice.style.display = 'none';
+    const feeDisp = el('neighborhood-fee-display');
+    if (feeDisp) feeDisp.style.display = 'none';
   }
   updateCartBar();
 }
@@ -823,26 +856,63 @@ function getSubtotal() {
   return state.cart.reduce((s, i) => s + getItemTotal(i), 0);
 }
 
+function neighborhoodIsCombinar(bairro) {
+  return bairro === 'Outro bairro' || (!!bairro && !Object.prototype.hasOwnProperty.call(DELIVERY_BY_NEIGHBORHOOD, bairro));
+}
+
 function getDeliveryFee() {
   if (state.deliveryType === 'pickup') return 0;
   const bairro = state.form.neighborhood;
-  if (!bairro || bairro === 'Outro bairro') return 0;
+  if (!bairro || neighborhoodIsCombinar(bairro)) return 0;
   return DELIVERY_BY_NEIGHBORHOOD[bairro] || 0;
 }
 
 function feeDisplay() {
   if (state.deliveryType === 'pickup') return 'Grátis';
-  if (state.form.neighborhood === 'Outro bairro') return 'A combinar';
+  const bairro = state.form.neighborhood;
+  if (!bairro) return 'Grátis';
+  if (neighborhoodIsCombinar(bairro)) return 'A combinar';
   const fee = getDeliveryFee();
   return fee > 0 ? `R$ ${fmt(fee)}` : 'Grátis';
 }
 
-function handleNeighborhoodChange(val) {
-  state.form.neighborhood = val;
-  const notice = el('outro-bairro-notice');
-  if (notice) notice.style.display = val === 'Outro bairro' ? 'block' : 'none';
+function handleNeighborhoodInput(val) {
+  const bairro = val.trim();
+  state.form.neighborhood = bairro;
+
+  const notice  = el('outro-bairro-notice');
+  const msgEl   = el('outro-bairro-msg');
+  const feeDisp = el('neighborhood-fee-display');
+
+  if (notice && msgEl) {
+    if (!bairro) {
+      notice.style.display = 'none';
+    } else if (bairro === 'Outro bairro') {
+      notice.style.display = 'flex';
+      msgEl.textContent = 'Entrega para outro bairro será combinada pelo WhatsApp.';
+    } else if (!Object.prototype.hasOwnProperty.call(DELIVERY_BY_NEIGHBORHOOD, bairro)) {
+      notice.style.display = 'flex';
+      msgEl.textContent = 'Bairro não encontrado na lista. O valor da entrega será combinado pelo WhatsApp.';
+    } else {
+      notice.style.display = 'none';
+    }
+  }
+
+  if (feeDisp) {
+    const fee = DELIVERY_BY_NEIGHBORHOOD[bairro];
+    if (bairro && fee !== undefined && bairro !== 'Outro bairro') {
+      feeDisp.style.display = 'flex';
+      feeDisp.innerHTML = `<i class="fas fa-motorcycle"></i> Frete para <strong>${bairro}</strong>: <strong class="txt-primary">R$ ${fmt(fee)}</strong>`;
+    } else {
+      feeDisp.style.display = 'none';
+    }
+  }
+
   updateCartBar();
 }
+
+/* Alias mantido para compatibilidade com setDeliveryType (reset pelo select antigo) */
+function handleNeighborhoodChange(val) { handleNeighborhoodInput(val); }
 
 function getTotal() {
   return Math.max(0, getSubtotal() - state.discount + getDeliveryFee());
@@ -1183,7 +1253,7 @@ function goToPayment() {
 
   if (state.deliveryType === 'delivery') {
     if (!state.form.neighborhood) {
-      showToast('Selecione seu bairro para calcular o frete.');
+      showToast('Informe seu bairro para calcular ou combinar o frete.');
       el('f-neighborhood')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
@@ -1324,7 +1394,7 @@ function sendWhatsApp() {
   } else {
     tipoEntrega = 'Entrega';
     const bairro   = state.form.neighborhood || 'Não informado';
-    const freteTxt = state.form.neighborhood === 'Outro bairro'
+    const freteTxt = neighborhoodIsCombinar(state.form.neighborhood)
       ? 'A combinar pelo WhatsApp'
       : (getDeliveryFee() > 0 ? `R$ ${fmt(getDeliveryFee())}` : 'Grátis');
     locTxt = `\n\n🏘️ *Bairro:* ${bairro}\n🏍️ *Frete:* ${freteTxt}`;
@@ -2125,3 +2195,4 @@ window.closeMenu               = closeMenu;
 window.confirmClosedCheckout   = confirmClosedCheckout;
 window.cancelClosedCheckout    = cancelClosedCheckout;
 window.handleNeighborhoodChange = handleNeighborhoodChange;
+window.handleNeighborhoodInput  = handleNeighborhoodInput;

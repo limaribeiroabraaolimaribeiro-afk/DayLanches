@@ -199,20 +199,58 @@
         <h3 class="ck-card-title"><i class="fas fa-map-marker-alt"></i> Bairro de entrega</h3>
         <div class="form-group">
           <label class="form-label">Bairro *</label>
-          <select id="f-neighborhood" class="form-input form-select" onchange="handleNeighborhoodChange(this.value)">
-            <option value="">Selecione seu bairro</option>
-            <option value="Rio do Peixe">Rio do Peixe — R$ 6,00</option>
-            <option value="Centro">Centro — R$ 8,00</option>
-            <option value="Vila do Salto">Vila do Salto — R$ 10,00</option>
-            <option value="Ribeirão do Padre">Ribeirão do Padre — R$ 12,00</option>
-            <option value="Braço Serafim">Braço Serafim — R$ 15,00</option>
-            <option value="Outro bairro">Outro bairro — combinar pelo WhatsApp</option>
-          </select>
+          <input
+            type="text"
+            id="f-neighborhood"
+            class="form-input"
+            list="neighborhood-list"
+            placeholder="Digite ou selecione seu bairro"
+            autocomplete="off"
+            oninput="handleNeighborhoodInput(this.value)"
+          >
+          <datalist id="neighborhood-list">
+            <option value="Centro">
+            <option value="Vila do Salto">
+            <option value="Dom Bosco">
+            <option value="Braço Paula Ramos">
+            <option value="Braço Serafim">
+            <option value="Alto Serafim">
+            <option value="Braço Dauer">
+            <option value="Braço Francês">
+            <option value="Braço Joaquim">
+            <option value="Braço Costa">
+            <option value="Braço Bugre">
+            <option value="Braço da Onça">
+            <option value="Alto Máximo">
+            <option value="Baixo Máximo">
+            <option value="Braço Comprido">
+            <option value="Braço Miguel">
+            <option value="Alto Braço Miguel">
+            <option value="Braço Cunha">
+            <option value="Braço Elza">
+            <option value="Braço Freimann">
+            <option value="Ribeirão do Padre">
+            <option value="Braço Belga">
+            <option value="Boa Vista">
+            <option value="Vila Nova">
+            <option value="Baixo Canoas">
+            <option value="Rio Canoas">
+            <option value="Braço Arataca">
+            <option value="Braço Gavião">
+            <option value="Serrinha">
+            <option value="Rio Novo">
+            <option value="Rio do Peixe">
+            <option value="Laranjeiras">
+            <option value="Garuva">
+            <option value="Garuvinha">
+            <option value="Outro bairro">
+          </datalist>
         </div>
         <div id="outro-bairro-notice" class="outro-bairro-notice" style="display:none">
           <i class="fas fa-info-circle"></i>
-          Para outro bairro, o valor da entrega será combinado pelo WhatsApp.
+          <span id="outro-bairro-msg">Para outro bairro, o valor da entrega será combinado pelo WhatsApp.</span>
         </div>
+        <div id="neighborhood-fee-display" class="neighborhood-fee-display" style="display:none"></div>
       </div>
 
       <div class="ck-card" id="geo-card">
