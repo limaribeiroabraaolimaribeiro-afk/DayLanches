@@ -525,7 +525,7 @@ const state = {
   search:      '',
   deliveryType: 'delivery',  /* delivery | pickup */
   form: {
-    name: '', notes: '', neighborhood: '',
+    name: '', notes: '',
   },
   geo: { lat: null, lon: null, link: '', routeLink: '', distanceKm: null },
   payMethod:   '',
@@ -533,45 +533,6 @@ const state = {
   couponApplied: false,
   discount:    0,
   orderId:     null,
-};
-
-/* Fretes por bairro — altere os valores aqui quando necessário */
-const DELIVERY_BY_NEIGHBORHOOD = {
-  'Centro':            8,
-  'Vila do Salto':     10,
-  'Dom Bosco':         8,
-  'Braço Paula Ramos': 15,
-  'Braço Serafim':     15,
-  'Alto Serafim':      18,
-  'Braço Dauer':       15,
-  'Braço Francês':     15,
-  'Braço Joaquim':     15,
-  'Braço Costa':       15,
-  'Braço Bugre':       15,
-  'Braço da Onça':     18,
-  'Alto Máximo':       18,
-  'Baixo Máximo':      15,
-  'Braço Comprido':    15,
-  'Braço Miguel':      15,
-  'Alto Braço Miguel': 18,
-  'Braço Cunha':       15,
-  'Braço Elza':        12,
-  'Braço Freimann':    15,
-  'Ribeirão do Padre': 12,
-  'Braço Belga':       15,
-  'Boa Vista':         12,
-  'Vila Nova':         10,
-  'Baixo Canoas':      15,
-  'Rio Canoas':        15,
-  'Braço Arataca':     18,
-  'Braço Gavião':      18,
-  'Serrinha':          18,
-  'Rio Novo':          15,
-  'Rio do Peixe':       6,
-  'Laranjeiras':       15,
-  'Garuva':            18,
-  'Garuvinha':         18,
-  'Outro bairro':       0,
 };
 
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
@@ -619,13 +580,6 @@ function navigateTo(page) {
 
   if (page === 'delivery') {
     state.geo = { lat: null, lon: null, link: '', routeLink: '', distanceKm: null };
-    state.form.neighborhood = '';
-    const sel = el('f-neighborhood');
-    if (sel) sel.value = '';
-    const notice = el('outro-bairro-notice');
-    if (notice) notice.style.display = 'none';
-    const feeDisp = el('neighborhood-fee-display');
-    if (feeDisp) feeDisp.style.display = 'none';
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
     const stat = el('geo-status');
@@ -647,18 +601,7 @@ function goBack() {
 function setDeliveryType(type) {
   state.deliveryType = type;
   const geoCard = el('geo-card');
-  const nhCard  = el('neighborhood-card');
   if (geoCard) geoCard.style.display = type === 'pickup' ? 'none' : 'block';
-  if (nhCard)  nhCard.style.display  = type === 'pickup' ? 'none' : 'block';
-  if (type === 'pickup') {
-    state.form.neighborhood = '';
-    const sel = el('f-neighborhood');
-    if (sel) sel.value = '';
-    const notice = el('outro-bairro-notice');
-    if (notice) notice.style.display = 'none';
-    const feeDisp = el('neighborhood-fee-display');
-    if (feeDisp) feeDisp.style.display = 'none';
-  }
   updateCartBar();
 }
 
@@ -887,75 +830,21 @@ function getSubtotal() {
   return state.cart.reduce((s, i) => s + getItemTotal(i), 0);
 }
 
-function neighborhoodIsCombinar(bairro) {
-  return bairro === 'Outro bairro' || (!!bairro && !Object.prototype.hasOwnProperty.call(DELIVERY_BY_NEIGHBORHOOD, bairro));
-}
-
 function getDeliveryFee() {
   if (state.deliveryType === 'pickup') return 0;
-  /* Com localização: usa cálculo por km */
-  if (state.geo.lat) return calculateDeliveryFeeByKm();
-  /* Sem localização: estimativa pelo bairro */
-  const bairro = state.form.neighborhood;
-  if (!bairro || neighborhoodIsCombinar(bairro)) return 0;
-  return DELIVERY_BY_NEIGHBORHOOD[bairro] || 0;
+  return calculateDeliveryFeeByKm();
 }
 
 function feeDisplay() {
   if (state.deliveryType === 'pickup') return 'Grátis';
-  if (state.geo.lat) {
-    /* Frete real por km */
-    const fee = getDeliveryFee();
-    const distStr = state.geo.distanceKm != null
-      ? ` (${state.geo.distanceKm.toFixed(1).replace('.', ',')} km)`
-      : '';
-    return fee > 0 ? `R$ ${fmt(fee)}${distStr}` : 'Grátis';
+  const fee = getDeliveryFee();
+  if (state.geo.distanceKm != null) {
+    return fee > 0
+      ? `R$ ${fmt(fee)} (${state.geo.distanceKm.toFixed(1).replace('.', ',')} km)`
+      : 'Grátis';
   }
-  /* Estimativa pelo bairro enquanto aguarda localização */
-  const bairro = state.form.neighborhood;
-  if (!bairro) return 'Grátis';
-  if (neighborhoodIsCombinar(bairro)) return 'A combinar';
-  const est = DELIVERY_BY_NEIGHBORHOOD[bairro] || 0;
-  return est > 0 ? `~R$ ${fmt(est)}` : 'Grátis';
+  return fee > 0 ? `R$ ${fmt(fee)}` : 'Grátis';
 }
-
-function handleNeighborhoodInput(val) {
-  const bairro = val.trim();
-  state.form.neighborhood = bairro;
-
-  const notice  = el('outro-bairro-notice');
-  const msgEl   = el('outro-bairro-msg');
-  const feeDisp = el('neighborhood-fee-display');
-
-  if (notice && msgEl) {
-    if (!bairro) {
-      notice.style.display = 'none';
-    } else if (bairro === 'Outro bairro') {
-      notice.style.display = 'flex';
-      msgEl.textContent = 'Entrega para outro bairro será combinada pelo WhatsApp.';
-    } else if (!Object.prototype.hasOwnProperty.call(DELIVERY_BY_NEIGHBORHOOD, bairro)) {
-      notice.style.display = 'flex';
-      msgEl.textContent = 'Bairro não encontrado na lista. O valor da entrega será combinado pelo WhatsApp.';
-    } else {
-      notice.style.display = 'none';
-    }
-  }
-
-  if (feeDisp) {
-    const fee = DELIVERY_BY_NEIGHBORHOOD[bairro];
-    if (bairro && fee !== undefined && bairro !== 'Outro bairro') {
-      feeDisp.style.display = 'flex';
-      feeDisp.innerHTML = `<i class="fas fa-motorcycle"></i> Frete para <strong>${bairro}</strong>: <strong class="txt-primary">R$ ${fmt(fee)}</strong>`;
-    } else {
-      feeDisp.style.display = 'none';
-    }
-  }
-
-  updateCartBar();
-}
-
-/* Alias mantido para compatibilidade com setDeliveryType (reset pelo select antigo) */
-function handleNeighborhoodChange(val) { handleNeighborhoodInput(val); }
 
 function getTotal() {
   return Math.max(0, getSubtotal() - state.discount + getDeliveryFee());
@@ -1294,17 +1183,10 @@ function goToPayment() {
   }
   errBox.style.display = 'none';
 
-  if (state.deliveryType === 'delivery') {
-    if (!state.form.neighborhood) {
-      showToast('Informe seu bairro para calcular ou combinar o frete.');
-      el('f-neighborhood')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
-    if (!state.geo.lat) {
-      showToast('Para entrega, envie sua localização para facilitar a entrega.');
-      el('btn-geo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
+  if (state.deliveryType === 'delivery' && !state.geo.lat) {
+    showToast('Para calcular o frete, permita o acesso à localização.');
+    el('btn-geo')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
   }
 
   state.form.name  = name;
@@ -1338,8 +1220,7 @@ function updatePaymentPage() {
   if (state.deliveryType === 'pickup') {
     if (addrTxt) addrTxt.textContent = 'Retirada no local — R. Faustino Martini, 160, Luiz Alves - SC';
   } else if (state.geo.lat) {
-    const bairroInfo = state.form.neighborhood ? ` • ${state.form.neighborhood}` : '';
-    if (addrTxt) addrTxt.innerHTML = `<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Localização enviada${bairroInfo} — Abrir no mapa</a>`;
+    if (addrTxt) addrTxt.innerHTML = `<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Localização enviada — Abrir no mapa</a>`;
   } else {
     if (addrTxt) addrTxt.textContent = 'Localização não informada';
   }
@@ -1436,20 +1317,17 @@ function sendWhatsApp() {
     locTxt = '';
   } else {
     tipoEntrega = 'Entrega';
-    const bairro   = state.form.neighborhood || 'Não informado';
-    const freteTxt = neighborhoodIsCombinar(state.form.neighborhood)
-      ? 'A combinar pelo WhatsApp'
-      : (getDeliveryFee() > 0 ? `R$ ${fmt(getDeliveryFee())}` : 'Grátis');
-    locTxt = `\n\n🏘️ *Bairro:* ${bairro}\n🏍️ *Frete:* ${freteTxt}`;
     if (state.geo.lat) {
-      locTxt +=
+      const freteTxt = getDeliveryFee() > 0 ? `R$ ${fmt(getDeliveryFee())}` : 'Grátis';
+      locTxt =
         `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
         `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`;
       if (state.geo.distanceKm != null) {
         locTxt += `\n\n📏 *Distância aproximada:* ${state.geo.distanceKm.toFixed(1).replace('.', ',')} km`;
       }
+      locTxt += `\n🏍️ *Frete:* ${freteTxt}`;
     } else {
-      locTxt += '\n\n📍 Localização não informada';
+      locTxt = '\n\n📍 Localização não informada';
     }
   }
 
@@ -2293,7 +2171,5 @@ window.openMenu                = openMenu;
 window.closeMenu               = closeMenu;
 window.confirmClosedCheckout   = confirmClosedCheckout;
 window.cancelClosedCheckout    = cancelClosedCheckout;
-window.handleNeighborhoodChange = handleNeighborhoodChange;
-window.handleNeighborhoodInput  = handleNeighborhoodInput;
 window.shareProduct             = shareProduct;
 window.shareProductWhatsApp     = shareProductWhatsApp;
