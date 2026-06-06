@@ -2400,6 +2400,37 @@ a { text-decoration: none; color: inherit; }
 .closed-modal-btns { display: flex; gap: 10px; width: 100%; margin-top: 6px; }
 .closed-modal-btns .btn-secondary { flex: 1; }
 .closed-modal-btns .btn-primary   { flex: 2; }
+
+/* ═══════════════════════════════════════════
+   BOTÕES DE COMPARTILHAMENTO (produto)
+═══════════════════════════════════════════ */
+.pp-share-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.pp-share-btn,
+.pp-whatsapp-share-btn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: .86rem;
+  font-family: inherit;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.pp-share-btn:active,
+.pp-whatsapp-share-btn:active { transform: scale(.97); }
+.pp-share-btn { background: #f3f4f6; color: #111; }
+.pp-share-btn:hover { background: #e5e7eb; }
+.pp-whatsapp-share-btn { background: #22c55e; color: #fff; }
+.pp-whatsapp-share-btn:hover { background: #16a34a; }
 @keyframes bounceIn {
   0%   { transform: scale(0); }
   60%  { transform: scale(1.1); }

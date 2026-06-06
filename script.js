@@ -1615,6 +1615,50 @@ function closeProductPage() {
   if (!state.cartOpen && !spOpen) document.body.style.overflow = '';
   ppProductId = null;
   ppSelectedAddons = [];
+  if (window.location.search.includes('produto')) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+
+/* ──────────────────────────────────────────
+   COMPARTILHAMENTO DE PRODUTOS
+────────────────────────────────────────── */
+function getProductShareUrl(id) {
+  return `${window.location.origin}${window.location.pathname}?produto=${id}`;
+}
+
+function shareProductWhatsApp() {
+  if (!ppProductId) return;
+  const p = PRODUCTS.find(pr => pr.id === ppProductId);
+  if (!p) return;
+  const url     = getProductShareUrl(p.id);
+  const message =
+    `🔥 Olha esse produto da Day Lanches!\n\n` +
+    `🍔 *${p.name}*\n` +
+    `💰 R$ ${fmt(p.price)}\n\n` +
+    `Peça pelo cardápio online:\n${url}\n\n` +
+    `📍 Day Lanches — Luiz Alves/SC`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+}
+
+async function shareProduct() {
+  if (!ppProductId) return;
+  const p = PRODUCTS.find(pr => pr.id === ppProductId);
+  if (!p) return;
+  const url       = getProductShareUrl(p.id);
+  const shareText = `🔥 ${p.name} na Day Lanches por R$ ${fmt(p.price)}! Peça pelo cardápio online.`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: `${p.name} — Day Lanches`, text: shareText, url });
+    } catch (_) { /* cancelado pelo usuário */ }
+  } else {
+    try {
+      await navigator.clipboard.writeText(`${shareText}\n${url}`);
+      showToast('Link do produto copiado!');
+    } catch (_) {
+      showToast('Copie o link: ' + url);
+    }
+  }
 }
 
 function ppChangeQty(delta) {
@@ -2155,6 +2199,15 @@ document.addEventListener('DOMContentLoaded', () => {
   updateStoreStatus();
   setInterval(updateStoreStatus, 60000);
 
+  /* Abrir produto direto pelo link ?produto=ID */
+  const _pid = new URLSearchParams(window.location.search).get('produto');
+  if (_pid) {
+    const _id = Number(_pid);
+    if (PRODUCTS.some(p => p.id === _id)) {
+      setTimeout(() => openProductPage(_id), 300);
+    }
+  }
+
   /* Pre-fill: apenas nome para demonstração */
   setTimeout(() => {
     const fn = el('f-name'); if (fn && !fn.value) fn.value = 'Maria da Silva';
@@ -2196,3 +2249,5 @@ window.confirmClosedCheckout   = confirmClosedCheckout;
 window.cancelClosedCheckout    = cancelClosedCheckout;
 window.handleNeighborhoodChange = handleNeighborhoodChange;
 window.handleNeighborhoodInput  = handleNeighborhoodInput;
+window.shareProduct             = shareProduct;
+window.shareProductWhatsApp     = shareProductWhatsApp;
