@@ -73,7 +73,7 @@ const PRODUCTS = [
     name: 'OREO',
     desc: 'Crocante e irresistível',
     price: 5.00,
-    img: 'images/oreo.jpg',
+    img: 'images/oreo.webp',
     badges: ['mais'],
   },
   {
