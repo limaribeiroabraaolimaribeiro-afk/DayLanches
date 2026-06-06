@@ -65,7 +65,7 @@ const PRODUCTS = [
     name: 'Freegells',
     desc: 'Extra forte e refrescante para qualquer hora',
     price: 2.50,
-    img: 'https://th.bing.com/th/id/R.ddc6e43a970855f00f18a6b2af203e45?rik=URB9V9GioZGblQ&pid=ImgRaw&r=0',
+    img: 'https://paulinhodoces.com.br/wp-content/uploads/2024/02/3-4.jpg',
     badges: ['novo'],
   },
   {
@@ -73,7 +73,7 @@ const PRODUCTS = [
     name: 'OREO',
     desc: 'Crocante e irresistível',
     price: 5.00,
-    img: 'https://i.mlcdn.com.br/portaldalu/fotosconteudo/91770_01.jpg',
+    img: 'https://handletheheat.com/wp-content/uploads/2011/08/easy-oreo-cookies-recipe.jpg',
     badges: ['mais'],
   },
   {
@@ -81,7 +81,7 @@ const PRODUCTS = [
     name: 'Paçoquinha',
     desc: 'O sabor tradicional que todo mundo ama',
     price: 1.00,
-    img: 'https://images.pexels.com/photos/5865653/pexels-photo-5865653.jpeg?auto=compress&cs=tinysrgb&w=800',
+    img: 'https://a-static.mlcdn.com.br/800x560/pacoquinha-queridinha-dos-brasil-tradicional/modaestilochequebem/a3f7c1c47ad811eda7574201ac185019/49d3d8f5eddcfe6604494c4a13e33f15.jpeg',
     badges: [],
   },
   {
@@ -89,7 +89,7 @@ const PRODUCTS = [
     name: 'Pirulito',
     desc: 'Docinho que alegra qualquer momento',
     price: 0.50,
-    img: 'https://images.pexels.com/photos/9743246/pexels-photo-9743246.jpeg?auto=compress&cs=tinysrgb&w=800',
+    img: 'https://segredosdomundo.r7.com/wp-content/uploads/2020/09/pirulito-a-historia-por-tras-do-desenvolvimento-do-doce-em-palito-1-scaled.jpg',
     badges: [],
   },
   /* ── HAMBÚRGUER ── */
@@ -1533,7 +1533,7 @@ function closeProductPage() {
 /* ──────────────────────────────────────────
    COMPARTILHAMENTO DE PRODUTOS
 ────────────────────────────────────────── */
-const SITE_URL = 'https://limaribeiroabraaolimaribeiro-afk.github.io/DayLanches';
+const SITE_URL = 'https://www.daylanches.com.br';
 
 function slugify(text) {
   return text.toString()

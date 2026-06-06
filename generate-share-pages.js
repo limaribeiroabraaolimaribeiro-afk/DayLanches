@@ -2,7 +2,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const SITE_URL = 'https://limaribeiroabraaolimaribeiro-afk.github.io/DayLanches';
+const SITE_URL = 'https://www.daylanches.com.br';
 
 /* ── Extrai PRODUCTS do script.js ── */
 const src   = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8');
