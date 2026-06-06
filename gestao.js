@@ -4,6 +4,13 @@
    Requer: Supabase JS v2, supabase-config.js
 ───────────────────────────────────────── */
 
+/* Retorna o cliente Supabase inicializado em supabase-config.js */
+function getSb() {
+  const c = window.supabaseClient;
+  if (!c) throw new Error('Cliente Supabase não inicializado. Verifique supabase-config.js');
+  return c;
+}
+
 /* ── App State ── */
 const gs = {
   section: 'produtos',
@@ -19,22 +26,37 @@ const gs = {
 /* ══════════════════════════════════════
    AUTH
 ══════════════════════════════════════ */
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
   const email = v('login-email'), pwd = v('login-password');
   hide('login-error');
   setLoading('login-btn', true, 'Entrando...');
 
-  supabase.auth.signInWithPassword({ email, password: pwd })
-    .then(({ error }) => {
-      if (error) {
-        show('login-error', authMsg(error));
-        setLoading('login-btn', false, 'Entrar');
-      }
-    });
+  try {
+    console.log('[Gestão] Tentando login:', email);
+    console.log('[Gestão] Supabase client:', window.supabaseClient);
+
+    const sb = getSb();
+
+    const loginPromise = sb.auth.signInWithPassword({ email, password: pwd });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Tempo limite ao entrar. Verifique sua conexão.')), 12000)
+    );
+
+    const { data, error } = await Promise.race([loginPromise, timeoutPromise]);
+
+    if (error) throw error;
+    if (!data?.session) throw new Error('Login feito, mas sessão não foi criada.');
+
+  } catch (err) {
+    console.error('[Gestão] Erro no login:', err);
+    show('login-error', authMsg(err));
+  } finally {
+    setLoading('login-btn', false, 'Entrar');
+  }
 }
 
-function handleCreateAccount(e) {
+async function handleCreateAccount(e) {
   e.preventDefault();
   const name  = v('create-name');
   const email = v('create-email');
@@ -49,38 +71,42 @@ function handleCreateAccount(e) {
 
   setLoading('create-btn', true, 'Criando...');
 
-  supabase.auth.signUp({
-    email, password: pwd,
-    options: { data: { name, role: 'owner' } },
-  }).then(async ({ data, error }) => {
-    if (error) {
-      show('create-error', authMsg(error));
-      setLoading('create-btn', false, 'Criar acesso');
-      return;
-    }
+  try {
+    const { data, error } = await getSb().auth.signUp({
+      email, password: pwd,
+      options: { data: { name, role: 'owner' } },
+    });
+    if (error) throw error;
     if (data.user) {
-      await supabase.from('profiles').insert({
+      await getSb().from('profiles').insert({
         id: data.user.id, name, email, role: 'owner',
       }).catch(() => {});
     }
     toast('Acesso criado! Verifique seu e-mail se necessário.');
     setTimeout(() => showView('login'), 1500);
-  });
+  } catch (err) {
+    show('create-error', authMsg(err));
+  } finally {
+    setLoading('create-btn', false, 'Criar acesso');
+  }
 }
 
 function handleLogout() {
-  supabase.auth.signOut().then(() => showView('login'));
+  getSb().auth.signOut().catch(() => {}).finally(() => showView('login'));
 }
 
 function authMsg(error) {
   if (!error) return 'Erro desconhecido.';
-  const msg = error.message || '';
-  if (msg.includes('Invalid login credentials'))  return 'E-mail ou senha incorretos.';
-  if (msg.includes('Email not confirmed'))         return 'Confirme seu e-mail antes de entrar.';
+  const msg = (error.message || error.toString()).toLowerCase();
+  if (msg.includes('invalid login credentials'))   return 'E-mail ou senha incorretos.';
+  if (msg.includes('email not confirmed'))         return 'Confirme o e-mail do usuário no Supabase (ou crie o usuário como confirmado).';
   if (msg.includes('already registered'))          return 'Este e-mail já está em uso.';
-  if (msg.includes('Password should'))             return 'Senha deve ter ao menos 6 caracteres.';
-  if (msg.includes('User already registered'))     return 'Este e-mail já está em uso.';
-  return 'Erro ao entrar. Tente novamente.';
+  if (msg.includes('password should'))             return 'Senha deve ter ao menos 6 caracteres.';
+  if (msg.includes('user already registered'))     return 'Este e-mail já está em uso.';
+  if (msg.includes('tempo limite'))                return error.message;
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed'))
+    return 'Erro de rede. Verifique sua conexão e o SUPABASE_URL em supabase-config.js.';
+  return `Erro: ${error.message || 'tente novamente.'}`;
 }
 
 /* ══════════════════════════════════════
@@ -127,7 +153,7 @@ function closeSidebar() {
 ══════════════════════════════════════ */
 async function loadProducts() {
   try {
-    const { data, error } = await supabase.from('products').select('*').order('name');
+    const { data, error } = await getSb().from('products').select('*').order('name');
     if (error) throw error;
     gs.products = data || [];
   } catch (e) {
@@ -252,11 +278,11 @@ async function handleSaveProduct(e) {
     const existingId = elid('p-id').value;
     let err;
     if (existingId) {
-      ({ error: err } = await supabase.from('products').update(data).eq('id', existingId));
+      ({ error: err } = await getSb().from('products').update(data).eq('id', existingId));
       if (!err) toast('Produto atualizado!');
     } else {
       data.created_at = now;
-      ({ error: err } = await supabase.from('products').insert(data));
+      ({ error: err } = await getSb().from('products').insert(data));
       if (!err) toast('Produto cadastrado!');
     }
     if (err) throw err;
@@ -273,7 +299,7 @@ async function handleSaveProduct(e) {
 
 async function confirmDeleteProduct(id, name) {
   if (!confirm(`Excluir "${name}"? Esta ação não pode ser desfeita.`)) return;
-  const { error } = await supabase.from('products').delete().eq('id', id);
+  const { error } = await getSb().from('products').delete().eq('id', id);
   if (error) { toast('Erro ao excluir.', true); return; }
   toast('Produto excluído.');
   loadProducts();
@@ -324,13 +350,13 @@ async function uploadProductImage(file) {
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
   const filePath = `produtos/${fileName}`;
 
-  const { error } = await supabase.storage.from('products').upload(filePath, file, {
+  const { error } = await getSb().storage.from('products').upload(filePath, file, {
     cacheControl: '3600',
     upsert: false,
   });
   if (error) throw error;
 
-  const { data } = supabase.storage.from('products').getPublicUrl(filePath);
+  const { data } = getSb().storage.from('products').getPublicUrl(filePath);
   return data.publicUrl;
 }
 
@@ -420,7 +446,7 @@ function nextStatusBtns(o) {
 }
 
 async function updateOrderStatus(id, status) {
-  const { error } = await supabase.from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await getSb().from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { toast('Erro ao atualizar status.', true); return; }
   toast('Status atualizado!');
   loadOrders();
@@ -458,7 +484,7 @@ function renderSales() {
 ══════════════════════════════════════ */
 async function loadConfig() {
   try {
-    const { data, error } = await supabase.from('store_settings').select('*').eq('id','store').single();
+    const { data, error } = await getSb().from('store_settings').select('*').eq('id','store').single();
     if (error || !data) return;
     setv('cfg-wa',     data.whatsapp||'');
     setv('cfg-pix',    data.pix_key||'');
@@ -485,7 +511,7 @@ async function handleSaveConfig(e) {
     store_lon:             parseFloat(getv('cfg-lon'))     || -48.83443849068592,
     updated_at:            new Date().toISOString(),
   };
-  const { error } = await supabase.from('store_settings').upsert(data);
+  const { error } = await getSb().from('store_settings').upsert(data);
   if (error) { toast('Erro ao salvar: ' + error.message, true); return; }
   toast('Configurações salvas!');
 }
@@ -510,7 +536,7 @@ function renderUserInfo() {
 async function sendPwdReset() {
   const user = gs.currentUser;
   if (!user) return;
-  const { error } = await supabase.auth.resetPasswordForEmail(user.email);
+  const { error } = await getSb().auth.resetPasswordForEmail(user.email);
   if (error) { toast('Erro ao enviar e-mail.', true); return; }
   toast('E-mail de redefinição enviado!');
 }
@@ -561,16 +587,18 @@ function togglePwd(inputId, btn) {
    BOOTSTRAP
 ══════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  /* Verifica se Supabase está configurado */
-  if (typeof supabase === 'undefined' || SUPABASE_URL === 'COLOCAR_SUPABASE_URL_AQUI') {
-    show('login-error', '⚠️ Supabase não configurado. Preencha supabase-config.js');
+  console.log('[Gestão] supabase-config.js carregado:', !!window.supabaseClient);
+
+  /* Verifica se Supabase está inicializado */
+  if (!window.supabaseClient) {
+    show('login-error', '⚠️ Supabase não carregado. Verifique a ordem dos scripts e supabase-config.js');
     const btn = elid('login-btn');
     if (btn) btn.disabled = true;
     showView('login');
     return;
   }
 
-  supabase.auth.onAuthStateChange((_event, session) => {
+  getSb().auth.onAuthStateChange((_event, session) => {
     if (session?.user) {
       gs.currentUser = session.user;
       showView('dashboard');
@@ -584,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* Verifica sessão existente */
-  supabase.auth.getSession().then(({ data: { session } }) => {
+  getSb().auth.getSession().then(({ data: { session } }) => {
     if (!session) showView('login');
   });
 });
