@@ -576,6 +576,30 @@ const DELIVERY_BY_NEIGHBORHOOD = {
 
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
 
+/* Localização da loja: R. Faustino Martini, Rio do Peixe, Luiz Alves - SC */
+const STORE_LAT = -26.74403627881803;
+const STORE_LON = -48.83443849068592;
+const DELIVERY_PRICE_PER_KM = 2.50;
+
+function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  const R    = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a    =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calculateDeliveryFeeByKm() {
+  if (state.deliveryType === 'pickup') return 0;
+  if (!state.geo.lat || !state.geo.lon) return 0;
+  const distKm = calculateDistanceKm(STORE_LAT, STORE_LON, Number(state.geo.lat), Number(state.geo.lon));
+  state.geo.distanceKm = distKm;
+  return Math.ceil(distKm * DELIVERY_PRICE_PER_KM);
+}
+
 /* ── CONFIGURAÇÕES DA LOJA ── */
 // Trocar pelo número real no formato internacional (sem + e sem espaços)
 const STORE_WHATSAPP = "554791559926";
@@ -651,11 +675,13 @@ function requestGeoLocation() {
 
   navigator.geolocation.getCurrentPosition(
     pos => {
-      const lat       = pos.coords.latitude.toFixed(6);
-      const lon       = pos.coords.longitude.toFixed(6);
-      const link      = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-      const routeLink = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-      state.geo = { lat, lon, link, routeLink, distanceKm: null };
+      const lat         = pos.coords.latitude.toFixed(6);
+      const lon         = pos.coords.longitude.toFixed(6);
+      const link        = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      const routeLink   = `https://www.google.com/maps/dir/?api=1&origin=${STORE_LAT},${STORE_LON}&destination=${lat},${lon}`;
+      const distanceKm  = calculateDistanceKm(STORE_LAT, STORE_LON, Number(lat), Number(lon));
+      const fee         = Math.ceil(distanceKm * DELIVERY_PRICE_PER_KM);
+      state.geo = { lat, lon, link, routeLink, distanceKm };
 
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
       if (stat) {
@@ -665,10 +691,15 @@ function requestGeoLocation() {
             <i class="fas fa-check-circle"></i>
             <span>Localização adicionada com sucesso!</span>
           </div>
+          <div class="geo-fee-info">
+            <span><i class="fas fa-route"></i> Distância aproximada: <strong>${distanceKm.toFixed(1).replace('.', ',')} km</strong></span>
+            <span><i class="fas fa-motorcycle"></i> Frete: <strong>R$ ${fmt(fee)}</strong></span>
+          </div>
           <a href="${link}" target="_blank" rel="noopener" class="geo-map-link">
             <i class="fas fa-map-location-dot"></i> Abrir no mapa
           </a>`;
       }
+      updateCartBar();
       showToast('Localização adicionada com sucesso!');
     },
     err => {
@@ -862,6 +893,9 @@ function neighborhoodIsCombinar(bairro) {
 
 function getDeliveryFee() {
   if (state.deliveryType === 'pickup') return 0;
+  /* Com localização: usa cálculo por km */
+  if (state.geo.lat) return calculateDeliveryFeeByKm();
+  /* Sem localização: estimativa pelo bairro */
   const bairro = state.form.neighborhood;
   if (!bairro || neighborhoodIsCombinar(bairro)) return 0;
   return DELIVERY_BY_NEIGHBORHOOD[bairro] || 0;
@@ -869,11 +903,20 @@ function getDeliveryFee() {
 
 function feeDisplay() {
   if (state.deliveryType === 'pickup') return 'Grátis';
+  if (state.geo.lat) {
+    /* Frete real por km */
+    const fee = getDeliveryFee();
+    const distStr = state.geo.distanceKm != null
+      ? ` (${state.geo.distanceKm.toFixed(1).replace('.', ',')} km)`
+      : '';
+    return fee > 0 ? `R$ ${fmt(fee)}${distStr}` : 'Grátis';
+  }
+  /* Estimativa pelo bairro enquanto aguarda localização */
   const bairro = state.form.neighborhood;
   if (!bairro) return 'Grátis';
   if (neighborhoodIsCombinar(bairro)) return 'A combinar';
-  const fee = getDeliveryFee();
-  return fee > 0 ? `R$ ${fmt(fee)}` : 'Grátis';
+  const est = DELIVERY_BY_NEIGHBORHOOD[bairro] || 0;
+  return est > 0 ? `~R$ ${fmt(est)}` : 'Grátis';
 }
 
 function handleNeighborhoodInput(val) {
@@ -1402,6 +1445,9 @@ function sendWhatsApp() {
       locTxt +=
         `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
         `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`;
+      if (state.geo.distanceKm != null) {
+        locTxt += `\n\n📏 *Distância aproximada:* ${state.geo.distanceKm.toFixed(1).replace('.', ',')} km`;
+      }
     } else {
       locTxt += '\n\n📍 Localização não informada';
     }
