@@ -1,27 +1,13 @@
 'use strict';
 /* ─────────────────────────────────────────
    Day Lanches — Gestão da loja
-   Requer: Firebase 9 compat, firebase-config.js
+   Requer: Supabase JS v2, supabase-config.js
 ───────────────────────────────────────── */
-
-let auth, db;
-
-/* ── Firebase Init ── */
-function initFirebase() {
-  try {
-    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-    auth = firebase.auth();
-    db   = firebase.firestore();
-    return true;
-  } catch (e) {
-    console.error('Firebase não inicializado. Preencha firebase-config.js', e);
-    return false;
-  }
-}
 
 /* ── App State ── */
 const gs = {
   section: 'produtos',
+  currentUser: null,
   products: [],
   orders: [],
   orderFilter: 'all',
@@ -38,10 +24,13 @@ function handleLogin(e) {
   const email = v('login-email'), pwd = v('login-password');
   hide('login-error');
   setLoading('login-btn', true, 'Entrando...');
-  auth.signInWithEmailAndPassword(email, pwd)
-    .catch(err => {
-      show('login-error', authMsg(err.code));
-      setLoading('login-btn', false, 'Entrar');
+
+  supabase.auth.signInWithPassword({ email, password: pwd })
+    .then(({ error }) => {
+      if (error) {
+        show('login-error', authMsg(error));
+        setLoading('login-btn', false, 'Entrar');
+      }
     });
 }
 
@@ -54,50 +43,53 @@ function handleCreateAccount(e) {
   const code  = v('create-code').toUpperCase().trim();
 
   hide('create-error');
-
-  if (pwd !== pwd2)           return show('create-error', 'As senhas não coincidem.');
-  if (pwd.length < 6)         return show('create-error', 'Senha precisa ter ao menos 6 caracteres.');
+  if (pwd !== pwd2)             return show('create-error', 'As senhas não coincidem.');
+  if (pwd.length < 6)           return show('create-error', 'Senha precisa ter ao menos 6 caracteres.');
   if (code !== ACTIVATION_CODE) return show('create-error', 'Código de ativação inválido.');
 
   setLoading('create-btn', true, 'Criando...');
-  auth.createUserWithEmailAndPassword(email, pwd)
-    .then(cred => Promise.all([
-      cred.user.updateProfile({ displayName: name }),
-      db.collection('users').doc(cred.user.uid).set({
-        name, email, role: 'owner',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }),
-    ]))
-    .then(() => toast('Acesso criado! Entrando...'))
-    .catch(err => {
-      show('create-error', authMsg(err.code));
+
+  supabase.auth.signUp({
+    email, password: pwd,
+    options: { data: { name, role: 'owner' } },
+  }).then(async ({ data, error }) => {
+    if (error) {
+      show('create-error', authMsg(error));
       setLoading('create-btn', false, 'Criar acesso');
-    });
+      return;
+    }
+    if (data.user) {
+      await supabase.from('profiles').insert({
+        id: data.user.id, name, email, role: 'owner',
+      }).catch(() => {});
+    }
+    toast('Acesso criado! Verifique seu e-mail se necessário.');
+    setTimeout(() => showView('login'), 1500);
+  });
 }
 
 function handleLogout() {
-  auth.signOut().then(() => showView('login'));
+  supabase.auth.signOut().then(() => showView('login'));
 }
 
-function authMsg(code) {
-  return ({
-    'auth/invalid-email':        'E-mail inválido.',
-    'auth/user-not-found':       'E-mail não encontrado.',
-    'auth/wrong-password':       'Senha incorreta.',
-    'auth/invalid-credential':   'E-mail ou senha incorretos.',
-    'auth/email-already-in-use': 'Este e-mail já está em uso.',
-    'auth/weak-password':        'Senha muito fraca.',
-    'auth/too-many-requests':    'Muitas tentativas. Tente em breve.',
-  })[code] || 'Erro ao entrar. Tente novamente.';
+function authMsg(error) {
+  if (!error) return 'Erro desconhecido.';
+  const msg = error.message || '';
+  if (msg.includes('Invalid login credentials'))  return 'E-mail ou senha incorretos.';
+  if (msg.includes('Email not confirmed'))         return 'Confirme seu e-mail antes de entrar.';
+  if (msg.includes('already registered'))          return 'Este e-mail já está em uso.';
+  if (msg.includes('Password should'))             return 'Senha deve ter ao menos 6 caracteres.';
+  if (msg.includes('User already registered'))     return 'Este e-mail já está em uso.';
+  return 'Erro ao entrar. Tente novamente.';
 }
 
 /* ══════════════════════════════════════
    VIEWS / NAVIGATION
 ══════════════════════════════════════ */
 function showView(name) {
-  ['login','create-account','dashboard'].forEach(v => {
-    const el_ = document.getElementById(`view-${v}`);
-    if (el_) el_.style.display = v === name ? 'flex' : 'none';
+  ['login','create-account','dashboard'].forEach(n => {
+    const el_ = document.getElementById(`view-${n}`);
+    if (el_) el_.style.display = n === name ? 'flex' : 'none';
   });
 }
 
@@ -112,8 +104,8 @@ function showSection(name) {
   const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', config:'Configurações', acessos:'Acessos' };
   elid('dash-title').textContent = titles[name] || name;
   gs.section = name;
-  if (name === 'vendas') renderSales();
-  if (name === 'config') loadConfig();
+  if (name === 'vendas')  renderSales();
+  if (name === 'config')  loadConfig();
   if (name === 'acessos') renderUserInfo();
   if (name === 'pedidos') loadOrders();
   closeSidebar();
@@ -135,8 +127,9 @@ function closeSidebar() {
 ══════════════════════════════════════ */
 async function loadProducts() {
   try {
-    const snap = await db.collection('products').orderBy('name').get();
-    gs.products = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+    const { data, error } = await supabase.from('products').select('*').order('name');
+    if (error) throw error;
+    gs.products = data || [];
   } catch (e) {
     console.warn('Erro ao carregar produtos:', e);
     gs.products = [];
@@ -148,14 +141,13 @@ function renderProductList() {
   const wrap = elid('products-list');
   const q    = gs.productFilter.toLowerCase();
   const list = q
-    ? gs.products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.cat||'').toLowerCase().includes(q))
+    ? gs.products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q))
     : gs.products;
 
   if (!list.length) {
     wrap.innerHTML = '<p class="empty-msg">Nenhum produto. Clique em "Novo produto" para começar.</p>';
     return;
   }
-
   wrap.innerHTML = `
     <table class="data-table">
       <thead><tr>
@@ -164,14 +156,14 @@ function renderProductList() {
       </tr></thead>
       <tbody>${list.map(p => `
         <tr class="${p.active===false?'row-inactive':''}">
-          <td><div class="tbl-img-wrap"><img src="${esc(p.img||'')}" alt="" loading="lazy" onerror="this.style.display='none'"></div></td>
+          <td><div class="tbl-img-wrap"><img src="${esc(p.image_url||'')}" alt="" loading="lazy" onerror="this.style.display='none'"></div></td>
           <td><strong>${esc(p.name)}</strong>${p.badges?.length?`<span class="tbl-badge">${p.badges[0]}</span>`:''}</td>
-          <td>${esc(p.cat||'—')}</td>
+          <td>${esc(p.category||'—')}</td>
           <td>R$ ${fmt(p.price)}</td>
           <td><span class="status-pill ${p.active!==false?'status-active':'status-inactive'}">${p.active!==false?'Ativo':'Inativo'}</span></td>
           <td>
-            <button class="btn-icon-sm btn-edit" onclick="openProductForm('${p.firestoreId}')"><i class="fas fa-pen"></i></button>
-            <button class="btn-icon-sm btn-del"  onclick="confirmDeleteProduct('${p.firestoreId}','${esc(p.name)}')"><i class="fas fa-trash"></i></button>
+            <button class="btn-icon-sm btn-edit" onclick="openProductForm('${p.id}')"><i class="fas fa-pen"></i></button>
+            <button class="btn-icon-sm btn-del"  onclick="confirmDeleteProduct('${p.id}','${esc(p.name)}')"><i class="fas fa-trash"></i></button>
           </td>
         </tr>`).join('')}
       </tbody>
@@ -180,8 +172,8 @@ function renderProductList() {
 
 function filterProductList(q) { gs.productFilter = q; renderProductList(); }
 
-function openProductForm(firestoreId) {
-  gs.editId = firestoreId || null;
+function openProductForm(id) {
+  gs.editId = id || null;
   gs.uploadedUrl = '';
 
   elid('form-product').reset();
@@ -192,23 +184,23 @@ function openProductForm(firestoreId) {
   elid('img-placeholder').style.display = 'flex';
   elid('img-status').style.display = 'none';
   elid('product-error').style.display = 'none';
-  elid('modal-title').textContent = firestoreId ? 'Editar produto' : 'Novo produto';
+  elid('modal-title').textContent = id ? 'Editar produto' : 'Novo produto';
 
-  if (firestoreId) {
-    const p = gs.products.find(x => x.firestoreId === firestoreId);
+  if (id) {
+    const p = gs.products.find(x => x.id === id);
     if (p) {
-      elid('p-id').value    = p.firestoreId;
+      elid('p-id').value    = p.id;
       elid('p-name').value  = p.name || '';
       elid('p-price').value = p.price || '';
-      elid('p-desc').value  = p.desc || '';
-      elid('p-cat').value   = p.cat || '';
+      elid('p-desc').value  = p.description || '';
+      elid('p-cat').value   = p.category || '';
       elid('p-badge').value = p.badges?.[0] || '';
       elid('p-active').checked = p.active !== false;
-      elid('p-acai').checked   = !!p.allowAcaiAddons;
-      elid('p-img').value      = p.img || '';
-      elid('p-img-url').value  = p.img || '';
-      if (p.img) {
-        elid('img-preview').src = p.img;
+      elid('p-acai').checked   = !!p.allow_acai_addons;
+      elid('p-img').value      = p.image_url || '';
+      elid('p-img-url').value  = p.image_url || '';
+      if (p.image_url) {
+        elid('img-preview').src = p.image_url;
         elid('img-preview').style.display = 'block';
         elid('img-placeholder').style.display = 'none';
       }
@@ -236,19 +228,20 @@ async function handleSaveProduct(e) {
   const cat    = elid('p-cat').value;
 
   hide('product-error');
-  if (!name)       return show('product-error', 'Informe o nome do produto.');
+  if (!name)        return show('product-error', 'Informe o nome do produto.');
   if (isNaN(price)) return show('product-error', 'Informe um preço válido.');
-  if (!cat)        return show('product-error', 'Selecione uma categoria.');
+  if (!cat)         return show('product-error', 'Selecione uma categoria.');
 
   const badge = elid('p-badge').value;
+  const now   = new Date().toISOString();
   const data  = {
-    name, price, cat,
-    desc:           elid('p-desc').value.trim(),
-    img:            imgUrl,
-    active:         elid('p-active').checked,
-    allowAcaiAddons: elid('p-acai').checked,
-    badges:         badge ? [badge] : [],
-    updatedAt:      firebase.firestore.FieldValue.serverTimestamp(),
+    name, price, category: cat,
+    description:      elid('p-desc').value.trim(),
+    image_url:        imgUrl,
+    active:           elid('p-active').checked,
+    allow_acai_addons: elid('p-acai').checked,
+    badges:           badge ? [badge] : [],
+    updated_at:       now,
   };
 
   const btn = elid('save-btn');
@@ -257,18 +250,20 @@ async function handleSaveProduct(e) {
 
   try {
     const existingId = elid('p-id').value;
+    let err;
     if (existingId) {
-      await db.collection('products').doc(existingId).update(data);
-      toast('Produto atualizado!');
+      ({ error: err } = await supabase.from('products').update(data).eq('id', existingId));
+      if (!err) toast('Produto atualizado!');
     } else {
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('products').doc().set(data);
-      toast('Produto cadastrado!');
+      data.created_at = now;
+      ({ error: err } = await supabase.from('products').insert(data));
+      if (!err) toast('Produto cadastrado!');
     }
+    if (err) throw err;
     closeProductForm();
     loadProducts();
   } catch (err) {
-    show('product-error', 'Erro ao salvar. Verifique o Firestore.');
+    show('product-error', 'Erro ao salvar: ' + (err.message || 'tente novamente.'));
     console.error(err);
   } finally {
     btn.disabled = false;
@@ -278,20 +273,15 @@ async function handleSaveProduct(e) {
 
 async function confirmDeleteProduct(id, name) {
   if (!confirm(`Excluir "${name}"? Esta ação não pode ser desfeita.`)) return;
-  try {
-    await db.collection('products').doc(id).delete();
-    toast('Produto excluído.');
-    loadProducts();
-  } catch { toast('Erro ao excluir.', true); }
+  const { error } = await supabase.from('products').delete().eq('id', id);
+  if (error) { toast('Erro ao excluir.', true); return; }
+  toast('Produto excluído.');
+  loadProducts();
 }
 
 /* ══════════════════════════════════════
-   IMAGE UPLOAD (Cloudinary)
+   IMAGE UPLOAD (Supabase Storage)
 ══════════════════════════════════════ */
-function triggerImageUpload() {
-  elid('img-file').click();
-}
-
 async function handleImageSelect(input) {
   const file = input.files[0];
   if (!file) return;
@@ -313,10 +303,10 @@ async function handleImageSelect(input) {
   const status = elid('img-status');
   status.style.display = 'flex';
   status.className = 'img-status uploading';
-  status.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando imagem para Cloudinary...';
+  status.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando imagem...';
 
   try {
-    const url = await uploadToCloudinary(file);
+    const url = await uploadProductImage(file);
     gs.uploadedUrl = url;
     elid('p-img').value     = url;
     elid('p-img-url').value = url;
@@ -324,26 +314,24 @@ async function handleImageSelect(input) {
     status.innerHTML = '<i class="fas fa-check-circle"></i> Imagem enviada com sucesso!';
   } catch (err) {
     status.className = 'img-status error';
-    status.innerHTML = '<i class="fas fa-exclamation-circle"></i> Erro ao enviar. Verifique a configuração do Cloudinary.';
+    status.innerHTML = '<i class="fas fa-exclamation-circle"></i> Erro ao enviar: ' + (err.message || 'verifique o bucket no Supabase.');
     console.error(err);
   }
 }
 
-async function uploadToCloudinary(file) {
-  if (!CLOUDINARY_CLOUD_NAME || CLOUDINARY_CLOUD_NAME === 'COLOCAR_CLOUD_NAME') {
-    throw new Error('Cloudinary não configurado. Preencha firebase-config.js');
-  }
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  formData.append('folder', 'day-lanches/produtos');
+async function uploadProductImage(file) {
+  const ext      = file.name.split('.').pop().toLowerCase();
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const filePath = `produtos/${fileName}`;
 
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-    method: 'POST', body: formData,
+  const { error } = await supabase.storage.from('products').upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: false,
   });
-  if (!res.ok) throw new Error('Cloudinary retornou erro ' + res.status);
-  const data = await res.json();
-  return data.secure_url;
+  if (error) throw error;
+
+  const { data } = supabase.storage.from('products').getPublicUrl(filePath);
+  return data.publicUrl;
 }
 
 function syncImgUrl(url) {
@@ -360,8 +348,13 @@ function syncImgUrl(url) {
 ══════════════════════════════════════ */
 async function loadOrders() {
   try {
-    const snap = await db.collection('orders').orderBy('createdAt', 'desc').limit(100).get();
-    gs.orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    gs.orders = data || [];
   } catch (e) {
     gs.orders = [];
     console.warn('Erro ao carregar pedidos:', e);
@@ -393,27 +386,26 @@ function orderCard(o) {
     saiu_para_entrega:'st-entrega',
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
-  const date = o.createdAt?.toDate
-    ? o.createdAt.toDate().toLocaleString('pt-BR')
-    : '—';
-  const num  = o.orderNumber || o.id.slice(-6).toUpperCase();
+  const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const num  = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
 
   return `
     <div class="order-card ${stClass[o.status]||''}">
       <div class="order-hd">
         <div>
-          <span class="order-num">#${num}</span>
-          <span class="order-customer">${esc(o.customerName||'Cliente')}</span>
+          <span class="order-num">#${esc(num)}</span>
+          <span class="order-customer">${esc(o.customer_name||'Cliente')}</span>
         </div>
         <span class="order-status ${stClass[o.status]||''}">${statusLabels[o.status]||o.status}</span>
       </div>
       <div class="order-meta">
         <span><i class="fas fa-clock"></i> ${date}</span>
-        <span><i class="fas fa-${o.deliveryType==='pickup'?'store':'motorcycle'}"></i> ${o.deliveryType==='pickup'?'Retirada':'Entrega'}</span>
+        <span><i class="fas fa-${o.delivery_type==='pickup'?'store':'motorcycle'}"></i> ${o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
         <span><i class="fas fa-tag"></i> R$ ${fmt(o.total)}</span>
-        <span><i class="fas fa-credit-card"></i> ${o.paymentMethod||'—'}</span>
+        <span><i class="fas fa-credit-card"></i> ${esc(o.payment_method||'—')}</span>
       </div>
-      <div class="order-items">${(o.items||[]).map(i=>`<span class="order-item-tag">${i.qty}x ${esc(i.name)}</span>`).join('')}</div>
+      <div class="order-items">${items.map(i=>`<span class="order-item-tag">${i.qty}x ${esc(i.name)}</span>`).join('')}</div>
       ${o.notes?`<div class="order-meta"><span><i class="fas fa-comment"></i> ${esc(o.notes)}</span></div>`:''}
       <div class="order-actions">${nextStatusBtns(o)}</div>
     </div>`;
@@ -428,13 +420,10 @@ function nextStatusBtns(o) {
 }
 
 async function updateOrderStatus(id, status) {
-  try {
-    await db.collection('orders').doc(id).update({
-      status, updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-    toast('Status atualizado!');
-    loadOrders();
-  } catch { toast('Erro ao atualizar status.', true); }
+  const { error } = await supabase.from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Erro ao atualizar status.', true); return; }
+  toast('Status atualizado!');
+  loadOrders();
 }
 
 function filterOrders(filter, btn) {
@@ -448,10 +437,10 @@ function filterOrders(filter, btn) {
    SALES
 ══════════════════════════════════════ */
 function renderSales() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const todayOrders  = gs.orders.filter(o => o.createdAt?.toDate?.() >= today);
+  const today = new Date().toISOString().split('T')[0];
+  const todayOrders  = gs.orders.filter(o => o.created_at?.startsWith(today));
   const openOrders   = gs.orders.filter(o => !['finalizado','cancelado'].includes(o.status));
-  const todayRevenue = todayOrders.reduce((s, o) => s + (o.total||0), 0);
+  const todayRevenue = todayOrders.reduce((s, o) => s + Number(o.total||0), 0);
 
   elid('sv-hoje').textContent    = todayOrders.length;
   elid('sv-receita').textContent = 'R$ ' + fmt(todayRevenue);
@@ -459,12 +448,9 @@ function renderSales() {
   elid('sv-total').textContent   = gs.orders.length;
 
   const salesList = elid('sales-list');
-  if (gs.orders.length) {
-    salesList.innerHTML = '<h3 style="margin-bottom:12px;font-size:.9rem;font-weight:700">Pedidos recentes</h3>'
-      + gs.orders.slice(0,20).map(orderCard).join('');
-  } else {
-    salesList.innerHTML = '<p class="empty-msg">Nenhum pedido registrado ainda.</p>';
-  }
+  salesList.innerHTML = gs.orders.length
+    ? '<h3 style="margin-bottom:12px;font-size:.9rem;font-weight:700">Pedidos recentes</h3>' + gs.orders.slice(0,20).map(orderCard).join('')
+    : '<p class="empty-msg">Nenhum pedido registrado ainda.</p>';
 }
 
 /* ══════════════════════════════════════
@@ -472,59 +458,61 @@ function renderSales() {
 ══════════════════════════════════════ */
 async function loadConfig() {
   try {
-    const snap = await db.collection('settings').doc('store').get();
-    if (!snap.exists) return;
-    const cfg = snap.data();
-    setv('cfg-wa',     cfg.whatsapp||'');
-    setv('cfg-pix',    cfg.pix||'');
-    setv('cfg-insta',  cfg.instagram||'');
-    setv('cfg-hours',  cfg.hours||'');
-    setv('cfg-km',     cfg.deliveryPriceKm||'');
-    setv('cfg-factor', cfg.routeFactor||'');
-    setv('cfg-lat',    cfg.storeLat||'');
-    setv('cfg-lon',    cfg.storeLon||'');
+    const { data, error } = await supabase.from('store_settings').select('*').eq('id','store').single();
+    if (error || !data) return;
+    setv('cfg-wa',     data.whatsapp||'');
+    setv('cfg-pix',    data.pix_key||'');
+    setv('cfg-insta',  data.instagram||'');
+    setv('cfg-hours',  typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text||''));
+    setv('cfg-km',     data.delivery_price_per_km||'');
+    setv('cfg-factor', data.route_factor||'');
+    setv('cfg-lat',    data.store_lat||'');
+    setv('cfg-lon',    data.store_lon||'');
   } catch (e) { console.warn('Erro config:', e); }
 }
 
 async function handleSaveConfig(e) {
   e.preventDefault();
   const data = {
-    whatsapp:         getv('cfg-wa'),
-    pix:              getv('cfg-pix'),
-    instagram:        getv('cfg-insta'),
-    hours:            getv('cfg-hours'),
-    deliveryPriceKm:  parseFloat(getv('cfg-km'))     || 2.5,
-    routeFactor:      parseFloat(getv('cfg-factor'))  || 1.4,
-    storeLat:         parseFloat(getv('cfg-lat'))     || -26.74403627881803,
-    storeLon:         parseFloat(getv('cfg-lon'))     || -48.83443849068592,
-    updatedAt:        firebase.firestore.FieldValue.serverTimestamp(),
+    id:                    'store',
+    whatsapp:              getv('cfg-wa'),
+    pix_key:               getv('cfg-pix'),
+    instagram:             getv('cfg-insta'),
+    schedule:              { text: getv('cfg-hours') },
+    delivery_price_per_km: parseFloat(getv('cfg-km'))     || 2.5,
+    route_factor:          parseFloat(getv('cfg-factor'))  || 1.4,
+    store_lat:             parseFloat(getv('cfg-lat'))     || -26.74403627881803,
+    store_lon:             parseFloat(getv('cfg-lon'))     || -48.83443849068592,
+    updated_at:            new Date().toISOString(),
   };
-  try {
-    await db.collection('settings').doc('store').set(data, { merge: true });
-    toast('Configurações salvas!');
-  } catch { toast('Erro ao salvar configurações.', true); }
+  const { error } = await supabase.from('store_settings').upsert(data);
+  if (error) { toast('Erro ao salvar: ' + error.message, true); return; }
+  toast('Configurações salvas!');
 }
 
 /* ══════════════════════════════════════
    USER INFO
 ══════════════════════════════════════ */
 function renderUserInfo() {
-  const user = auth.currentUser;
+  const user = gs.currentUser;
   if (!user) return;
+  const meta = user.user_metadata || {};
   elid('user-info-block').innerHTML = `
-    <div class="user-info-row"><span>Nome</span><strong>${esc(user.displayName||'—')}</strong></div>
+    <div class="user-info-row"><span>Nome</span><strong>${esc(meta.name||'—')}</strong></div>
     <div class="user-info-row"><span>E-mail</span><strong>${esc(user.email)}</strong></div>
-    <div class="user-info-row"><span>UID</span><code>${user.uid}</code></div>
-    <div class="user-info-row"><span>Último acesso</span><strong>${new Date(user.metadata.lastSignInTime||0).toLocaleString('pt-BR')}</strong></div>
+    <div class="user-info-row"><span>ID</span><code>${user.id}</code></div>
+    <div class="user-info-row"><span>Último acesso</span><strong>${new Date(user.last_sign_in_at||0).toLocaleString('pt-BR')}</strong></div>
     <div style="margin-top:16px">
       <button class="btn-secondary" onclick="sendPwdReset()"><i class="fas fa-key"></i> Redefinir senha</button>
     </div>`;
 }
 
-function sendPwdReset() {
-  auth.sendPasswordResetEmail(auth.currentUser.email)
-    .then(()  => toast('E-mail de redefinição enviado!'))
-    .catch(()  => toast('Erro ao enviar e-mail.', true));
+async function sendPwdReset() {
+  const user = gs.currentUser;
+  if (!user) return;
+  const { error } = await supabase.auth.resetPasswordForEmail(user.email);
+  if (error) { toast('Erro ao enviar e-mail.', true); return; }
+  toast('E-mail de redefinição enviado!');
 }
 
 /* ══════════════════════════════════════
@@ -558,11 +546,7 @@ function setLoading(id, loading, label) {
   const btn = elid(id);
   if (!btn) return;
   btn.disabled = loading;
-  if (loading) {
-    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${label||'Aguarde...'}`;
-  } else {
-    btn.innerHTML = label || btn.dataset.orig || btn.textContent;
-  }
+  btn.innerHTML = loading ? `<i class="fas fa-spinner fa-spin"></i> ${label}` : label;
 }
 
 function togglePwd(inputId, btn) {
@@ -577,44 +561,52 @@ function togglePwd(inputId, btn) {
    BOOTSTRAP
 ══════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
-  if (!initFirebase()) {
-    show('login-error', '⚠️ Firebase não configurado. Preencha firebase-config.js');
+  /* Verifica se Supabase está configurado */
+  if (typeof supabase === 'undefined' || SUPABASE_URL === 'COLOCAR_SUPABASE_URL_AQUI') {
+    show('login-error', '⚠️ Supabase não configurado. Preencha supabase-config.js');
     const btn = elid('login-btn');
     if (btn) btn.disabled = true;
     showView('login');
     return;
   }
 
-  auth.onAuthStateChanged(user => {
-    if (user) {
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (session?.user) {
+      gs.currentUser = session.user;
       showView('dashboard');
-      elid('user-display').textContent = user.displayName || user.email.split('@')[0];
+      elid('user-display').textContent = session.user.user_metadata?.name || session.user.email.split('@')[0];
       loadProducts();
       loadOrders();
     } else {
+      gs.currentUser = null;
       showView('login');
     }
+  });
+
+  /* Verifica sessão existente */
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (!session) showView('login');
   });
 });
 
 /* Expose for HTML onclick */
-window.handleLogin            = handleLogin;
-window.handleCreateAccount    = handleCreateAccount;
-window.handleLogout           = handleLogout;
-window.showView               = showView;
-window.showSection            = showSection;
-window.openSidebar            = openSidebar;
-window.closeSidebar           = closeSidebar;
-window.openProductForm        = openProductForm;
-window.closeProductForm       = closeProductForm;
+window.handleLogin             = handleLogin;
+window.handleCreateAccount     = handleCreateAccount;
+window.handleLogout            = handleLogout;
+window.showView                = showView;
+window.showSection             = showSection;
+window.openSidebar             = openSidebar;
+window.closeSidebar            = closeSidebar;
+window.openProductForm         = openProductForm;
+window.closeProductForm        = closeProductForm;
 window.closeProductFormOutside = closeProductFormOutside;
-window.handleSaveProduct      = handleSaveProduct;
-window.handleImageSelect      = handleImageSelect;
-window.syncImgUrl             = syncImgUrl;
-window.filterProductList      = filterProductList;
-window.confirmDeleteProduct   = confirmDeleteProduct;
-window.filterOrders           = filterOrders;
-window.updateOrderStatus      = updateOrderStatus;
-window.handleSaveConfig       = handleSaveConfig;
-window.togglePwd              = togglePwd;
-window.sendPwdReset           = sendPwdReset;
+window.handleSaveProduct       = handleSaveProduct;
+window.handleImageSelect       = handleImageSelect;
+window.syncImgUrl              = syncImgUrl;
+window.filterProductList       = filterProductList;
+window.confirmDeleteProduct    = confirmDeleteProduct;
+window.filterOrders            = filterOrders;
+window.updateOrderStatus       = updateOrderStatus;
+window.handleSaveConfig        = handleSaveConfig;
+window.togglePwd               = togglePwd;
+window.sendPwdReset            = sendPwdReset;

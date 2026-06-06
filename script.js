@@ -536,44 +536,42 @@ const DELIVERY_PRICE_PER_KM  = 2.50;
 const DELIVERY_ROUTE_FACTOR  = 1.4; /* Haversine é linha reta; fator estima rota real */
 
 /* ──────────────────────────────────────────
-   FIRESTORE — inicialização segura (opcional)
-   Só funciona se firebase-config.js estiver preenchido.
+   SUPABASE — integração opcional
+   Só funciona se supabase-config.js estiver preenchido.
 ────────────────────────────────────────── */
-let _fsdb = null;
-function getDb() {
-  if (_fsdb) return _fsdb;
+function getSb() {
   try {
-    if (typeof firebase !== 'undefined' && typeof FIREBASE_CONFIG !== 'undefined'
-        && FIREBASE_CONFIG.projectId && FIREBASE_CONFIG.projectId !== 'COLOCAR_PROJECT_ID') {
-      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-      _fsdb = firebase.firestore();
+    if (typeof supabase !== 'undefined' && typeof SUPABASE_URL !== 'undefined'
+        && SUPABASE_URL !== 'COLOCAR_SUPABASE_URL_AQUI') {
+      return supabase;
     }
-  } catch(e) { /* Firebase não configurado ainda */ }
-  return _fsdb;
+  } catch(e) {}
+  return null;
 }
 
-async function saveOrderToFirestore(orderData) {
-  const db = getDb();
-  if (!db) return;
+async function saveOrderToSupabase(orderData) {
+  const sb = getSb();
+  if (!sb) return;
   try {
-    await db.collection('orders').add({
-      ...orderData,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-  } catch(e) { console.warn('Pedido não salvo no Firestore (não crítico):', e); }
+    await sb.from('orders').insert(orderData);
+  } catch(e) { console.warn('Pedido não salvo no Supabase (não crítico):', e); }
 }
 
-async function loadProductsFromFirestore() {
-  const db = getDb();
-  if (!db) return;
+async function loadProductsFromDatabase() {
+  const sb = getSb();
+  if (!sb) return;
   try {
-    const snap = await db.collection('products').where('active', '!=', false).get();
-    if (snap.empty) return;
-    const fp = snap.docs.map(d => ({ ...d.data(), id: d.data().id || d.id }));
+    const { data, error } = await sb.from('products').select('*').eq('active', true);
+    if (error || !data?.length) return;
     PRODUCTS.length = 0;
-    fp.forEach(p => PRODUCTS.push(p));
+    data.forEach(p => PRODUCTS.push({
+      id: p.id, name: p.name, desc: p.description,
+      price: Number(p.price), cat: p.category, img: p.image_url,
+      badges: p.badges || [], allowAcaiAddons: p.allow_acai_addons,
+      freeAddonLimit: p.free_addon_limit, active: p.active,
+    }));
     renderProducts();
-  } catch(e) { console.warn('Firestore indisponível, usando produtos locais:', e); }
+  } catch(e) { console.warn('Supabase indisponível, usando produtos locais:', e); }
 }
 
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
@@ -1370,20 +1368,21 @@ function sendWhatsApp() {
     (f.notes ? `\n\n📝 *Observações:*\n${f.notes}` : '') +
     locTxt;
 
-  /* Salvar pedido no Firestore (não bloqueia o WhatsApp) */
-  saveOrderToFirestore({
-    orderNumber:   state.orderId,
-    customerName:  state.form.name,
-    deliveryType:  state.deliveryType,
-    items:         state.cart.map(i => ({ name: i.name, qty: i.qty, price: getItemTotal(i) })),
-    subtotal:      getSubtotal(),
-    deliveryFee:   getDeliveryFee(),
-    total:         getTotal(),
-    paymentMethod: state.payMethod,
-    notes:         state.form.notes || '',
-    location:      state.geo.lat ? { lat: state.geo.lat, lon: state.geo.lon, link: state.geo.link } : null,
-    status:        'novo',
-    whatsappSent:  true,
+  /* Salvar pedido no Supabase (não bloqueia o WhatsApp) */
+  saveOrderToSupabase({
+    order_number:    `DL-${state.orderId}`,
+    customer_name:   state.form.name,
+    delivery_type:   state.deliveryType,
+    items:           state.cart.map(i => ({ name: i.name, qty: i.qty, price: getItemTotal(i) })),
+    subtotal:        getSubtotal(),
+    delivery_fee:    getDeliveryFee(),
+    total:           getTotal(),
+    payment_method:  state.payMethod,
+    payment_status:  state.payMethod === 'pix' ? 'aguardando_comprovante' : 'pagamento_na_entrega',
+    notes:           state.form.notes || '',
+    location:        state.geo.lat ? { lat: state.geo.lat, lon: state.geo.lon, link: state.geo.link } : null,
+    status:          'novo',
+    whatsapp_sent:   true,
   });
 
   window.open(`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
@@ -2176,7 +2175,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCarousel();
   updateStoreStatus();
   setInterval(updateStoreStatus, 60000);
-  loadProductsFromFirestore(); /* tenta carregar do Firestore; se vazio/offline, usa local */
+  loadProductsFromDatabase(); /* tenta Supabase; se vazio/offline, mantém produtos locais */
 
   /* Abrir produto direto pelo link ?produto=ID */
   const _pid = new URLSearchParams(window.location.search).get('produto');
