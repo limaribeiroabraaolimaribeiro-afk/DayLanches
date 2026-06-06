@@ -1547,7 +1547,7 @@ function closeProductPage() {
 /* ──────────────────────────────────────────
    COMPARTILHAMENTO DE PRODUTOS
 ────────────────────────────────────────── */
-const SITE_URL = 'https://daylanches.com.br';
+const SITE_URL = 'https://limaribeiroabraaolimaribeiro-afk.github.io/DayLanches';
 
 function slugify(text) {
   return text.toString()

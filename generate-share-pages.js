@@ -2,7 +2,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const SITE_URL = 'https://daylanches.com.br';
+const SITE_URL = 'https://limaribeiroabraaolimaribeiro-afk.github.io/DayLanches';
 
 /* ── Extrai PRODUCTS do script.js ── */
 const src   = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8');
@@ -60,12 +60,16 @@ for (const p of PRODUCTS) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title}</title>
-  <meta property="og:type"        content="product">
-  <meta property="og:site_name"   content="Day Lanches">
-  <meta property="og:title"       content="${title}">
-  <meta property="og:description" content="${desc}">
-  <meta property="og:image"       content="${img}">
-  <meta property="og:url"         content="${ogUrl}">
+  <meta property="og:type"             content="website">
+  <meta property="og:site_name"        content="Day Lanches">
+  <meta property="og:title"            content="${title}">
+  <meta property="og:description"      content="${desc}">
+  <meta property="og:image"            content="${img}">
+  <meta property="og:image:secure_url" content="${img}">
+  <meta property="og:image:type"       content="image/jpeg">
+  <meta property="og:image:width"      content="1200">
+  <meta property="og:image:height"     content="630">
+  <meta property="og:url"              content="${ogUrl}">
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="${title}">
   <meta name="twitter:description" content="${desc}">
