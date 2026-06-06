@@ -7,7 +7,7 @@
 /* Retorna o cliente Supabase inicializado em supabase-config.js */
 function getSb() {
   const c = window.supabaseClient;
-  if (!c) throw new Error('Cliente Supabase não inicializado. Verifique supabase-config.js');
+  if (!c) throw new Error('Supabase não carregado. Verifique a ordem dos scripts e supabase-config.js');
   return c;
 }
 

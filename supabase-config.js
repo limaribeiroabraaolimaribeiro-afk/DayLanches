@@ -1,21 +1,11 @@
-/* ──────────────────────────────────────────
-   Day Lanches — Configuração Supabase
-   Preencha com os dados do seu projeto.
-   Acesse: https://supabase.com → Project Settings → API
-────────────────────────────────────────── */
-
 const SUPABASE_URL      = "https://gbrdjnbrstnqgarefcdm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_SE5dXWKNqt0ABlnzantPrA_Jtns5Cvn";
 
-/* Código para criar novo acesso da loja */
 const ACTIVATION_CODE = "DAY-LANCHES-2026";
 
-/* Inicializa e expõe o cliente globalmente */
-window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-/* Acesso de teste — criar em: Supabase > Authentication > Users > Add user
-   Email: teste@daylanches.com.br
-   Senha: DayTeste123! */
-
-/* Inicializa o cliente Supabase */
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+if (!window.supabase) {
+  console.error("[Day Lanches] SDK Supabase não carregou. Verifique o script CDN no gestao.html.");
+} else {
+  window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  console.log("[Day Lanches] Supabase conectado:", window.supabaseClient);
+}
