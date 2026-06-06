@@ -61,48 +61,36 @@ const PRODUCTS = [
   },
   /* ── ADICIONAIS AÇAÍ (produtos da loja) ── */
   {
-    id: 4, cat: 'acai',
+    id: 4, cat: 'adicionais',
     name: 'Freegells',
     desc: 'Extra forte e refrescante para qualquer hora',
     price: 2.50,
     img: 'https://th.bing.com/th/id/R.ddc6e43a970855f00f18a6b2af203e45?rik=URB9V9GioZGblQ&pid=ImgRaw&r=0',
-    fallbackIcon: 'fa-candy-cane',
-    fallbackLabel: 'Freegells',
     badges: ['novo'],
-    isAddon: true,
   },
   {
-    id: 5, cat: 'acai',
+    id: 5, cat: 'adicionais',
     name: 'OREO',
-    desc: 'Crocante e irresistível para seu açaí',
+    desc: 'Crocante e irresistível',
     price: 5.00,
     img: 'https://i.mlcdn.com.br/portaldalu/fotosconteudo/91770_01.jpg',
-    fallbackIcon: 'fa-cookie',
-    fallbackLabel: 'OREO',
     badges: ['mais'],
-    isAddon: true,
   },
   {
-    id: 6, cat: 'acai',
+    id: 6, cat: 'adicionais',
     name: 'Paçoquinha',
     desc: 'O sabor tradicional que todo mundo ama',
     price: 1.00,
     img: 'https://images.pexels.com/photos/5865653/pexels-photo-5865653.jpeg?auto=compress&cs=tinysrgb&w=800',
-    fallbackIcon: 'fa-square',
-    fallbackLabel: 'Paçoquinha',
     badges: [],
-    isAddon: true,
   },
   {
-    id: 7, cat: 'acai',
+    id: 7, cat: 'adicionais',
     name: 'Pirulito',
     desc: 'Docinho que alegra qualquer momento',
     price: 0.50,
     img: 'https://images.pexels.com/photos/9743246/pexels-photo-9743246.jpeg?auto=compress&cs=tinysrgb&w=800',
-    fallbackIcon: 'fa-candy-cane',
-    fallbackLabel: 'Pirulito',
     badges: [],
-    isAddon: true,
   },
   /* ── HAMBÚRGUER ── */
   {
@@ -508,10 +496,14 @@ const ACAI_CUSTOM_PRODUCT_IDS = [1, 2, 3];
 const ACAI_COMBO_PRODUCT_ID = 3;
 const ACAI_COMBO_FREE_LIMIT = 3;
 const ACAI_ADDONS = [
-  { id: 'freegells', name: 'Freegells', price: 2.50 },
-  { id: 'oreo', name: 'OREO', price: 5.00 },
-  { id: 'pacoquinha', name: 'Paçoquinha', price: 1.00 },
-  { id: 'pirulito', name: 'Pirulito', price: 0.50 },
+  { id: 'choc-branco',      name: 'Chocolate branco',          price: 5.00 },
+  { id: 'choc-preto',       name: 'Chocolate preto',           price: 5.00 },
+  { id: 'choc-branco-oreo', name: 'Chocolate branco com OREO', price: 5.00 },
+  { id: 'morango',          name: 'Morango',                   price: 5.00 },
+  { id: 'nutella',          name: 'Nutella',                   price: 5.00 },
+  { id: 'mms',              name: 'M&Ms',                      price: 5.00 },
+  { id: 'granola',          name: 'Granola',                   price: 5.00 },
+  { id: 'pacoca',           name: 'Paçoca',                    price: 5.00 },
 ];
 
 /* ──────────────────────────────────────────
@@ -1038,6 +1030,7 @@ function renderProducts() {
     hotdog: '🌭 Hot Dogs',
     bebidas: '🥤 Bebidas',
     salgadinhos: '🥨 Salgadinhos',
+    adicionais: '🍬 Adicionais',
   };
 
   const q = state.search.toLowerCase().trim();
@@ -1351,6 +1344,7 @@ const PP_CAT_LABELS = {
   combos: '🎁 Combos', porcoes: '🍟 Porções',
   hamburguer: '🍔 Hambúrguer', hotdog: '🌭 Hot Dogs',
   bebidas: '🥤 Bebidas', salgadinhos: '🥨 Salgadinhos',
+  adicionais: '🍬 Adicionais',
 };
 
 function getPpProduct() {
