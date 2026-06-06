@@ -527,7 +527,7 @@ const state = {
   form: {
     name: '', notes: '',
   },
-  geo: { lat: null, lon: null, link: '', routeLink: '', distanceKm: null },
+  geo: { lat: null, lon: null, link: '', routeLink: '', distanceKm: null, straightDistanceKm: null },
   payMethod:   '',
   payStatus:   'idle',     /* idle | waiting | confirmed | production */
   couponApplied: false,
@@ -540,7 +540,8 @@ const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
 /* Localização da loja: R. Faustino Martini, Rio do Peixe, Luiz Alves - SC */
 const STORE_LAT = -26.74403627881803;
 const STORE_LON = -48.83443849068592;
-const DELIVERY_PRICE_PER_KM = 2.50;
+const DELIVERY_PRICE_PER_KM  = 2.50;
+const DELIVERY_ROUTE_FACTOR  = 1.4; /* Haversine é linha reta; fator estima rota real */
 
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   const R    = 6371;
@@ -556,9 +557,11 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
 function calculateDeliveryFeeByKm() {
   if (state.deliveryType === 'pickup') return 0;
   if (!state.geo.lat || !state.geo.lon) return 0;
-  const distKm = calculateDistanceKm(STORE_LAT, STORE_LON, Number(state.geo.lat), Number(state.geo.lon));
-  state.geo.distanceKm = distKm;
-  return Math.ceil(distKm * DELIVERY_PRICE_PER_KM);
+  const straight  = calculateDistanceKm(STORE_LAT, STORE_LON, Number(state.geo.lat), Number(state.geo.lon));
+  const estimated = straight * DELIVERY_ROUTE_FACTOR;
+  state.geo.straightDistanceKm = straight;
+  state.geo.distanceKm         = estimated;
+  return Math.ceil(estimated * DELIVERY_PRICE_PER_KM);
 }
 
 /* ── CONFIGURAÇÕES DA LOJA ── */
@@ -622,9 +625,10 @@ function requestGeoLocation() {
       const lon         = pos.coords.longitude.toFixed(6);
       const link        = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
       const routeLink   = `https://www.google.com/maps/dir/?api=1&origin=${STORE_LAT},${STORE_LON}&destination=${lat},${lon}`;
-      const distanceKm  = calculateDistanceKm(STORE_LAT, STORE_LON, Number(lat), Number(lon));
-      const fee         = Math.ceil(distanceKm * DELIVERY_PRICE_PER_KM);
-      state.geo = { lat, lon, link, routeLink, distanceKm };
+      const straight    = calculateDistanceKm(STORE_LAT, STORE_LON, Number(lat), Number(lon));
+      const estimated   = straight * DELIVERY_ROUTE_FACTOR;
+      const fee         = Math.ceil(estimated * DELIVERY_PRICE_PER_KM);
+      state.geo = { lat, lon, link, routeLink, straightDistanceKm: straight, distanceKm: estimated };
 
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
       if (stat) {
@@ -635,7 +639,7 @@ function requestGeoLocation() {
             <span>Localização adicionada com sucesso!</span>
           </div>
           <div class="geo-fee-info">
-            <span><i class="fas fa-route"></i> Distância aproximada: <strong>${distanceKm.toFixed(1).replace('.', ',')} km</strong></span>
+            <span><i class="fas fa-route"></i> Distância aproximada: <strong>${estimated.toFixed(1).replace('.', ',')} km</strong></span>
             <span><i class="fas fa-motorcycle"></i> Frete: <strong>R$ ${fmt(fee)}</strong></span>
           </div>
           <a href="${link}" target="_blank" rel="noopener" class="geo-map-link">
@@ -1310,34 +1314,22 @@ function sendWhatsApp() {
   };
   const troco = state.payMethod === 'cash' ? (el('troco-input')?.value.trim() || '') : '';
 
-  /* Tipo e localização */
-  let tipoEntrega, locTxt;
-  if (state.deliveryType === 'pickup') {
-    tipoEntrega = 'Retirada no local';
-    locTxt = '';
-  } else {
-    tipoEntrega = 'Entrega';
-    if (state.geo.lat) {
-      const freteTxt = getDeliveryFee() > 0 ? `R$ ${fmt(getDeliveryFee())}` : 'Grátis';
-      locTxt =
-        `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
-        `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`;
-      if (state.geo.distanceKm != null) {
-        locTxt += `\n\n📏 *Distância aproximada:* ${state.geo.distanceKm.toFixed(1).replace('.', ',')} km`;
-      }
-      locTxt += `\n🏍️ *Frete:* ${freteTxt}`;
-    } else {
-      locTxt = '\n\n📍 Localização não informada';
-    }
-  }
+  const tipoEntrega = state.deliveryType === 'pickup' ? 'Retirada no local' : 'Entrega';
+  const freteTxt    = state.deliveryType === 'pickup'
+    ? 'Grátis'
+    : (getDeliveryFee() > 0 ? `R$ ${fmt(getDeliveryFee())}` : 'Grátis');
+
+  const locTxt = state.deliveryType === 'delivery' && state.geo.lat
+    ? `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
+      `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`
+    : '';
 
   const message =
     `Olá, Day Lanches! Quero fazer um pedido.\n\n` +
     `👤 *Nome:* ${f.name}\n\n` +
     `📦 *Tipo do pedido:* ${tipoEntrega}\n\n` +
     `🛒 *Pedido:*\n${items}\n\n` +
-    `💰 *Subtotal:* R$ ${fmt(getSubtotal())}\n` +
-    `🚚 *Taxa de entrega:* ${getDeliveryFee() > 0 ? 'R$ ' + fmt(getDeliveryFee()) : 'Grátis'}\n` +
+    `🏍️ *Frete:* ${freteTxt}\n` +
     `💰 *Total:* R$ ${fmt(getTotal())}\n\n` +
     `💳 *Forma de pagamento:* ${payLabels[state.payMethod] || state.payMethod}` +
     (troco ? `\n💵 *Troco para:* R$ ${troco}` : '') +
