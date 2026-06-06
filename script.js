@@ -73,7 +73,7 @@ const PRODUCTS = [
     name: 'OREO',
     desc: 'Crocante e irresistível',
     price: 5.00,
-    img: 'https://handletheheat.com/wp-content/uploads/2011/08/easy-oreo-cookies-recipe.jpg',
+    img: 'images/oreo.jpg',
     badges: ['mais'],
   },
   {
