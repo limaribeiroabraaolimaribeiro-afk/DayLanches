@@ -4,8 +4,8 @@
    Acesse: https://supabase.com → Project Settings → API
 ────────────────────────────────────────── */
 
-const SUPABASE_URL      = "sb_publishable_SE5dXWKNqt0ABlnzantPrA_Jtns5Cvn";
-const SUPABASE_ANON_KEY = "COLOCAR_SUPABASE_ANON_KEY_AQUI";
+const SUPABASE_URL      = "https://gbrdjnbrstnqgarefcdm.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_SE5dXWKNqt0ABlnzantPrA_Jtns5Cvn";
 
 /* Código para criar novo acesso da loja */
 const ACTIVATION_CODE = "DAY-LANCHES-2026";
