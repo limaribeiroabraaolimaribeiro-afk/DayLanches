@@ -2402,35 +2402,35 @@ a { text-decoration: none; color: inherit; }
 .closed-modal-btns .btn-primary   { flex: 2; }
 
 /* ═══════════════════════════════════════════
-   BOTÕES DE COMPARTILHAMENTO (produto)
+   BOTÕES DE COMPARTILHAMENTO FLUTUANTES
 ═══════════════════════════════════════════ */
-.pp-share-actions {
+.pp-floating-actions {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 20;
   display: flex;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
 }
-.pp-share-btn,
-.pp-whatsapp-share-btn {
-  flex: 1;
-  min-height: 44px;
-  border-radius: 14px;
-  font-weight: 700;
-  font-size: .86rem;
-  font-family: inherit;
+.pp-float-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  font-size: 1.05rem;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   cursor: pointer;
-  transition: opacity .15s, transform .1s;
+  transition: transform .15s, box-shadow .15s;
 }
-.pp-share-btn:active,
-.pp-whatsapp-share-btn:active { transform: scale(.97); }
-.pp-share-btn { background: #f3f4f6; color: #111; }
-.pp-share-btn:hover { background: #e5e7eb; }
-.pp-whatsapp-share-btn { background: #22c55e; color: #fff; }
-.pp-whatsapp-share-btn:hover { background: #16a34a; }
+.pp-float-btn:hover  { transform: scale(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.3); }
+.pp-float-btn:active { transform: scale(.95); }
+.pp-share-main { background: rgba(255,255,255,.92); color: #111; }
+.pp-share-wa   { background: #22c55e; color: #fff; }
 @keyframes bounceIn {
   0%   { transform: scale(0); }
   60%  { transform: scale(1.1); }

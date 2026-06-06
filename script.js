@@ -1547,15 +1547,26 @@ function closeProductPage() {
 /* ──────────────────────────────────────────
    COMPARTILHAMENTO DE PRODUTOS
 ────────────────────────────────────────── */
-function getProductShareUrl(id) {
-  return `${window.location.origin}${window.location.pathname}?produto=${id}`;
+const SITE_URL = 'https://daylanches.com.br';
+
+function slugify(text) {
+  return text.toString()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
+}
+
+function getProductShareUrl(product) {
+  const slug = product.slug || slugify(product.name);
+  return `${SITE_URL}/share/${slug}.html`;
 }
 
 function shareProductWhatsApp() {
   if (!ppProductId) return;
   const p = PRODUCTS.find(pr => pr.id === ppProductId);
   if (!p) return;
-  const url     = getProductShareUrl(p.id);
+  const url     = getProductShareUrl(p);
   const message =
     `🔥 Olha esse produto da Day Lanches!\n\n` +
     `🍔 *${p.name}*\n` +
@@ -1569,7 +1580,7 @@ async function shareProduct() {
   if (!ppProductId) return;
   const p = PRODUCTS.find(pr => pr.id === ppProductId);
   if (!p) return;
-  const url       = getProductShareUrl(p.id);
+  const url       = getProductShareUrl(p);
   const shareText = `🔥 ${p.name} na Day Lanches por R$ ${fmt(p.price)}! Peça pelo cardápio online.`;
   if (navigator.share) {
     try {
