@@ -492,6 +492,13 @@ const PRODUCTS = [
   },
 ];
 
+/* Lista ativa: Supabase quando carregado, senão fallback local */
+let PRODUCTS_DATA = [];
+
+function getProductsList() {
+  return PRODUCTS_DATA.length ? PRODUCTS_DATA : (window.PRODUCTS_LOCAL || PRODUCTS);
+}
+
 const ACAI_CUSTOM_PRODUCT_IDS = [1, 2, 3];
 const ACAI_COMBO_PRODUCT_ID = 3;
 const ACAI_COMBO_FREE_LIMIT = 3;
@@ -536,17 +543,10 @@ const DELIVERY_PRICE_PER_KM  = 2.50;
 const DELIVERY_ROUTE_FACTOR  = 1.4; /* Haversine é linha reta; fator estima rota real */
 
 /* ──────────────────────────────────────────
-   SUPABASE — integração opcional
-   Só funciona se supabase-config.js estiver preenchido.
+   SUPABASE — integração
 ────────────────────────────────────────── */
 function getSb() {
-  try {
-    if (typeof supabase !== 'undefined' && typeof SUPABASE_URL !== 'undefined'
-        && SUPABASE_URL !== 'COLOCAR_SUPABASE_URL_AQUI') {
-      return supabase;
-    }
-  } catch(e) {}
-  return null;
+  return window.supabaseClient || null;
 }
 
 async function saveOrderToSupabase(orderData) {
@@ -558,20 +558,40 @@ async function saveOrderToSupabase(orderData) {
 }
 
 async function loadProductsFromDatabase() {
-  const sb = getSb();
-  if (!sb) return;
   try {
-    const { data, error } = await sb.from('products').select('*').eq('active', true);
-    if (error || !data?.length) return;
-    PRODUCTS.length = 0;
-    data.forEach(p => PRODUCTS.push({
-      id: p.id, name: p.name, desc: p.description,
-      price: Number(p.price), cat: p.category, img: p.image_url,
-      badges: p.badges || [], allowAcaiAddons: p.allow_acai_addons,
-      freeAddonLimit: p.free_addon_limit, active: p.active,
-    }));
-    renderProducts();
-  } catch(e) { console.warn('Supabase indisponível, usando produtos locais:', e); }
+    const db = getSb();
+    if (!db) {
+      console.warn('Supabase não carregado. Usando produtos locais.');
+      return;
+    }
+    const { data, error } = await db
+      .from('products')
+      .select('*')
+      .eq('active', true)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Erro ao carregar produtos do Supabase:', error);
+      return;
+    }
+    if (data && data.length > 0) {
+      PRODUCTS_DATA = data.map(p => ({
+        id:             p.id,
+        name:           p.name,
+        desc:           p.description || '',
+        price:          Number(p.price || 0),
+        cat:            p.category,
+        img:            p.image_url || '',
+        badges:         p.badges || [],
+        allowAcaiAddons: !!p.allow_acai_addons,
+        freeAddonLimit: Number(p.free_addon_limit || 0),
+      }));
+      console.log('Produtos carregados do Supabase:', PRODUCTS_DATA.length);
+    } else {
+      console.warn('Supabase vazio. Usando produtos locais.');
+    }
+  } catch(err) {
+    console.error('Falha ao carregar produtos:', err);
+  }
 }
 
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
@@ -812,7 +832,7 @@ function getCartQty(id) {
 }
 
 function addToCart(id) {
-  const product = PRODUCTS.find(p => p.id === id);
+  const product = getProductsList().find(p => p.id === id);
   if (!product) return;
 
   if (isAcaiCustomProduct(product)) {
@@ -890,7 +910,7 @@ function saveCart() {
 }
 
 function normalizeCartItem(item) {
-  const product = PRODUCTS.find(p => p.id === item.id);
+  const product = getProductsList().find(p => p.id === item.id);
   if (!product) return item;
 
   const addons = (item.addons || []).map(addon => {
@@ -1073,7 +1093,7 @@ function renderProducts() {
   };
 
   const q = state.search.toLowerCase().trim();
-  const filtered = PRODUCTS.filter(p => {
+  const filtered = getProductsList().filter(p => {
     if (p.isAddon) return false;
     const matchCat    = state.cat === 'all' || p.cat === state.cat;
     const matchSearch = !q || p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q);
@@ -1153,7 +1173,7 @@ function buildProductCard(p) {
 function refreshProductCard(id) {
   const card = document.querySelector(`.product-card[data-id="${id}"]`);
   if (!card) return;
-  const p   = PRODUCTS.find(p => p.id === id);
+  const p   = getProductsList().find(p => p.id === id);
   const qty = getCartQty(id);
   const ctrl = card.querySelector(`#ctrl-${id}`);
   if (!ctrl) return;
@@ -1404,7 +1424,7 @@ const PP_CAT_LABELS = {
 };
 
 function getPpProduct() {
-  return PRODUCTS.find(p => p.id === ppProductId);
+  return getProductsList().find(p => p.id === ppProductId);
 }
 
 function ensurePpAddonsSection() {
@@ -1529,7 +1549,7 @@ function ppToggleAddon(addonId) {
 }
 
 function openProductPage(id) {
-  const p = PRODUCTS.find(p => p.id === id);
+  const p = getProductsList().find(p => p.id === id);
   if (!p) return;
   ppProductId = id;
   ppQty = 1;
@@ -1606,7 +1626,7 @@ function getProductShareUrl(product) {
 
 function shareProductWhatsApp() {
   if (!ppProductId) return;
-  const p = PRODUCTS.find(pr => pr.id === ppProductId);
+  const p = getProductsList().find(pr => pr.id === ppProductId);
   if (!p) return;
   const url     = getProductShareUrl(p);
   const message =
@@ -1620,7 +1640,7 @@ function shareProductWhatsApp() {
 
 async function shareProduct() {
   if (!ppProductId) return;
-  const p = PRODUCTS.find(pr => pr.id === ppProductId);
+  const p = getProductsList().find(pr => pr.id === ppProductId);
   if (!p) return;
   const url       = getProductShareUrl(p);
   const shareText = `🔥 ${p.name} na Day Lanches por R$ ${fmt(p.price)}! Peça pelo cardápio online.`;
@@ -1646,7 +1666,7 @@ function ppChangeQty(delta) {
 
 function ppAddToCart() {
   if (!ppProductId) return;
-  const p = PRODUCTS.find(p => p.id === ppProductId);
+  const p = getProductsList().find(p => p.id === ppProductId);
   if (!p) return;
 
   const item = createCartItem(p, ppQty, getPpSelectedAddons(p));
@@ -1777,7 +1797,7 @@ function renderSpHistory() {
 function renderSpSuggestions() {
   const grid = el('sp-suggest-grid');
   if (!grid) return;
-  const items = SP_SUGGEST_IDS.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean);
+  const items = SP_SUGGEST_IDS.map(id => getProductsList().find(p => p.id === id)).filter(Boolean);
   grid.innerHTML = items.map(p => {
     const imgH = p.img
       ? `<img class="sp-suggest-img" src="${p.img}" alt="${p.name}" loading="lazy">`
@@ -1827,7 +1847,7 @@ function renderSpResults(q) {
   const noRes = el('sp-no-results');
   if (!list || !noRes) return;
   const ql = q.toLowerCase();
-  const filtered = PRODUCTS.filter(p =>
+  const filtered = getProductsList().filter(p =>
     !p.isAddon && (p.name.toLowerCase().includes(ql) || p.desc.toLowerCase().includes(ql))
   );
   if (!filtered.length) {
@@ -1860,7 +1880,7 @@ function spSelectProduct(id) {
   if (term) saveSpHistory(term);
   closeSearchPage();
   setTimeout(() => {
-    const p = PRODUCTS.find(p => p.id === id);
+    const p = getProductsList().find(p => p.id === id);
     scrollToCategory(p ? p.cat : 'all', id);
   }, 320);
 }
@@ -1912,7 +1932,7 @@ function initCarousel() {
   }
 
   const slides = CAROUSEL_IDS.map(id => {
-    const p    = PRODUCTS.find(p => p.id === id);
+    const p    = getProductsList().find(p => p.id === id);
     const meta = CAROUSEL_BADGE_MAP[id] || {};
     if (!p) return null;
     return { ...p, cBadge: meta.badge || 'novo', cLabel: meta.label || '' };
@@ -2167,7 +2187,8 @@ function handleCardImgError(img, icon) {
 /* ──────────────────────────────────────────
    16. INICIALIZAÇÃO
 ────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadProductsFromDatabase();
   loadCart();
   refreshCartCount();
   updateCartBar();
@@ -2175,13 +2196,12 @@ document.addEventListener('DOMContentLoaded', () => {
   initCarousel();
   updateStoreStatus();
   setInterval(updateStoreStatus, 60000);
-  loadProductsFromDatabase(); /* tenta Supabase; se vazio/offline, mantém produtos locais */
 
   /* Abrir produto direto pelo link ?produto=ID */
   const _pid = new URLSearchParams(window.location.search).get('produto');
   if (_pid) {
     const _id = Number(_pid);
-    if (PRODUCTS.some(p => p.id === _id)) {
+    if (getProductsList().some(p => p.id === _id)) {
       setTimeout(() => openProductPage(_id), 300);
     }
   }
