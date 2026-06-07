@@ -311,65 +311,124 @@ function renderOptionGroupsUI() {
   const container = elid('option-groups-list');
   if (!container) return;
   const active = _editGroups.filter(g => !g._deleted);
-  if (!active.length) {
-    container.innerHTML = '<p class="empty-groups-msg">Nenhuma escolha cadastrada.</p>';
-    return;
-  }
+  if (!active.length) { container.innerHTML = ''; return; }
+
   container.innerHTML = active.map(group => {
     const ri          = _editGroups.indexOf(group);
     const activeItems = group.items.filter(i => !i._deleted);
+    const isCheck     = group.type === 'checkbox';
+    const hasMax      = group.max_select > 0;
+    const hasFree     = group.free_limit > 0;
+
     return `
-      <div class="opt-group-card">
-        <div class="opt-group-hd">
-          <input class="form-input" placeholder="Título (ex: Adicionais)" value="${esc(group.title)}"
-            oninput="_editGroups[${ri}].title=this.value" style="flex:1">
-          <button type="button" class="btn-icon-sm btn-del" onclick="removeOptGroup(${ri})"><i class="fas fa-trash"></i></button>
-        </div>
-        <div class="form-row" style="margin-top:8px">
-          <div class="form-group">
-            <label class="form-label">Tipo</label>
-            <select class="form-input form-select" onchange="_editGroups[${ri}].type=this.value">
-              <option value="checkbox" ${group.type==='checkbox'?'selected':''}>Múltipla escolha</option>
-              <option value="radio"    ${group.type==='radio'   ?'selected':''}>Escolha única</option>
-            </select>
+      <div class="opt-choice-card">
+        <div class="opt-choice-header">
+          <div class="form-group" style="flex:1;margin:0">
+            <label class="form-label">Título da escolha</label>
+            <input class="form-input" placeholder="Ex: Adicionais, Deseja batata palha?" value="${esc(group.title)}"
+              oninput="_editGroups[${ri}].title=this.value">
           </div>
-          <div class="form-group">
-            <label class="form-label">Grátis</label>
-            <input type="number" class="form-input" min="0" value="${group.free_limit}"
-              oninput="_editGroups[${ri}].free_limit=Number(this.value)||0">
+          <button type="button" class="opt-choice-remove" onclick="removeOptGroup(${ri})">
+            <i class="fas fa-trash"></i> Remover
+          </button>
+        </div>
+        <div class="opt-choice-questions">
+          <div class="opt-q-row">
+            <span class="opt-q-label">Como o cliente escolhe?</span>
+            <div class="opt-q-options">
+              <label class="opt-radio-pill${!isCheck?' selected':''}">
+                <input type="radio" name="type_${ri}" value="radio" ${!isCheck?'checked':''}
+                  onchange="_editGroups[${ri}].type='radio';renderOptionGroupsUI()">
+                <i class="fas fa-dot-circle"></i> Apenas uma opção
+              </label>
+              <label class="opt-radio-pill${isCheck?' selected':''}">
+                <input type="radio" name="type_${ri}" value="checkbox" ${isCheck?'checked':''}
+                  onchange="_editGroups[${ri}].type='checkbox';renderOptionGroupsUI()">
+                <i class="fas fa-check-square"></i> Várias opções
+              </label>
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Máx.</label>
-            <input type="number" class="form-input" min="0" value="${group.max_select}"
-              oninput="_editGroups[${ri}].max_select=Number(this.value)||0">
+          <div class="opt-q-row">
+            <span class="opt-q-label">Essa escolha é obrigatória?</span>
+            <div class="opt-q-options">
+              <label class="opt-radio-pill${!group.required?' selected':''}">
+                <input type="radio" name="req_${ri}" ${!group.required?'checked':''}
+                  onchange="_editGroups[${ri}].required=false"> Não
+              </label>
+              <label class="opt-radio-pill${group.required?' selected':''}">
+                <input type="radio" name="req_${ri}" ${group.required?'checked':''}
+                  onchange="_editGroups[${ri}].required=true"> Sim
+              </label>
+            </div>
           </div>
+          ${isCheck ? `
+          <div class="opt-q-row">
+            <span class="opt-q-label">Tem limite de escolhas?</span>
+            <div class="opt-q-options">
+              <label class="opt-radio-pill${!hasMax?' selected':''}">
+                <input type="radio" name="maxsel_${ri}" ${!hasMax?'checked':''}
+                  onchange="_editGroups[${ri}].max_select=0"> Não
+              </label>
+              <label class="opt-inline-row${hasMax?' selected':''}">
+                <input type="radio" name="maxsel_${ri}" ${hasMax?'checked':''}
+                  onchange="_editGroups[${ri}].max_select=2;renderOptionGroupsUI()">
+                Sim, no máximo
+                <input type="number" class="opt-inline-num" min="1" max="99"
+                  value="${hasMax?group.max_select:2}" ${!hasMax?'disabled':''}
+                  onclick="event.stopPropagation()"
+                  oninput="_editGroups[${ri}].max_select=Number(this.value)||2">
+                opções
+              </label>
+            </div>
+          </div>
+          <div class="opt-q-row">
+            <span class="opt-q-label">Algumas opções são grátis?</span>
+            <div class="opt-q-options">
+              <label class="opt-radio-pill${!hasFree?' selected':''}">
+                <input type="radio" name="free_${ri}" ${!hasFree?'checked':''}
+                  onchange="_editGroups[${ri}].free_limit=0"> Não
+              </label>
+              <label class="opt-inline-row${hasFree?' selected':''}">
+                <input type="radio" name="free_${ri}" ${hasFree?'checked':''}
+                  onchange="_editGroups[${ri}].free_limit=3;renderOptionGroupsUI()">
+                Sim, as primeiras
+                <input type="number" class="opt-inline-num" min="1" max="99"
+                  value="${hasFree?group.free_limit:3}" ${!hasFree?'disabled':''}
+                  onclick="event.stopPropagation()"
+                  oninput="_editGroups[${ri}].free_limit=Number(this.value)||1">
+                são grátis
+              </label>
+            </div>
+          </div>
+          ` : ''}
         </div>
-        <div class="opt-group-flags">
-          <label class="check-label">
-            <input type="checkbox" ${group.required?'checked':''} onchange="_editGroups[${ri}].required=this.checked"> Obrigatório
-          </label>
-          <label class="check-label">
-            <input type="checkbox" ${group.active?'checked':''} onchange="_editGroups[${ri}].active=this.checked"> Ativo
-          </label>
+        <div class="opt-choice-items-section">
+          <div class="opt-choice-items-hd">
+            <span>Opções disponíveis</span>
+            <small>nome &nbsp;|&nbsp; valor adicional</small>
+          </div>
+          <div class="opt-items-list">
+            ${activeItems.map(item => {
+              const ii = group.items.indexOf(item);
+              const pv = item.price_delta > 0 ? String(item.price_delta.toFixed(2)).replace('.',',') : '';
+              return `<div class="opt-item-row">
+                <input class="form-input" placeholder="Ex: Nutella, Bacon extra, Gelada…" value="${esc(item.name)}"
+                  oninput="_editGroups[${ri}].items[${ii}].name=this.value" style="flex:1;min-width:0">
+                <div class="opt-item-price-wrap">
+                  <span class="opt-price-prefix">+R$</span>
+                  <input type="text" inputmode="decimal" class="form-input opt-price-input" placeholder="0,00" value="${pv}"
+                    oninput="_editGroups[${ri}].items[${ii}].price_delta=parsePriceInput(this.value)">
+                </div>
+                <button type="button" class="opt-item-remove" onclick="removeOptItem(${ri},${ii})">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>`;
+            }).join('')}
+          </div>
+          <button type="button" class="btn-add-opt" onclick="addOptItem(${ri})">
+            <i class="fas fa-plus"></i> Adicionar opção
+          </button>
         </div>
-        <div class="opt-items-list">
-          ${activeItems.map(item => {
-            const ii = group.items.indexOf(item);
-            return `<div class="opt-item-row">
-              <input class="form-input" placeholder="Nome da opção" value="${esc(item.name)}"
-                oninput="_editGroups[${ri}].items[${ii}].name=this.value" style="flex:1">
-              <div style="display:flex;align-items:center;gap:4px">
-                <span style="font-size:.8rem;color:var(--text-muted)">+R$</span>
-                <input type="number" class="form-input" min="0" step="0.01" value="${item.price_delta}"
-                  oninput="_editGroups[${ri}].items[${ii}].price_delta=parsePriceInput(this.value)" style="width:70px">
-              </div>
-              <button type="button" class="btn-icon-sm btn-del" onclick="removeOptItem(${ri},${ii})"><i class="fas fa-times"></i></button>
-            </div>`;
-          }).join('')}
-        </div>
-        <button type="button" class="btn-add-opt" onclick="addOptItem(${ri})">
-          <i class="fas fa-plus"></i> Adicionar opção
-        </button>
       </div>`;
   }).join('');
 }
@@ -600,8 +659,22 @@ async function openProductForm(id) {
     }
   }
 
+  /* Update save button label */
+  const saveLabel = elid('save-btn-label');
+  if (saveLabel) saveLabel.textContent = id ? 'Salvar alterações' : 'Salvar produto';
+
+  /* Price with comma for text input */
+  if (id) {
+    const p2 = gs.products.find(x => x.id === id);
+    if (p2 && p2.price != null) {
+      const pe = elid('p-price');
+      if (pe) pe.value = String(Number(p2.price).toFixed(2)).replace('.', ',');
+    }
+  }
+
   elid('product-overlay').style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  updateProductPreview();
   await loadOptionGroupsForEdit(id || null);
 }
 
@@ -620,12 +693,12 @@ async function handleSaveProduct(e) {
   e.preventDefault();
   const imgUrl = gs.uploadedUrl || elid('p-img').value || elid('p-img-url').value || '';
   const name   = elid('p-name').value.trim();
-  const price  = parseFloat(elid('p-price').value);
+  const price  = parsePriceInput(elid('p-price').value);
   const cat    = elid('p-cat').value;
 
   hide('product-error');
   if (!name)        return show('product-error', 'Informe o nome do produto.');
-  if (isNaN(price)) return show('product-error', 'Informe um preço válido.');
+  if (!price || price <= 0) return show('product-error', 'Informe um preço válido.');
   if (!cat)         return show('product-error', 'Selecione uma categoria.');
 
   const badge = elid('p-badge').value;
@@ -696,6 +769,8 @@ async function handleImageSelect(input) {
     elid('img-preview').src = ev.target.result;
     elid('img-preview').style.display = 'block';
     elid('img-placeholder').style.display = 'none';
+    elid('ppc-img') && (elid('ppc-img').src = ev.target.result) && (elid('ppc-img').style.display = 'block');
+    elid('ppc-ph')  && (elid('ppc-ph').style.display = 'none');
   };
   reader.readAsDataURL(file);
 
@@ -740,6 +815,7 @@ function syncImgUrl(url) {
   elid('img-preview').src = url;
   elid('img-preview').style.display = 'block';
   elid('img-placeholder').style.display = 'none';
+  updateProductPreview();
 }
 
 /* ══════════════════════════════════════
@@ -993,6 +1069,79 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+/* ══════════════════════════════════════
+   PREVIEW + TEMPLATE
+══════════════════════════════════════ */
+function updateProductPreview() {
+  const name  = (elid('p-name')?.value || '').trim();
+  const desc  = (elid('p-desc')?.value || '').trim();
+  const price = parsePriceInput(elid('p-price')?.value || '0');
+  const badge = elid('p-badge')?.value || '';
+  const img   = elid('p-img')?.value || '';
+
+  const badgeLabels = { mais:'Mais pedido', novo:'Novo', dest:'Destaque', combo:'Combo', promo:'Promoção' };
+
+  const setTxt = (id, v) => { const e = elid(id); if (e) e.textContent = v; };
+  setTxt('ppc-name',  name  || 'Nome do produto');
+  setTxt('ppc-desc',  desc  || 'Descrição aparece aqui');
+  setTxt('ppc-price', price > 0 ? `R$ ${fmt(price)}` : 'R$ —');
+
+  const ppcBadge = elid('ppc-badge');
+  if (ppcBadge) {
+    if (badge && badgeLabels[badge]) {
+      ppcBadge.textContent    = badgeLabels[badge];
+      ppcBadge.style.display  = 'block';
+      ppcBadge.className      = `ppc-badge`;
+    } else {
+      ppcBadge.style.display  = 'none';
+    }
+  }
+
+  const ppcImg = elid('ppc-img');
+  const ppcPh  = elid('ppc-ph');
+  if (ppcImg && ppcPh) {
+    if (img) { ppcImg.src = img; ppcImg.style.display = 'block'; ppcPh.style.display = 'none'; }
+    else     { ppcImg.style.display = 'none'; ppcPh.style.display = 'flex'; }
+  }
+
+  const pricePreview = elid('pf-price-preview');
+  const priceVal     = elid('pf-price-val');
+  if (pricePreview) {
+    if (price > 0) {
+      if (priceVal) priceVal.textContent = `R$ ${fmt(price)}`;
+      pricePreview.style.display = 'block';
+    } else {
+      pricePreview.style.display = 'none';
+    }
+  }
+}
+
+function applyProductTemplate(type) {
+  if (!type) return;
+  const sel = elid('p-template');
+  if (sel) setTimeout(() => { sel.value = ''; }, 300);
+
+  const makeItem = (name, price) => ({ id:null, name, price_delta:price, active:true, _deleted:false });
+  const ACAI = [
+    'Chocolate branco','Chocolate preto','Chocolate branco com OREO',
+    'Morango','Nutella','M&Ms','Granola','Paçoca',
+  ].map(n => makeItem(n, 5));
+
+  if (type === 'acai-paid') {
+    _editGroups.push({ id:null, title:'Adicionais', type:'checkbox', required:false, min_select:0, max_select:0, free_limit:0, active:true, _deleted:false, items:[...ACAI] });
+  } else if (type === 'acai-combo') {
+    _editGroups.push({ id:null, title:'Escolha até 3 adicionais grátis', type:'checkbox', required:false, min_select:0, max_select:0, free_limit:3, active:true, _deleted:false, items:[...ACAI] });
+  } else if (type === 'burger-extras') {
+    _editGroups.push({ id:null, title:'Deseja batata palha?', type:'radio', required:false, min_select:0, max_select:1, free_limit:0, active:true, _deleted:false, items:[makeItem('Com batata palha',0), makeItem('Sem batata palha',0)] });
+    _editGroups.push({ id:null, title:'Extras', type:'checkbox', required:false, min_select:0, max_select:0, free_limit:0, active:true, _deleted:false, items:[makeItem('Bacon extra',5), makeItem('Cheddar extra',4), makeItem('Ovo',3)] });
+  } else if (type === 'drink-temp') {
+    _editGroups.push({ id:null, title:'Como prefere a bebida?', type:'radio', required:false, min_select:0, max_select:1, free_limit:0, active:true, _deleted:false, items:[makeItem('Gelada',0), makeItem('Natural',0)] });
+  }
+
+  renderOptionGroupsUI();
+  toast('Modelo aplicado! Você pode editar ou adicionar mais opções.');
+}
+
 /* Expose for HTML onclick */
 window.handleLogin             = handleLogin;
 window.handleCreateAccount     = handleCreateAccount;
@@ -1021,3 +1170,5 @@ window.removeOptGroup                 = removeOptGroup;
 window.addOptItem                     = addOptItem;
 window.removeOptItem                  = removeOptItem;
 window.createAcaiDefaultOptions       = createAcaiDefaultOptions;
+window.updateProductPreview           = updateProductPreview;
+window.applyProductTemplate           = applyProductTemplate;

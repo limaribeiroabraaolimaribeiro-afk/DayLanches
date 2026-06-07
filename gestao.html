@@ -182,100 +182,181 @@
 
 <!-- ===================== MODAL: PRODUTO ===================== -->
 <div id="product-overlay" class="modal-overlay" style="display:none" onclick="closeProductFormOutside(event)">
-  <div class="modal-box" id="product-modal">
-    <div class="modal-hd">
-      <h2 id="modal-title">Novo produto</h2>
+  <div class="modal-box pform-modal" id="product-modal">
+
+    <!-- Header -->
+    <div class="pform-header">
+      <div>
+        <h2 class="pform-title" id="modal-title">Novo produto</h2>
+        <p class="pform-subtitle">Preencha as informações do produto</p>
+      </div>
       <button class="btn-icon modal-close" onclick="closeProductForm()"><i class="fas fa-times"></i></button>
     </div>
-    <form id="form-product" onsubmit="handleSaveProduct(event)" class="modal-body">
-      <input type="hidden" id="p-id">
-      <input type="hidden" id="p-img">
 
-      <!-- Upload de imagem -->
-      <div class="img-upload-area" onclick="document.getElementById('img-file').click()" id="img-upload-area">
-        <div id="img-placeholder" class="img-placeholder">
-          <i class="fas fa-camera"></i>
-          <span>Enviar imagem do produto</span>
-          <small>JPG, PNG, WEBP • máx. 5MB</small>
+    <!-- Layout: form + preview -->
+    <div class="pform-layout">
+
+      <!-- FORM -->
+      <form id="form-product" onsubmit="handleSaveProduct(event)" class="pform-form">
+        <input type="hidden" id="p-id">
+        <input type="hidden" id="p-img">
+        <input type="checkbox" id="p-acai" style="display:none">
+
+        <!-- 1. Informações principais -->
+        <div class="pf-section">
+          <div class="pf-section-hd"><i class="fas fa-tag"></i> Informações principais</div>
+          <div class="form-group">
+            <label class="form-label">Nome do produto *</label>
+            <input type="text" id="p-name" class="form-input" required
+              placeholder="Ex: X-Burger, Açaí 500ml, Coca-Cola 2L"
+              oninput="updateProductPreview()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Descrição</label>
+            <textarea id="p-desc" class="form-textarea" rows="2"
+              placeholder="Ex: Hambúrguer artesanal com queijo, alface e tomate"
+              oninput="updateProductPreview()"></textarea>
+            <p class="form-hint">Escreva de forma simples o que vem no produto.</p>
+          </div>
         </div>
-        <img id="img-preview" src="" alt="preview" style="display:none">
-        <input type="file" id="img-file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleImageSelect(this)">
-      </div>
-      <div id="img-status" class="img-status" style="display:none"></div>
 
-      <!-- Campos do produto -->
-      <div class="form-row">
-        <div class="form-group" style="flex:2">
-          <label class="form-label">Nome *</label>
-          <input type="text" id="p-name" class="form-input" required placeholder="Ex: X-Burguer">
+        <!-- 2. Foto -->
+        <div class="pf-section">
+          <div class="pf-section-hd"><i class="fas fa-camera"></i> Foto do produto</div>
+          <div class="img-upload-area" onclick="document.getElementById('img-file').click()" id="img-upload-area">
+            <div id="img-placeholder" class="img-placeholder">
+              <i class="fas fa-cloud-upload-alt"></i>
+              <span>Clique para enviar foto</span>
+              <small>JPG, PNG, WEBP • máx. 5MB</small>
+            </div>
+            <img id="img-preview" src="" alt="preview" style="display:none">
+            <input type="file" id="img-file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleImageSelect(this)">
+          </div>
+          <div id="img-status" class="img-status" style="display:none"></div>
+          <p class="form-hint">Use uma foto bonita do produto. Isso ajuda o cliente a comprar.</p>
+          <details class="advanced-wrap" style="margin-top:6px">
+            <summary>Usar link de imagem (avançado)</summary>
+            <input type="text" id="p-img-url" class="form-input" placeholder="https://..." style="margin-top:8px" oninput="syncImgUrl(this.value)">
+          </details>
         </div>
-        <div class="form-group">
-          <label class="form-label">Preço (R$) *</label>
-          <input type="number" id="p-price" class="form-input" required step="0.01" min="0" placeholder="0,00">
+
+        <!-- 3. Categoria e Destaque -->
+        <div class="pf-section">
+          <div class="pf-section-hd"><i class="fas fa-store"></i> Onde esse produto aparece?</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Categoria *</label>
+              <select id="p-cat" class="form-input form-select" required onchange="updateProductPreview()">
+                <option value="">Selecione...</option>
+                <option value="acai">Açaí</option>
+                <option value="hamburguer">Hambúrguer</option>
+                <option value="artesanais">Artesanais</option>
+                <option value="hotdog">Hot Dogs</option>
+                <option value="porcoes">Porções</option>
+                <option value="combos">Combos</option>
+                <option value="bebidas">Bebidas</option>
+                <option value="salgadinhos">Salgadinhos</option>
+                <option value="adicionais">Adicionais</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Selo do produto</label>
+              <select id="p-badge" class="form-input form-select" onchange="updateProductPreview()">
+                <option value="">Nenhum</option>
+                <option value="mais">Mais pedido</option>
+                <option value="novo">Novo</option>
+                <option value="dest">Destaque</option>
+                <option value="combo">Combo</option>
+                <option value="promo">Promoção</option>
+              </select>
+              <p class="form-hint">O selo aparece em cima do produto no cardápio.</p>
+            </div>
+          </div>
+          <label class="pf-check-label">
+            <input type="checkbox" id="p-active" checked>
+            <span>Produto ativo — aparece no cardápio quando marcado</span>
+          </label>
         </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Descrição</label>
-        <textarea id="p-desc" class="form-textarea" rows="2" placeholder="Descrição curta do produto"></textarea>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Categoria *</label>
-          <select id="p-cat" class="form-input form-select" required>
-            <option value="">Selecione...</option>
-            <option value="acai">Açaí</option>
-            <option value="hamburguer">Hambúrguer</option>
-            <option value="artesanais">Artesanais</option>
-            <option value="hotdog">Hot Dogs</option>
-            <option value="porcoes">Porções</option>
-            <option value="combos">Combos</option>
-            <option value="bebidas">Bebidas</option>
-            <option value="salgadinhos">Salgadinhos</option>
-            <option value="adicionais">Adicionais</option>
-          </select>
+
+        <!-- 4. Preço -->
+        <div class="pf-section">
+          <div class="pf-section-hd"><i class="fas fa-dollar-sign"></i> Preço</div>
+          <div class="form-group">
+            <label class="form-label">Preço do produto *</label>
+            <div class="pf-price-wrap">
+              <span class="pf-price-prefix">R$</span>
+              <input type="text" id="p-price" class="form-input pf-price-input" required
+                placeholder="25,00" inputmode="decimal" oninput="updateProductPreview()">
+            </div>
+          </div>
+          <div class="pf-price-preview" id="pf-price-preview" style="display:none">
+            Esse produto será vendido por <strong id="pf-price-val">R$ 0,00</strong>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Badge</label>
-          <select id="p-badge" class="form-input form-select">
-            <option value="">Nenhum</option>
-            <option value="mais">Mais pedido</option>
-            <option value="dest">Destaque</option>
-            <option value="novo">Novo</option>
-            <option value="combo">Combo</option>
-            <option value="promo">Promoção</option>
-          </select>
+
+        <!-- 5. Opções -->
+        <div class="pf-section">
+          <div class="pf-section-hd"><i class="fas fa-sliders"></i> Opções que o cliente pode escolher</div>
+          <p class="form-hint" style="margin-bottom:12px">
+            Use isso quando o cliente puder escolher sabores, adicionais ou remover ingredientes.
+            <br><span style="color:var(--text-muted);font-style:italic">Exemplos: Açaí → Nutella, Morango &nbsp;·&nbsp; Hambúrguer → Com batata palha &nbsp;·&nbsp; Bebida → Gelada ou natural</span>
+          </p>
+
+          <div class="pf-template-row">
+            <i class="fas fa-magic" style="color:var(--primary);flex-shrink:0"></i>
+            <div style="flex:1">
+              <label class="form-label" style="margin-bottom:4px">Usar modelo pronto</label>
+              <select id="p-template" class="form-input form-select" onchange="applyProductTemplate(this.value)">
+                <option value="">Escolher modelo de opções...</option>
+                <option value="acai-paid">Açaí com adicionais pagos (8 sabores)</option>
+                <option value="acai-combo">Combo Açaí — 3 adicionais grátis</option>
+                <option value="burger-extras">Hambúrguer com extras</option>
+                <option value="drink-temp">Bebida — Gelada ou natural</option>
+              </select>
+              <p class="form-hint">Aplica opções prontas. Você pode editar depois.</p>
+            </div>
+          </div>
+
+          <div id="option-groups-list"></div>
+
+          <button type="button" class="pf-btn-add-choice" onclick="addOptGroup()">
+            <i class="fas fa-plus-circle"></i> Adicionar escolha
+          </button>
         </div>
+
+        <div id="product-error" class="form-error" style="display:none"></div>
+
+        <div class="pf-actions">
+          <button type="button" class="btn-secondary" onclick="closeProductForm()">Cancelar</button>
+          <button type="submit" class="btn-primary" id="save-btn">
+            <i class="fas fa-save"></i> <span id="save-btn-label">Salvar produto</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- PREVIEW -->
+      <div class="pform-preview">
+        <p class="pform-preview-hd"><i class="fas fa-eye"></i> Prévia no cardápio</p>
+        <div class="ppc">
+          <div class="ppc-img-wrap">
+            <div class="ppc-img-ph" id="ppc-ph"><i class="fas fa-image"></i></div>
+            <img class="ppc-img" id="ppc-img" src="" alt="" style="display:none">
+            <span class="ppc-badge" id="ppc-badge" style="display:none"></span>
+          </div>
+          <div class="ppc-body">
+            <h3 class="ppc-name" id="ppc-name">Nome do produto</h3>
+            <p class="ppc-desc" id="ppc-desc">Descrição aparece aqui</p>
+            <div class="ppc-footer">
+              <span class="ppc-price" id="ppc-price">R$ —</span>
+              <span class="ppc-add-btn">Adicionar</span>
+            </div>
+          </div>
+        </div>
+        <p class="pform-preview-note">A aparência pode variar no cardápio.</p>
       </div>
-      <div class="form-row checks-row">
-        <label class="check-label"><input type="checkbox" id="p-active" checked> Produto ativo</label>
-        <label class="check-label"><input type="checkbox" id="p-acai"> Adicionais de açaí</label>
-      </div>
 
-      <!-- URL alternativa (oculta por padrão) -->
-      <details class="advanced-wrap">
-        <summary>URL da imagem (avançado)</summary>
-        <input type="text" id="p-img-url" class="form-input" placeholder="https://..." style="margin-top:8px" oninput="syncImgUrl(this.value)">
-      </details>
-
-      <!-- ESCOLHAS DO PRODUTO -->
-  <div class="options-section">
-    <div class="options-section-hd">
-      <span class="options-section-title"><i class="fas fa-list-check"></i> Escolhas do produto</span>
-      <button type="button" class="btn-secondary btn-sm" onclick="addOptGroup()">
-        <i class="fas fa-plus"></i> Adicionar grupo
-      </button>
-    </div>
-    <div id="option-groups-list"></div>
-  </div>
-
-  <div id="product-error" class="form-error" style="display:none"></div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-secondary" onclick="closeProductForm()">Cancelar</button>
-        <button type="submit" class="btn-primary" id="save-btn"><i class="fas fa-save"></i> Salvar produto</button>
-      </div>
-    </form>
-  </div>
+    </div><!-- /pform-layout -->
+  </div><!-- /pform-modal -->
 </div>
 
 <!-- Toast -->
@@ -285,6 +366,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=5"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=9"></script>
+<script src="gestao.js?v=10"></script>
 </body>
 </html>
