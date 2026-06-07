@@ -152,44 +152,125 @@ function closeSidebar() {
    PRODUCTS
 ══════════════════════════════════════ */
 async function loadProducts() {
+  gs.usingLocalProducts = false;
   try {
     const { data, error } = await getSb().from('products').select('*').order('name');
     if (error) throw error;
-    gs.products = data || [];
+    if (data && data.length > 0) {
+      gs.products = data;
+    } else {
+      /* Supabase vazio — usa produtos locais */
+      gs.products = (window.PRODUCTS_LOCAL || []).filter(p => !p.isAddon);
+      gs.usingLocalProducts = true;
+    }
   } catch (e) {
-    console.warn('Erro ao carregar produtos:', e);
-    gs.products = [];
+    console.warn('Erro ao carregar produtos do Supabase, usando locais:', e);
+    gs.products = (window.PRODUCTS_LOCAL || []).filter(p => !p.isAddon);
+    gs.usingLocalProducts = true;
   }
   renderProductList();
+}
+
+async function importLocalProductsToSupabase() {
+  const btn = elid('btn-import');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importando...'; }
+
+  const local = (window.PRODUCTS_LOCAL || []).filter(p => !p.isAddon);
+  if (!local.length) { toast('Nenhum produto local encontrado.', true); return; }
+
+  const SITE = 'https://www.daylanches.com.br';
+  let imported = 0, skipped = 0, errors = 0;
+
+  for (const p of local) {
+    try {
+      const { data: existing } = await getSb()
+        .from('products').select('id')
+        .eq('name', p.name).eq('category', p.cat)
+        .maybeSingle();
+      if (existing) { skipped++; continue; }
+
+      let img = p.img || '';
+      if (img && !img.startsWith('http')) img = `${SITE}/${img.replace(/^\/+/, '')}`;
+
+      const { error } = await getSb().from('products').insert({
+        name:              p.name,
+        description:       p.desc || '',
+        price:             Number(p.price || 0),
+        category:          p.cat,
+        image_url:         img,
+        active:            true,
+        badges:            p.badges || [],
+        allow_acai_addons: !!p.allowAcaiAddons,
+        free_addon_limit:  p.freeAddonLimit || 0,
+      });
+      if (error) { console.error('Erro ao importar', p.name, error); errors++; }
+      else imported++;
+    } catch (e) { errors++; }
+  }
+
+  toast(`Importação concluída: ${imported} importados, ${skipped} já existiam${errors ? ', ' + errors + ' com erro' : ''}.`);
+  await loadProducts();
 }
 
 function renderProductList() {
   const wrap = elid('products-list');
   const q    = gs.productFilter.toLowerCase();
+
+  /* Normaliza campos: produtos do Supabase usam 'category'/'description'/'image_url'
+     produtos locais usam 'cat'/'desc'/'img' */
+  const normalized = gs.products.map(p => ({
+    ...p,
+    _name:     p.name || '',
+    _cat:      p.category || p.cat || '—',
+    _desc:     p.description || p.desc || '',
+    _img:      p.image_url || p.img || '',
+    _price:    p.price || 0,
+    _active:   p.active !== false,
+    _badges:   p.badges || [],
+    _isLocal:  !p.image_url && (p.cat !== undefined),
+  }));
+
   const list = q
-    ? gs.products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q))
-    : gs.products;
+    ? normalized.filter(p => p._name.toLowerCase().includes(q) || p._cat.toLowerCase().includes(q))
+    : normalized;
+
+  let banner = '';
+  if (gs.usingLocalProducts) {
+    banner = `
+      <div class="local-products-banner">
+        <div class="local-banner-text">
+          <i class="fas fa-info-circle"></i>
+          <span>Produtos locais carregados. Importe para a base da loja para poder editar e gerenciar.</span>
+        </div>
+        <button class="btn-primary btn-import" id="btn-import" onclick="importLocalProductsToSupabase()">
+          <i class="fas fa-cloud-upload-alt"></i> Importar produtos atuais
+        </button>
+      </div>`;
+  }
 
   if (!list.length) {
-    wrap.innerHTML = '<p class="empty-msg">Nenhum produto. Clique em "Novo produto" para começar.</p>';
+    wrap.innerHTML = banner + '<p class="empty-msg">Nenhum produto encontrado.</p>';
     return;
   }
-  wrap.innerHTML = `
+  wrap.innerHTML = banner + `
     <table class="data-table">
       <thead><tr>
         <th>Img</th><th>Nome</th><th>Categoria</th>
         <th>Preço</th><th>Status</th><th>Ações</th>
       </tr></thead>
       <tbody>${list.map(p => `
-        <tr class="${p.active===false?'row-inactive':''}">
-          <td><div class="tbl-img-wrap"><img src="${esc(p.image_url||'')}" alt="" loading="lazy" onerror="this.style.display='none'"></div></td>
-          <td><strong>${esc(p.name)}</strong>${p.badges?.length?`<span class="tbl-badge">${p.badges[0]}</span>`:''}</td>
-          <td>${esc(p.category||'—')}</td>
-          <td>R$ ${fmt(p.price)}</td>
-          <td><span class="status-pill ${p.active!==false?'status-active':'status-inactive'}">${p.active!==false?'Ativo':'Inativo'}</span></td>
+        <tr class="${!p._active?'row-inactive':''}">
+          <td><div class="tbl-img-wrap"><img src="${esc(p._img)}" alt="" loading="lazy" onerror="this.style.display='none'"></div></td>
+          <td><strong>${esc(p._name)}</strong>${p._badges?.length?`<span class="tbl-badge">${p._badges[0]}</span>`:''}</td>
+          <td>${esc(p._cat)}</td>
+          <td>R$ ${fmt(p._price)}</td>
+          <td><span class="status-pill ${p._active?'status-active':'status-inactive'}">${p._active?'Ativo':'Inativo'}</span></td>
           <td>
-            <button class="btn-icon-sm btn-edit" onclick="openProductForm('${p.id}')"><i class="fas fa-pen"></i></button>
-            <button class="btn-icon-sm btn-del"  onclick="confirmDeleteProduct('${p.id}','${esc(p.name)}')"><i class="fas fa-trash"></i></button>
+            ${!gs.usingLocalProducts
+              ? `<button class="btn-icon-sm btn-edit" onclick="openProductForm('${p.id}')"><i class="fas fa-pen"></i></button>
+                 <button class="btn-icon-sm btn-del"  onclick="confirmDeleteProduct('${p.id}','${esc(p._name)}')"><i class="fas fa-trash"></i></button>`
+              : `<span style="font-size:.75rem;color:var(--text-muted)">Importe para editar</span>`
+            }
           </td>
         </tr>`).join('')}
       </tbody>
@@ -374,7 +455,7 @@ function syncImgUrl(url) {
 ══════════════════════════════════════ */
 async function loadOrders() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSb()
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
@@ -635,6 +716,7 @@ window.filterProductList       = filterProductList;
 window.confirmDeleteProduct    = confirmDeleteProduct;
 window.filterOrders            = filterOrders;
 window.updateOrderStatus       = updateOrderStatus;
-window.handleSaveConfig        = handleSaveConfig;
-window.togglePwd               = togglePwd;
-window.sendPwdReset            = sendPwdReset;
+window.handleSaveConfig               = handleSaveConfig;
+window.togglePwd                      = togglePwd;
+window.sendPwdReset                   = sendPwdReset;
+window.importLocalProductsToSupabase  = importLocalProductsToSupabase;

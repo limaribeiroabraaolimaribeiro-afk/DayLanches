@@ -644,6 +644,42 @@ a { text-decoration: none; color: inherit; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
 
+/* ═══════════════════════ LOCAL PRODUCTS BANNER ═══════════════════════ */
+.local-products-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #FFF7ED;
+  border: 1.5px solid #FED7AA;
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+
+.local-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: .85rem;
+  color: #92400E;
+  font-weight: 500;
+  flex: 1;
+  min-width: 200px;
+}
+
+.local-banner-text i {
+  color: var(--primary);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.btn-import {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Overflow table on mobile */
 @media (max-width: 640px) {
   .data-table { font-size: .78rem; }
