@@ -1034,6 +1034,11 @@ function buildWhatsAppItemText(item) {
   let text = `• ${item.qty}x ${item.name} — R$ ${fmt(getItemTotal(item))}`;
   if (free.length) text += `\n  Adicionais grátis: ${free.join(', ')}`;
   if (paid.length) text += `\n  Adicionais: ${paid.join(', ')}`;
+  if (item.options?.length) {
+    item.options.forEach(og => {
+      text += `\n  ${og.groupTitle}: ${og.items.map(i=>i.name).join(', ')}`;
+    });
+  }
   return text;
 }
 
@@ -1062,7 +1067,7 @@ function renderCartItems() {
         <div class="ci-info">
           <div class="ci-name">${item.name}</div>
           <div class="ci-price">R$ ${fmt(getItemUnitPrice(item))}</div>
-          ${buildCartAddonsHTML(item)}
+          ${buildCartOptionsHTML(item)}${buildCartAddonsHTML(item)}
           <div class="ci-controls">
             <button class="ci-btn minus-btn" onclick="changeQty('${key}', -1)" aria-label="Diminuir">
               <i class="fas ${item.qty === 1 ? 'fa-trash' : 'fa-minus'}"></i>
@@ -1441,7 +1446,7 @@ function sendWhatsApp() {
     order_number:    `DL-${state.orderId}`,
     customer_name:   state.form.name,
     delivery_type:   state.deliveryType,
-    items:           state.cart.map(i => ({ name: i.name, qty: i.qty, price: getItemTotal(i) })),
+    items:           state.cart.map(i => ({ id:i.id, name:i.name, qty:i.qty, unitPrice:getItemUnitPrice(i), options:i.options||[], total:getItemTotal(i) })),
     subtotal:        getSubtotal(),
     delivery_fee:    getDeliveryFee(),
     total:           getTotal(),
@@ -1462,6 +1467,8 @@ function sendWhatsApp() {
 let ppProductId = null;
 let ppQty = 1;
 let ppSelectedAddons = [];
+let ppOptionGroups    = [];  /* grupos carregados do Supabase para o produto atual */
+let ppOptionSelections = {}; /* {groupId: Set<itemId>} para checkbox | {groupId: itemId} para radio */
 
 const PP_CAT_LABELS = {
   acai: '🍇 Açaí', artesanais: '🥩 Artesanais',
@@ -1529,7 +1536,10 @@ function updatePpAddButton() {
   const p = getPpProduct();
   const btn = el('pp-add-btn');
   if (!p || !btn) return;
-  btn.innerHTML = `<i class="fas fa-plus"></i> Adicionar ao carrinho — R$ ${fmt(getPpUnitPrice(p) * ppQty)}`;
+  const baseUnit = ppOptionGroups.length > 0
+    ? p.price + getPpOptionsTotal()
+    : getPpUnitPrice(p);
+  btn.innerHTML = `<i class="fas fa-plus"></i> Adicionar ao carrinho — R$ ${fmt(baseUnit * ppQty)}`;
 }
 
 function renderPpAddons(product) {
@@ -1601,12 +1611,176 @@ function ppToggleAddon(addonId) {
   renderPpAddons(getPpProduct());
 }
 
+/* ── Opções de produto (DB-driven) ── */
+async function loadProductOptions(productId) {
+  ppOptionGroups     = [];
+  ppOptionSelections = {};
+  try {
+    const db = getSb();
+    if (!db) return;
+    const { data, error } = await db
+      .from('product_option_groups')
+      .select('*, product_option_items(*)')
+      .eq('product_id', productId)
+      .eq('active', true)
+      .order('display_order');
+    if (error) throw error;
+    ppOptionGroups = (data || []).map(g => ({
+      id:         g.id,
+      title:      g.title,
+      type:       g.type || 'checkbox',
+      required:   !!g.required,
+      max_select: g.max_select || 0,
+      free_limit: g.free_limit || 0,
+      items:      (g.product_option_items || [])
+        .filter(i => i.active !== false)
+        .sort((a, b) => a.display_order - b.display_order)
+        .map(i => ({ id:i.id, name:i.name, price_delta:Number(i.price_delta||0) })),
+    }));
+    ppOptionGroups.forEach(g => {
+      ppOptionSelections[g.id] = g.type === 'radio' ? null : new Set();
+    });
+  } catch(e) { console.warn('Erro ao carregar opções:', e); }
+}
+
+function renderProductOptions(product) {
+  /* Remove seção antiga de opções DB (se houver) */
+  const oldOpts = el('pp-options-wrap');
+  if (oldOpts) oldOpts.remove();
+
+  /* Se não há grupos do banco, cai no sistema antigo de açaí */
+  const oldAddons = el('pp-addons-wrap');
+  if (!ppOptionGroups.length) {
+    if (oldAddons) oldAddons.style.display = '';
+    renderPpAddons(product);
+    return;
+  }
+
+  /* Esconde sistema antigo */
+  if (oldAddons) oldAddons.style.display = 'none';
+
+  const wrap = document.createElement('div');
+  wrap.id = 'pp-options-wrap';
+  wrap.className = 'pp-options-wrap';
+
+  wrap.innerHTML = ppOptionGroups.map(group => `
+    <div class="pp-opt-group">
+      <div class="pp-opt-group-hd">
+        <h3 class="pp-opt-group-title">${esc(group.title)}</h3>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${group.required ? '<span class="pp-opt-badge pp-opt-badge-req">Obrigatório</span>' : ''}
+          ${group.free_limit > 0 ? `<span class="pp-opt-badge pp-opt-badge-free">${group.free_limit} grátis</span>` : ''}
+          <span class="pp-opt-count" id="pp-opt-cnt-${group.id}"></span>
+        </div>
+      </div>
+      <div class="pp-opt-items">
+        ${group.items.map(item => `
+          <label class="pp-opt-item">
+            <input type="${group.type === 'radio' ? 'radio' : 'checkbox'}"
+              name="ppopt_${group.id}" value="${item.id}"
+              class="pp-opt-inp"
+              onchange="ppHandleOptionChange('${group.id}','${item.id}','${group.type}',${item.price_delta})">
+            <span class="pp-opt-name">${esc(item.name)}</span>
+            <span class="pp-opt-price">${item.price_delta > 0 ? `+ R$ ${fmt(item.price_delta)}` : 'Grátis'}</span>
+          </label>`).join('')}
+      </div>
+    </div>`).join('');
+
+  const qtyRow = document.querySelector('.pp-qty-row');
+  if (qtyRow) qtyRow.insertAdjacentElement('afterend', wrap);
+
+  updatePpAddButton();
+}
+
+function ppHandleOptionChange(groupId, itemId, type, priceDelta) {
+  const group = ppOptionGroups.find(g => g.id === groupId);
+  if (!group) return;
+
+  if (type === 'radio') {
+    ppOptionSelections[groupId] = itemId;
+  } else {
+    const sel = ppOptionSelections[groupId];
+    if (!(sel instanceof Set)) { ppOptionSelections[groupId] = new Set(); }
+    const s = ppOptionSelections[groupId];
+    if (s.has(itemId)) {
+      s.delete(itemId);
+    } else {
+      if (group.max_select > 0 && s.size >= group.max_select) {
+        const inp = document.querySelector(`input[name="ppopt_${groupId}"][value="${itemId}"]`);
+        if (inp) inp.checked = false;
+        showToast(`Máximo de ${group.max_select} ${group.max_select === 1 ? 'opção' : 'opções'} para "${group.title}".`);
+        return;
+      }
+      s.add(itemId);
+    }
+
+    /* Atualiza contador */
+    const countEl = el(`pp-opt-cnt-${groupId}`);
+    if (countEl) {
+      const n = (ppOptionSelections[groupId]).size;
+      const fl = group.free_limit;
+      countEl.textContent = n > 0
+        ? (fl > 0 ? `${Math.min(n,fl)} grátis${n>fl?' + '+(n-fl)+' pago':''}` : `${n} selecionado${n>1?'s':''}`)
+        : '';
+    }
+  }
+  updatePpAddButton();
+}
+
+function getPpOptionsTotal() {
+  let extra = 0;
+  for (const group of ppOptionGroups) {
+    const sel = ppOptionSelections[group.id];
+    const fl  = group.free_limit || 0;
+    if (group.type === 'radio') {
+      const item = group.items.find(i => i.id === sel);
+      if (item) extra += item.price_delta;
+    } else if (sel instanceof Set) {
+      [...sel].forEach((id, idx) => {
+        const item = group.items.find(i => i.id === id);
+        if (item && idx >= fl) extra += item.price_delta;
+      });
+    }
+  }
+  return extra;
+}
+
+function getPpOptionsForCart() {
+  const result = [];
+  for (const group of ppOptionGroups) {
+    const sel = ppOptionSelections[group.id];
+    const fl  = group.free_limit || 0;
+    const chosen = [];
+    if (group.type === 'radio') {
+      const item = group.items.find(i => i.id === sel);
+      if (item) chosen.push({ name:item.name, price:item.price_delta, free:false });
+    } else if (sel instanceof Set) {
+      [...sel].forEach((id, idx) => {
+        const item = group.items.find(i => i.id === id);
+        if (item) chosen.push({ name:item.name, price:idx < fl ? 0 : item.price_delta, free:idx < fl });
+      });
+    }
+    if (chosen.length) result.push({ groupTitle:group.title, items:chosen });
+  }
+  return result;
+}
+
+function buildCartOptionsHTML(item) {
+  if (!item.options?.length) return '';
+  return item.options.map(og => {
+    const names = (og.items||[]).map(i => i.name).join(', ');
+    return `<div class="ci-addons">${esc(og.groupTitle)}: ${esc(names)}</div>`;
+  }).join('');
+}
+
 function openProductPage(id) {
   const p = findProductByAnyId(id);
   if (!p) return;
   ppProductId = p.id;
   ppQty = 1;
-  ppSelectedAddons = [];
+  ppSelectedAddons  = [];
+  ppOptionGroups    = [];
+  ppOptionSelections = {};
 
   /* Imagem */
   const hero = el('pp-hero');
@@ -1642,18 +1816,21 @@ function openProductPage(id) {
   const obs = el('pp-obs');
   if (obs) obs.value = '';
 
-  renderPpAddons(p);
-
   const page = el('product-page');
   if (page) { page.classList.add('open'); document.body.style.overflow = 'hidden'; }
+
+  /* Carrega opções do banco de forma assíncrona */
+  loadProductOptions(p.id).then(() => renderProductOptions(p));
 }
 
 function closeProductPage() {
   const page = el('product-page');
   if (page) page.classList.remove('open');
   if (!state.cartOpen && !spOpen) document.body.style.overflow = '';
-  ppProductId = null;
-  ppSelectedAddons = [];
+  ppProductId       = null;
+  ppSelectedAddons  = [];
+  ppOptionGroups    = [];
+  ppOptionSelections = {};
   if (window.location.search.includes('produto')) {
     window.history.replaceState({}, '', window.location.pathname);
   }
@@ -1719,10 +1896,24 @@ function ppChangeQty(delta) {
 
 function ppAddToCart() {
   if (!ppProductId) return;
-  const p = getProductsList().find(p => p.id === ppProductId);
+  const p = getPpProduct();
   if (!p) return;
 
-  const item = createCartItem(p, ppQty, getPpSelectedAddons(p));
+  let item;
+
+  if (ppOptionGroups.length > 0) {
+    /* Sistema novo: opções do banco */
+    const options    = getPpOptionsForCart();
+    const optExtra   = getPpOptionsTotal();
+    const unitPrice  = p.price + optExtra;
+    const optKey     = options.map(og => og.items.map(i=>i.name).join('+')).join('|') || 'base';
+    const cartKey    = `p${p.id}_${optKey}`;
+    item = { ...p, qty:ppQty, basePrice:p.price, price:unitPrice, addons:[], options, cartKey };
+  } else {
+    /* Sistema antigo: adicionais açaí */
+    item = createCartItem(p, ppQty, getPpSelectedAddons(p));
+  }
+
   const existing = state.cart.find(c => getCartItemKey(c) === item.cartKey);
   if (existing) {
     existing.qty += ppQty;

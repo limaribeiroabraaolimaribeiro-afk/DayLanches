@@ -2446,3 +2446,82 @@ a { text-decoration: none; color: inherit; }
 .product-card:nth-child(3) { animation-delay: .08s; }
 .product-card:nth-child(4) { animation-delay: .12s; }
 .product-card:nth-child(n+5) { animation-delay: .16s; }
+
+/* ─── OPÇÕES DO PRODUTO (novo sistema DB-driven) ─── */
+.pp-options-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.pp-opt-group {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.pp-opt-group:last-child { border-bottom: none; }
+
+.pp-opt-group-hd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.pp-opt-group-title {
+  font-size: .92rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pp-opt-badge {
+  font-size: .72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.pp-opt-badge-req  { background: var(--danger-bg, #FEF2F2); color: #EF4444; }
+.pp-opt-badge-free { background: var(--success-bg, #F0FDF4); color: #16a34a; }
+
+.pp-opt-count {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.pp-opt-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pp-opt-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  user-select: none;
+}
+.pp-opt-item:hover { border-color: var(--primary); background: var(--primary-light, #FFF3EB); }
+.pp-opt-item:has(.pp-opt-inp:checked) {
+  border-color: var(--primary);
+  background: var(--primary-light, #FFF3EB);
+}
+
+.pp-opt-inp { width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; }
+
+.pp-opt-name  { flex: 1; font-size: .88rem; font-weight: 500; color: var(--text); }
+.pp-opt-price { font-size: .82rem; font-weight: 700; color: var(--primary); white-space: nowrap; }
+
+@media (max-width: 480px) {
+  .pp-opt-group { padding: 14px 16px; }
+}

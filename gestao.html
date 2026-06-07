@@ -107,6 +107,9 @@
         <button class="btn-secondary" id="btn-sync-meta" onclick="syncLocalProductMetadata()" title="Atualiza local_id, display_order e slug nos produtos já importados">
           <i class="fas fa-sync-alt"></i> Sincronizar ordem
         </button>
+        <button class="btn-secondary" id="btn-acai-defaults" onclick="createAcaiDefaultOptions()" title="Cria grupos de adicionais para os produtos de Açaí já importados">
+          <i class="fas fa-ice-cream"></i> Criar escolhas do Açaí
+        </button>
         <input type="search" class="search-input-dash" placeholder="Buscar produto..." oninput="filterProductList(this.value)">
       </div>
       <div id="products-list"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
@@ -254,7 +257,18 @@
         <input type="text" id="p-img-url" class="form-input" placeholder="https://..." style="margin-top:8px" oninput="syncImgUrl(this.value)">
       </details>
 
-      <div id="product-error" class="form-error" style="display:none"></div>
+      <!-- ESCOLHAS DO PRODUTO -->
+  <div class="options-section">
+    <div class="options-section-hd">
+      <span class="options-section-title"><i class="fas fa-list-check"></i> Escolhas do produto</span>
+      <button type="button" class="btn-secondary btn-sm" onclick="addOptGroup()">
+        <i class="fas fa-plus"></i> Adicionar grupo
+      </button>
+    </div>
+    <div id="option-groups-list"></div>
+  </div>
+
+  <div id="product-error" class="form-error" style="display:none"></div>
 
       <div class="modal-actions">
         <button type="button" class="btn-secondary" onclick="closeProductForm()">Cancelar</button>
@@ -271,6 +285,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=5"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=8"></script>
+<script src="gestao.js?v=9"></script>
 </body>
 </html>

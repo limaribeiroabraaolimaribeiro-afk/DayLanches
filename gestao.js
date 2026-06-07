@@ -269,6 +269,208 @@ async function syncLocalProductMetadata() {
   await loadProducts();
 }
 
+/* ══════════════════════════════════════
+   OPTION GROUPS — estado local do editor
+══════════════════════════════════════ */
+let _editGroups    = [];  /* grupos sendo editados */
+let _delGroupIds   = [];  /* IDs de grupos marcados para deletar */
+
+async function loadOptionGroupsForEdit(productId) {
+  _editGroups  = [];
+  _delGroupIds = [];
+  if (!productId) { renderOptionGroupsUI(); return; }
+  try {
+    const { data, error } = await getSb()
+      .from('product_option_groups')
+      .select('*, product_option_items(*)')
+      .eq('product_id', productId)
+      .order('display_order');
+    if (error) throw error;
+    _editGroups = (data || []).map(g => ({
+      id:          g.id,
+      title:       g.title || '',
+      type:        g.type || 'checkbox',
+      required:    !!g.required,
+      min_select:  g.min_select || 0,
+      max_select:  g.max_select || 0,
+      free_limit:  g.free_limit || 0,
+      active:      g.active !== false,
+      _deleted:    false,
+      items:       (g.product_option_items || [])
+        .sort((a,b) => a.display_order - b.display_order)
+        .map(i => ({ id:i.id, name:i.name||'', price_delta:Number(i.price_delta||0), active:i.active!==false, _deleted:false })),
+    }));
+  } catch(e) {
+    console.warn('Erro ao carregar grupos de opções:', e);
+    _editGroups = [];
+  }
+  renderOptionGroupsUI();
+}
+
+function renderOptionGroupsUI() {
+  const container = elid('option-groups-list');
+  if (!container) return;
+  const active = _editGroups.filter(g => !g._deleted);
+  if (!active.length) {
+    container.innerHTML = '<p class="empty-groups-msg">Nenhuma escolha cadastrada.</p>';
+    return;
+  }
+  container.innerHTML = active.map(group => {
+    const ri = _editGroups.indexOf(group);
+    const activeItems = group.items.filter(i => !i._deleted);
+    return `
+      <div class="opt-group-card">
+        <div class="opt-group-hd">
+          <input class="form-input" placeholder="Título (ex: Adicionais)" value="${esc(group.title)}"
+            onchange="_editGroups[${ri}].title=this.value" style="flex:1">
+          <button type="button" class="btn-icon-sm btn-del" onclick="removeOptGroup(${ri})"><i class="fas fa-trash"></i></button>
+        </div>
+        <div class="form-row" style="margin-top:8px">
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select class="form-input form-select" onchange="_editGroups[${ri}].type=this.value">
+              <option value="checkbox" ${group.type==='checkbox'?'selected':''}>Múltipla escolha</option>
+              <option value="radio"    ${group.type==='radio'   ?'selected':''}>Escolha única</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Grátis</label>
+            <input type="number" class="form-input" min="0" value="${group.free_limit}"
+              onchange="_editGroups[${ri}].free_limit=Number(this.value)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Máx.</label>
+            <input type="number" class="form-input" min="0" value="${group.max_select}"
+              onchange="_editGroups[${ri}].max_select=Number(this.value)">
+          </div>
+        </div>
+        <div class="opt-group-flags">
+          <label class="check-label">
+            <input type="checkbox" ${group.required?'checked':''} onchange="_editGroups[${ri}].required=this.checked"> Obrigatório
+          </label>
+          <label class="check-label">
+            <input type="checkbox" ${group.active?'checked':''} onchange="_editGroups[${ri}].active=this.checked"> Ativo
+          </label>
+        </div>
+        <div class="opt-items-list">
+          ${activeItems.map(item => {
+            const ii = group.items.indexOf(item);
+            return `<div class="opt-item-row">
+              <input class="form-input" placeholder="Nome da opção" value="${esc(item.name)}"
+                onchange="_editGroups[${ri}].items[${ii}].name=this.value" style="flex:1">
+              <div style="display:flex;align-items:center;gap:4px">
+                <span style="font-size:.8rem;color:var(--text-muted)">+R$</span>
+                <input type="number" class="form-input" min="0" step="0.01" value="${item.price_delta}"
+                  onchange="_editGroups[${ri}].items[${ii}].price_delta=Number(this.value)" style="width:70px">
+              </div>
+              <button type="button" class="btn-icon-sm btn-del" onclick="removeOptItem(${ri},${ii})"><i class="fas fa-times"></i></button>
+            </div>`;
+          }).join('')}
+        </div>
+        <button type="button" class="btn-add-opt" onclick="addOptItem(${ri})">
+          <i class="fas fa-plus"></i> Adicionar opção
+        </button>
+      </div>`;
+  }).join('');
+}
+
+function addOptGroup() {
+  _editGroups.push({ id:null, title:'', type:'checkbox', required:false, min_select:0, max_select:0, free_limit:0, active:true, _deleted:false, items:[] });
+  renderOptionGroupsUI();
+}
+function removeOptGroup(ri) {
+  const g = _editGroups[ri];
+  if (!g) return;
+  if (g.id) { g._deleted=true; _delGroupIds.push(g.id); }
+  else _editGroups.splice(ri, 1);
+  renderOptionGroupsUI();
+}
+function addOptItem(ri) {
+  _editGroups[ri]?.items.push({ id:null, name:'', price_delta:0, active:true, _deleted:false });
+  renderOptionGroupsUI();
+}
+function removeOptItem(ri, ii) {
+  const item = _editGroups[ri]?.items[ii];
+  if (!item) return;
+  if (item.id) item._deleted = true;
+  else _editGroups[ri].items.splice(ii, 1);
+  renderOptionGroupsUI();
+}
+
+async function saveOptionGroups(productId) {
+  const db = getSb();
+  for (const gid of _delGroupIds) {
+    await db.from('product_option_groups').delete().eq('id', gid).catch(()=>{});
+  }
+  for (let gi = 0; gi < _editGroups.length; gi++) {
+    const g = _editGroups[gi];
+    if (g._deleted) continue;
+    const now = new Date().toISOString();
+    const gPayload = { product_id:productId, title:g.title||'Escolhas', type:g.type||'checkbox',
+      required:!!g.required, min_select:Number(g.min_select||0), max_select:Number(g.max_select||0),
+      free_limit:Number(g.free_limit||0), active:g.active!==false, display_order:gi, updated_at:now };
+    let gid = g.id;
+    if (gid) {
+      await db.from('product_option_groups').update(gPayload).eq('id', gid).catch(()=>{});
+    } else {
+      const { data, error } = await db.from('product_option_groups').insert({ ...gPayload, created_at:now }).select('id').single();
+      if (error) { console.error('Erro ao inserir grupo:', error); continue; }
+      gid = data?.id;
+    }
+    if (!gid) continue;
+    for (let ii = 0; ii < g.items.length; ii++) {
+      const it = g.items[ii];
+      const iPayload = { group_id:gid, name:it.name||'', price_delta:Number(it.price_delta||0), active:it.active!==false, display_order:ii, updated_at:now };
+      if (it._deleted && it.id) { await db.from('product_option_items').delete().eq('id', it.id).catch(()=>{}); continue; }
+      if (it._deleted) continue;
+      if (it.id) { await db.from('product_option_items').update(iPayload).eq('id', it.id).catch(()=>{}); }
+      else { await db.from('product_option_items').insert({ ...iPayload, created_at:now }).catch(()=>{}); }
+    }
+  }
+}
+
+async function createAcaiDefaultOptions() {
+  const db = getSb();
+  const btn = elid('btn-acai-defaults');
+  if (btn) { btn.disabled=true; btn.textContent='Criando...'; }
+
+  const ADDONS = [
+    {name:'Chocolate branco',price_delta:5},{name:'Chocolate preto',price_delta:5},
+    {name:'Chocolate branco com OREO',price_delta:5},{name:'Morango',price_delta:5},
+    {name:'Nutella',price_delta:5},{name:'M&Ms',price_delta:5},
+    {name:'Granola',price_delta:5},{name:'Paçoca',price_delta:5},
+  ];
+
+  const defs = [
+    { name:'Açaí 300ml',    title:'Adicionais', free_limit:0 },
+    { name:'Açaí 500ml',    title:'Adicionais', free_limit:0 },
+    { name:'Combo Açaí 500ml', title:'Escolha até 3 adicionais grátis', free_limit:3 },
+  ];
+
+  let created=0, skipped=0;
+  const now = new Date().toISOString();
+
+  for (const def of defs) {
+    const { data:prods } = await db.from('products').select('id').eq('name', def.name).limit(1);
+    if (!prods?.length) { skipped++; continue; }
+    const pid = prods[0].id;
+    const { data:existing } = await db.from('product_option_groups').select('id').eq('product_id', pid).eq('title', def.title).maybeSingle();
+    if (existing) { skipped++; continue; }
+    const { data:newG, error:gErr } = await db.from('product_option_groups').insert({
+      product_id:pid, title:def.title, type:'checkbox', required:false,
+      min_select:0, max_select:0, free_limit:def.free_limit, active:true, display_order:0, created_at:now, updated_at:now,
+    }).select('id').single();
+    if (gErr || !newG) { skipped++; continue; }
+    for (let i=0; i<ADDONS.length; i++) {
+      await db.from('product_option_items').insert({ group_id:newG.id, name:ADDONS[i].name, price_delta:ADDONS[i].price_delta, active:true, display_order:i, created_at:now, updated_at:now });
+    }
+    created++;
+  }
+
+  if (btn) { btn.disabled=false; btn.textContent='Criar escolhas padrão do Açaí'; }
+  toast(`Açaí: ${created} grupos criados, ${skipped} já existiam ou não encontrados.`);
+}
+
 function renderProductList() {
   const wrap = elid('products-list');
   const q    = gs.productFilter.toLowerCase();
@@ -336,7 +538,7 @@ function renderProductList() {
 
 function filterProductList(q) { gs.productFilter = q; renderProductList(); }
 
-function openProductForm(id) {
+async function openProductForm(id) {
   gs.editId = id || null;
   gs.uploadedUrl = '';
 
@@ -373,11 +575,14 @@ function openProductForm(id) {
 
   elid('product-overlay').style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  await loadOptionGroupsForEdit(id || null);
 }
 
 function closeProductForm() {
   elid('product-overlay').style.display = 'none';
   document.body.style.overflow = '';
+  _editGroups  = [];
+  _delGroupIds = [];
 }
 
 function closeProductFormOutside(e) {
@@ -415,15 +620,18 @@ async function handleSaveProduct(e) {
   try {
     const existingId = elid('p-id').value;
     let err;
+    let savedProductId = existingId;
     if (existingId) {
       ({ error: err } = await getSb().from('products').update(data).eq('id', existingId));
       if (!err) toast('Produto atualizado!');
     } else {
       data.created_at = now;
-      ({ error: err } = await getSb().from('products').insert(data));
-      if (!err) toast('Produto cadastrado!');
+      const { data: inserted, error: insertErr } = await getSb().from('products').insert(data).select('id').single();
+      err = insertErr;
+      if (!err) { savedProductId = inserted?.id; toast('Produto cadastrado!'); }
     }
     if (err) throw err;
+    if (savedProductId) await saveOptionGroups(savedProductId);
     closeProductForm();
     loadProducts();
   } catch (err) {
@@ -569,7 +777,10 @@ function orderCard(o) {
         <span><i class="fas fa-tag"></i> R$ ${fmt(o.total)}</span>
         <span><i class="fas fa-credit-card"></i> ${esc(o.payment_method||'—')}</span>
       </div>
-      <div class="order-items">${items.map(i=>`<span class="order-item-tag">${i.qty}x ${esc(i.name)}</span>`).join('')}</div>
+      <div class="order-items">${items.map(i => {
+        const optStr = (i.options||[]).map(og=>`${og.groupTitle}: ${(og.items||[]).map(oi=>oi.name).join(', ')}`).join(' | ');
+        return `<span class="order-item-tag">${i.qty}x ${esc(i.name)}${optStr?` <small style="opacity:.7">(${esc(optStr)})</small>`:''}</span>`;
+      }).join('')}</div>
       ${o.notes?`<div class="order-meta"><span><i class="fas fa-comment"></i> ${esc(o.notes)}</span></div>`:''}
       <div class="order-actions">${nextStatusBtns(o)}</div>
     </div>`;
@@ -778,3 +989,8 @@ window.togglePwd                      = togglePwd;
 window.sendPwdReset                   = sendPwdReset;
 window.importLocalProductsToSupabase  = importLocalProductsToSupabase;
 window.syncLocalProductMetadata       = syncLocalProductMetadata;
+window.addOptGroup                    = addOptGroup;
+window.removeOptGroup                 = removeOptGroup;
+window.addOptItem                     = addOptItem;
+window.removeOptItem                  = removeOptItem;
+window.createAcaiDefaultOptions       = createAcaiDefaultOptions;
