@@ -4,6 +4,14 @@
    Requer: Supabase JS v2, supabase-config.js
 ───────────────────────────────────────── */
 
+function slugify(text) {
+  return String(text)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
+}
+
 /* Retorna o cliente Supabase inicializado em supabase-config.js */
 function getSb() {
   const c = window.supabaseClient;
@@ -202,6 +210,11 @@ async function importLocalProductsToSupabase() {
         badges:            p.badges || [],
         allow_acai_addons: !!p.allowAcaiAddons,
         free_addon_limit:  p.freeAddonLimit || 0,
+        local_id:          String(p.id || ''),
+        display_order:     local.indexOf(p),
+        slug:              p.slug || slugify(p.name || ''),
+        featured:          !!p.featured,
+        hero:              !!p.hero,
       });
       if (error) { console.error('Erro ao importar', p.name, error); errors++; }
       else imported++;
@@ -209,6 +222,50 @@ async function importLocalProductsToSupabase() {
   }
 
   toast(`Importação concluída: ${imported} importados, ${skipped} já existiam${errors ? ', ' + errors + ' com erro' : ''}.`);
+  await loadProducts();
+}
+
+async function syncLocalProductMetadata() {
+  const btn = elid('btn-sync-meta');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sincronizando...'; }
+
+  const local = (window.PRODUCTS_LOCAL || []).filter(p => !p.isAddon);
+  if (!local.length) { toast('Nenhum produto local encontrado.', true); return; }
+
+  let updated = 0, errors = 0;
+
+  for (let index = 0; index < local.length; index++) {
+    const p = local[index];
+    try {
+      const { error } = await getSb()
+        .from('products')
+        .update({
+          local_id:      String(p.id || ''),
+          display_order: index,
+          slug:          p.slug || slugify(p.name || ''),
+          badges:        p.badges || [],
+          featured:      !!p.featured,
+          hero:          !!p.hero,
+        })
+        .eq('name', p.name)
+        .eq('category', p.cat);
+      if (error) {
+        console.error('Erro ao sincronizar', p.name, error);
+        errors++;
+      } else {
+        updated++;
+      }
+    } catch (e) { errors++; }
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Sincronizar ordem e destaques'; }
+
+  if (errors > 0 && updated === 0) {
+    toast('Erro ao sincronizar. Execute o SQL abaixo no Supabase primeiro:\nalter table products add column if not exists local_id text;\nalter table products add column if not exists display_order integer default 0;\nalter table products add column if not exists slug text;\nalter table products add column if not exists featured boolean default false;\nalter table products add column if not exists hero boolean default false;', true);
+    return;
+  }
+
+  toast(`Sincronizado: ${updated} produtos${errors ? ', ' + errors + ' com erro' : ''}.`);
   await loadProducts();
 }
 
@@ -720,3 +777,4 @@ window.handleSaveConfig               = handleSaveConfig;
 window.togglePwd                      = togglePwd;
 window.sendPwdReset                   = sendPwdReset;
 window.importLocalProductsToSupabase  = importLocalProductsToSupabase;
+window.syncLocalProductMetadata       = syncLocalProductMetadata;

@@ -104,6 +104,9 @@
     <section id="section-produtos" class="dash-section active">
       <div class="section-toolbar">
         <button class="btn-primary" onclick="openProductForm()"><i class="fas fa-plus"></i> Novo produto</button>
+        <button class="btn-secondary" id="btn-sync-meta" onclick="syncLocalProductMetadata()" title="Atualiza local_id, display_order e slug nos produtos já importados">
+          <i class="fas fa-sync-alt"></i> Sincronizar ordem
+        </button>
         <input type="search" class="search-input-dash" placeholder="Buscar produto..." oninput="filterProductList(this.value)">
       </div>
       <div id="products-list"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
@@ -268,6 +271,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=5"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=7"></script>
+<script src="gestao.js?v=8"></script>
 </body>
 </html>
