@@ -1617,77 +1617,129 @@ async function loadProductOptions(productId) {
   ppOptionSelections = {};
   try {
     const db = getSb();
-    if (!db) return;
-    const { data, error } = await db
+    if (!db || !productId) return;
+
+    console.log('[DayLanches] Buscando opções para product.id:', productId);
+
+    /* Query 1: grupos ativos do produto */
+    const { data: groups, error: gErr } = await db
       .from('product_option_groups')
-      .select('*, product_option_items(*)')
+      .select('*')
       .eq('product_id', productId)
       .eq('active', true)
-      .order('display_order');
-    if (error) throw error;
-    ppOptionGroups = (data || []).map(g => ({
+      .order('display_order', { ascending: true });
+
+    if (gErr) { console.error('[DayLanches] Erro ao carregar grupos de opções:', gErr); return; }
+    if (!groups?.length) { console.log('[DayLanches] Nenhum grupo encontrado para', productId); return; }
+
+    console.log('[DayLanches] Grupos carregados:', groups.length);
+
+    /* Query 2: itens ativos dos grupos encontrados */
+    const groupIds = groups.map(g => g.id);
+    const { data: items, error: iErr } = await db
+      .from('product_option_items')
+      .select('*')
+      .in('group_id', groupIds)
+      .eq('active', true)
+      .order('display_order', { ascending: true });
+
+    if (iErr) { console.error('[DayLanches] Erro ao carregar itens de opções:', iErr); return; }
+
+    console.log('[DayLanches] Itens carregados:', items?.length ?? 0);
+
+    ppOptionGroups = groups.map(g => ({
       id:         g.id,
       title:      g.title,
       type:       g.type || 'checkbox',
       required:   !!g.required,
-      max_select: g.max_select || 0,
-      free_limit: g.free_limit || 0,
-      items:      (g.product_option_items || [])
-        .filter(i => i.active !== false)
-        .sort((a, b) => a.display_order - b.display_order)
-        .map(i => ({ id:i.id, name:i.name, price_delta:Number(i.price_delta||0) })),
+      max_select: Number(g.max_select || 0),
+      free_limit: Number(g.free_limit || 0),
+      items:      (items || [])
+        .filter(i => i.group_id === g.id)
+        .map(i => ({ id: i.id, name: i.name, price_delta: Number(i.price_delta || 0) })),
     }));
+
     ppOptionGroups.forEach(g => {
       ppOptionSelections[g.id] = g.type === 'radio' ? null : new Set();
     });
-  } catch(e) { console.warn('Erro ao carregar opções:', e); }
+
+    console.log('[DayLanches] Opções processadas:', ppOptionGroups);
+  } catch(e) { console.warn('[DayLanches] Erro ao carregar opções:', e); }
 }
 
 function renderProductOptions(product) {
-  /* Remove seção antiga de opções DB (se houver) */
+  /* Remove seção anterior de opções (se existir) */
   const oldOpts = el('pp-options-wrap');
   if (oldOpts) oldOpts.remove();
 
-  /* Se não há grupos do banco, cai no sistema antigo de açaí */
+  /* Oculta sistema antigo de açaí */
   const oldAddons = el('pp-addons-wrap');
+
+  /* Sem grupos: cai no sistema antigo (açaí hardcoded) ou sai */
   if (!ppOptionGroups.length) {
-    if (oldAddons) oldAddons.style.display = '';
-    renderPpAddons(product);
+    if (isAcaiCustomProduct(product)) {
+      if (oldAddons) oldAddons.style.display = '';
+      renderPpAddons(product);
+    } else {
+      if (oldAddons) oldAddons.style.display = 'none';
+    }
+    updatePpAddButton();
     return;
   }
 
-  /* Esconde sistema antigo */
   if (oldAddons) oldAddons.style.display = 'none';
 
   const wrap = document.createElement('div');
-  wrap.id = 'pp-options-wrap';
+  wrap.id        = 'pp-options-wrap';
   wrap.className = 'pp-options-wrap';
 
-  wrap.innerHTML = ppOptionGroups.map(group => `
-    <div class="pp-opt-group">
-      <div class="pp-opt-group-hd">
-        <h3 class="pp-opt-group-title">${esc(group.title)}</h3>
-        <div style="display:flex;align-items:center;gap:6px">
-          ${group.required ? '<span class="pp-opt-badge pp-opt-badge-req">Obrigatório</span>' : ''}
-          ${group.free_limit > 0 ? `<span class="pp-opt-badge pp-opt-badge-free">${group.free_limit} grátis</span>` : ''}
-          <span class="pp-opt-count" id="pp-opt-cnt-${group.id}"></span>
-        </div>
-      </div>
-      <div class="pp-opt-items">
-        ${group.items.map(item => `
-          <label class="pp-opt-item">
-            <input type="${group.type === 'radio' ? 'radio' : 'checkbox'}"
-              name="ppopt_${group.id}" value="${item.id}"
-              class="pp-opt-inp"
-              onchange="ppHandleOptionChange('${group.id}','${item.id}','${group.type}',${item.price_delta})">
-            <span class="pp-opt-name">${esc(item.name)}</span>
-            <span class="pp-opt-price">${item.price_delta > 0 ? `+ R$ ${fmt(item.price_delta)}` : 'Grátis'}</span>
-          </label>`).join('')}
-      </div>
-    </div>`).join('');
+  try {
+    wrap.innerHTML = ppOptionGroups.map(group => {
+      const gid = esc(group.id);
+      return `
+        <div class="pp-opt-group">
+          <div class="pp-opt-group-hd">
+            <h3 class="pp-opt-group-title">${esc(group.title)}</h3>
+            <div style="display:flex;align-items:center;gap:6px">
+              ${group.required ? '<span class="pp-opt-badge pp-opt-badge-req">Obrigatório</span>' : ''}
+              ${group.free_limit > 0 ? `<span class="pp-opt-badge pp-opt-badge-free">${group.free_limit} grátis</span>` : ''}
+              <span class="pp-opt-count" id="pp-opt-cnt-${gid}"></span>
+            </div>
+          </div>
+          <div class="pp-opt-items">
+            ${group.items.map(item => {
+              const iid = esc(item.id);
+              return `
+                <label class="pp-opt-item">
+                  <input type="${group.type === 'radio' ? 'radio' : 'checkbox'}"
+                    name="ppopt_${gid}" value="${iid}"
+                    class="pp-opt-inp"
+                    onchange="ppHandleOptionChange('${gid}','${iid}','${group.type}',${item.price_delta})">
+                  <span class="pp-opt-name">${esc(item.name)}</span>
+                  ${item.price_delta > 0
+                    ? `<span class="pp-opt-price">+ R$ ${fmt(item.price_delta)}</span>`
+                    : ''}
+                </label>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    console.error('[DayLanches] Erro ao renderizar opções:', e);
+    return;
+  }
 
+  /* Inserir entre pp-qty-row e pp-obs-wrap */
   const qtyRow = document.querySelector('.pp-qty-row');
-  if (qtyRow) qtyRow.insertAdjacentElement('afterend', wrap);
+  const obsWrap = document.querySelector('.pp-obs-wrap');
+  if (obsWrap) {
+    obsWrap.insertAdjacentElement('beforebegin', wrap);
+  } else if (qtyRow) {
+    qtyRow.insertAdjacentElement('afterend', wrap);
+  } else {
+    const body = el('product-page')?.querySelector('.pp-body');
+    if (body) body.insertBefore(wrap, body.firstChild);
+  }
 
   updatePpAddButton();
 }
@@ -1820,7 +1872,10 @@ function openProductPage(id) {
   if (page) { page.classList.add('open'); document.body.style.overflow = 'hidden'; }
 
   /* Carrega opções do banco de forma assíncrona */
-  loadProductOptions(p.id).then(() => renderProductOptions(p));
+  console.log('[DayLanches] Produto aberto:', p.name, '| id:', p.id);
+  loadProductOptions(p.id)
+    .then(() => renderProductOptions(p))
+    .catch(e => console.error('[DayLanches] Falha ao carregar opções:', e));
 }
 
 function closeProductPage() {
@@ -1898,6 +1953,25 @@ function ppAddToCart() {
   if (!ppProductId) return;
   const p = getPpProduct();
   if (!p) return;
+
+  /* Validar opções obrigatórias */
+  if (ppOptionGroups.length > 0) {
+    for (const group of ppOptionGroups) {
+      const sel = ppOptionSelections[group.id];
+      const count = group.type === 'radio'
+        ? (sel ? 1 : 0)
+        : (sel instanceof Set ? sel.size : 0);
+
+      if (group.required && count === 0) {
+        showToast(`Escolha uma opção em: "${group.title}"`);
+        return;
+      }
+      if (group.max_select > 0 && count > group.max_select) {
+        showToast(`Máximo de ${group.max_select} opções em: "${group.title}"`);
+        return;
+      }
+    }
+  }
 
   let item;
 
@@ -2339,6 +2413,9 @@ function fmt(n) {
 }
 function el(id) {
   return document.getElementById(id);
+}
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 /* ──────────────────────────────────────────
    HORÁRIO DE ATENDIMENTO
