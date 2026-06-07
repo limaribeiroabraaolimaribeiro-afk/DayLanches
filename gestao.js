@@ -86,9 +86,9 @@ async function handleCreateAccount(e) {
     });
     if (error) throw error;
     if (data.user) {
-      await getSb().from('profiles').insert({
-        id: data.user.id, name, email, role: 'owner',
-      }).catch(() => {});
+      try {
+        await getSb().from('profiles').insert({ id: data.user.id, name, email, role: 'owner' });
+      } catch(_) { /* perfil é opcional */ }
     }
     toast('Acesso criado! Verifique seu e-mail se necessário.');
     setTimeout(() => showView('login'), 1500);
@@ -316,13 +316,13 @@ function renderOptionGroupsUI() {
     return;
   }
   container.innerHTML = active.map(group => {
-    const ri = _editGroups.indexOf(group);
+    const ri          = _editGroups.indexOf(group);
     const activeItems = group.items.filter(i => !i._deleted);
     return `
       <div class="opt-group-card">
         <div class="opt-group-hd">
           <input class="form-input" placeholder="Título (ex: Adicionais)" value="${esc(group.title)}"
-            onchange="_editGroups[${ri}].title=this.value" style="flex:1">
+            oninput="_editGroups[${ri}].title=this.value" style="flex:1">
           <button type="button" class="btn-icon-sm btn-del" onclick="removeOptGroup(${ri})"><i class="fas fa-trash"></i></button>
         </div>
         <div class="form-row" style="margin-top:8px">
@@ -336,12 +336,12 @@ function renderOptionGroupsUI() {
           <div class="form-group">
             <label class="form-label">Grátis</label>
             <input type="number" class="form-input" min="0" value="${group.free_limit}"
-              onchange="_editGroups[${ri}].free_limit=Number(this.value)">
+              oninput="_editGroups[${ri}].free_limit=Number(this.value)||0">
           </div>
           <div class="form-group">
             <label class="form-label">Máx.</label>
             <input type="number" class="form-input" min="0" value="${group.max_select}"
-              onchange="_editGroups[${ri}].max_select=Number(this.value)">
+              oninput="_editGroups[${ri}].max_select=Number(this.value)||0">
           </div>
         </div>
         <div class="opt-group-flags">
@@ -357,11 +357,11 @@ function renderOptionGroupsUI() {
             const ii = group.items.indexOf(item);
             return `<div class="opt-item-row">
               <input class="form-input" placeholder="Nome da opção" value="${esc(item.name)}"
-                onchange="_editGroups[${ri}].items[${ii}].name=this.value" style="flex:1">
+                oninput="_editGroups[${ri}].items[${ii}].name=this.value" style="flex:1">
               <div style="display:flex;align-items:center;gap:4px">
                 <span style="font-size:.8rem;color:var(--text-muted)">+R$</span>
                 <input type="number" class="form-input" min="0" step="0.01" value="${item.price_delta}"
-                  onchange="_editGroups[${ri}].items[${ii}].price_delta=Number(this.value)" style="width:70px">
+                  oninput="_editGroups[${ri}].items[${ii}].price_delta=parsePriceInput(this.value)" style="width:70px">
               </div>
               <button type="button" class="btn-icon-sm btn-del" onclick="removeOptItem(${ri},${ii})"><i class="fas fa-times"></i></button>
             </div>`;
@@ -397,35 +397,62 @@ function removeOptItem(ri, ii) {
   renderOptionGroupsUI();
 }
 
+function parsePriceInput(value) {
+  if (typeof value === 'number') return value;
+  return Number(String(value || '0').replace('R$','').replace(/\./g,'').replace(',','.').trim()) || 0;
+}
+
 async function saveOptionGroups(productId) {
-  const db = getSb();
-  for (const gid of _delGroupIds) {
-    await db.from('product_option_groups').delete().eq('id', gid).catch(()=>{});
-  }
-  for (let gi = 0; gi < _editGroups.length; gi++) {
-    const g = _editGroups[gi];
-    if (g._deleted) continue;
-    const now = new Date().toISOString();
-    const gPayload = { product_id:productId, title:g.title||'Escolhas', type:g.type||'checkbox',
-      required:!!g.required, min_select:Number(g.min_select||0), max_select:Number(g.max_select||0),
-      free_limit:Number(g.free_limit||0), active:g.active!==false, display_order:gi, updated_at:now };
-    let gid = g.id;
-    if (gid) {
-      await db.from('product_option_groups').update(gPayload).eq('id', gid).catch(()=>{});
-    } else {
-      const { data, error } = await db.from('product_option_groups').insert({ ...gPayload, created_at:now }).select('id').single();
-      if (error) { console.error('Erro ao inserir grupo:', error); continue; }
-      gid = data?.id;
-    }
-    if (!gid) continue;
-    for (let ii = 0; ii < g.items.length; ii++) {
-      const it = g.items[ii];
-      const iPayload = { group_id:gid, name:it.name||'', price_delta:Number(it.price_delta||0), active:it.active!==false, display_order:ii, updated_at:now };
-      if (it._deleted && it.id) { await db.from('product_option_items').delete().eq('id', it.id).catch(()=>{}); continue; }
-      if (it._deleted) continue;
-      if (it.id) { await db.from('product_option_items').update(iPayload).eq('id', it.id).catch(()=>{}); }
-      else { await db.from('product_option_items').insert({ ...iPayload, created_at:now }).catch(()=>{}); }
-    }
+  if (!productId) throw new Error('ID do produto ausente ao salvar escolhas.');
+  const db  = getSb();
+  const now = new Date().toISOString();
+
+  /* Apaga todos os grupos existentes — CASCADE remove os itens automaticamente */
+  const { error: delErr } = await db
+    .from('product_option_groups')
+    .delete()
+    .eq('product_id', productId);
+  if (delErr) throw delErr;
+
+  /* Re-insere grupos e itens ativos */
+  const activeGroups = _editGroups.filter(g => !g._deleted && (g.title || '').trim());
+  for (let gi = 0; gi < activeGroups.length; gi++) {
+    const g = activeGroups[gi];
+    const activeItems = g.items.filter(i => !i._deleted && (i.name || '').trim());
+
+    const { data: newGroup, error: gErr } = await db
+      .from('product_option_groups')
+      .insert({
+        product_id:    productId,
+        title:         g.title.trim(),
+        type:          g.type || 'checkbox',
+        required:      !!g.required,
+        min_select:    Number(g.min_select || 0),
+        max_select:    Number(g.max_select || 0),
+        free_limit:    Number(g.free_limit || 0),
+        active:        g.active !== false,
+        display_order: gi,
+        created_at:    now,
+        updated_at:    now,
+      })
+      .select('id')
+      .single();
+    if (gErr) throw gErr;
+
+    if (!activeItems.length) continue;
+
+    const itemsPayload = activeItems.map((it, ii) => ({
+      group_id:      newGroup.id,
+      name:          it.name.trim(),
+      price_delta:   parsePriceInput(it.price_delta),
+      active:        it.active !== false,
+      display_order: ii,
+      created_at:    now,
+      updated_at:    now,
+    }));
+
+    const { error: iErr } = await db.from('product_option_items').insert(itemsPayload);
+    if (iErr) throw iErr;
   }
 }
 
