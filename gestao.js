@@ -307,6 +307,12 @@ async function loadOptionGroupsForEdit(productId) {
   renderOptionGroupsUI();
 }
 
+function setGroupField(ri, field, value) {
+  if (!_editGroups[ri]) return;
+  _editGroups[ri][field] = value;
+  renderOptionGroupsUI();
+}
+
 function renderOptionGroupsUI() {
   const container = elid('option-groups-list');
   if (!container) return;
@@ -322,6 +328,7 @@ function renderOptionGroupsUI() {
 
     return `
       <div class="opt-choice-card">
+        <!-- Título + Remover -->
         <div class="opt-choice-header">
           <div class="form-group" style="flex:1;margin:0">
             <label class="form-label">Título da escolha</label>
@@ -332,76 +339,79 @@ function renderOptionGroupsUI() {
             <i class="fas fa-trash"></i> Remover
           </button>
         </div>
+
+        <!-- Perguntas -->
         <div class="opt-choice-questions">
+
+          <!-- Como o cliente escolhe? -->
           <div class="opt-q-row">
             <span class="opt-q-label">Como o cliente escolhe?</span>
             <div class="opt-q-options">
-              <label class="opt-radio-pill${!isCheck?' selected':''}">
-                <input type="radio" name="type_${ri}" value="radio" ${!isCheck?'checked':''}
-                  onchange="_editGroups[${ri}].type='radio';renderOptionGroupsUI()">
+              <button type="button" class="opt-radio-pill${!isCheck ? ' selected' : ''}"
+                onclick="setGroupField(${ri},'type','radio')">
                 <i class="fas fa-dot-circle"></i> Apenas uma opção
-              </label>
-              <label class="opt-radio-pill${isCheck?' selected':''}">
-                <input type="radio" name="type_${ri}" value="checkbox" ${isCheck?'checked':''}
-                  onchange="_editGroups[${ri}].type='checkbox';renderOptionGroupsUI()">
+              </button>
+              <button type="button" class="opt-radio-pill${isCheck ? ' selected' : ''}"
+                onclick="setGroupField(${ri},'type','checkbox')">
                 <i class="fas fa-check-square"></i> Várias opções
-              </label>
+              </button>
             </div>
           </div>
+
+          <!-- Obrigatória? -->
           <div class="opt-q-row">
             <span class="opt-q-label">Essa escolha é obrigatória?</span>
             <div class="opt-q-options">
-              <label class="opt-radio-pill${!group.required?' selected':''}">
-                <input type="radio" name="req_${ri}" ${!group.required?'checked':''}
-                  onchange="_editGroups[${ri}].required=false"> Não
-              </label>
-              <label class="opt-radio-pill${group.required?' selected':''}">
-                <input type="radio" name="req_${ri}" ${group.required?'checked':''}
-                  onchange="_editGroups[${ri}].required=true"> Sim
-              </label>
+              <button type="button" class="opt-radio-pill${!group.required ? ' selected' : ''}"
+                onclick="setGroupField(${ri},'required',false)">Não</button>
+              <button type="button" class="opt-radio-pill${group.required ? ' selected' : ''}"
+                onclick="setGroupField(${ri},'required',true)">Sim</button>
             </div>
           </div>
+
           ${isCheck ? `
+          <!-- Tem limite? -->
           <div class="opt-q-row">
             <span class="opt-q-label">Tem limite de escolhas?</span>
             <div class="opt-q-options">
-              <label class="opt-radio-pill${!hasMax?' selected':''}">
-                <input type="radio" name="maxsel_${ri}" ${!hasMax?'checked':''}
-                  onchange="_editGroups[${ri}].max_select=0"> Não
-              </label>
-              <label class="opt-inline-row${hasMax?' selected':''}">
-                <input type="radio" name="maxsel_${ri}" ${hasMax?'checked':''}
-                  onchange="_editGroups[${ri}].max_select=2;renderOptionGroupsUI()">
-                Sim, no máximo
-                <input type="number" class="opt-inline-num" min="1" max="99"
-                  value="${hasMax?group.max_select:2}" ${!hasMax?'disabled':''}
-                  onclick="event.stopPropagation()"
-                  oninput="_editGroups[${ri}].max_select=Number(this.value)||2">
-                opções
-              </label>
+              <button type="button" class="opt-radio-pill${!hasMax ? ' selected' : ''}"
+                onclick="setGroupField(${ri},'max_select',0)">Não</button>
+              ${hasMax
+                ? `<div class="opt-inline-row selected">
+                    Sim, no máximo
+                    <input type="number" class="opt-inline-num" min="1" max="99" value="${group.max_select}"
+                      oninput="_editGroups[${ri}].max_select=Number(this.value)||1"
+                      onclick="event.stopPropagation()">
+                    opções
+                  </div>`
+                : `<button type="button" class="opt-radio-pill"
+                    onclick="setGroupField(${ri},'max_select',2)">Sim, com limite</button>`}
             </div>
           </div>
+
+          <!-- Opções grátis? -->
           <div class="opt-q-row">
             <span class="opt-q-label">Algumas opções são grátis?</span>
             <div class="opt-q-options">
-              <label class="opt-radio-pill${!hasFree?' selected':''}">
-                <input type="radio" name="free_${ri}" ${!hasFree?'checked':''}
-                  onchange="_editGroups[${ri}].free_limit=0"> Não
-              </label>
-              <label class="opt-inline-row${hasFree?' selected':''}">
-                <input type="radio" name="free_${ri}" ${hasFree?'checked':''}
-                  onchange="_editGroups[${ri}].free_limit=3;renderOptionGroupsUI()">
-                Sim, as primeiras
-                <input type="number" class="opt-inline-num" min="1" max="99"
-                  value="${hasFree?group.free_limit:3}" ${!hasFree?'disabled':''}
-                  onclick="event.stopPropagation()"
-                  oninput="_editGroups[${ri}].free_limit=Number(this.value)||1">
-                são grátis
-              </label>
+              <button type="button" class="opt-radio-pill${!hasFree ? ' selected' : ''}"
+                onclick="setGroupField(${ri},'free_limit',0)">Não</button>
+              ${hasFree
+                ? `<div class="opt-inline-row selected">
+                    As primeiras
+                    <input type="number" class="opt-inline-num" min="1" max="99" value="${group.free_limit}"
+                      oninput="_editGroups[${ri}].free_limit=Number(this.value)||1"
+                      onclick="event.stopPropagation()">
+                    são grátis
+                  </div>`
+                : `<button type="button" class="opt-radio-pill"
+                    onclick="setGroupField(${ri},'free_limit',3)">Sim, algumas são grátis</button>`}
             </div>
           </div>
           ` : ''}
-        </div>
+
+        </div><!-- /opt-choice-questions -->
+
+        <!-- Opções disponíveis -->
         <div class="opt-choice-items-section">
           <div class="opt-choice-items-hd">
             <span>Opções disponíveis</span>
@@ -410,7 +420,7 @@ function renderOptionGroupsUI() {
           <div class="opt-items-list">
             ${activeItems.map(item => {
               const ii = group.items.indexOf(item);
-              const pv = item.price_delta > 0 ? String(item.price_delta.toFixed(2)).replace('.',',') : '';
+              const pv = item.price_delta > 0 ? String(item.price_delta.toFixed(2)).replace('.', ',') : '';
               return `<div class="opt-item-row">
                 <input class="form-input" placeholder="Ex: Nutella, Bacon extra, Gelada…" value="${esc(item.name)}"
                   oninput="_editGroups[${ri}].items[${ii}].name=this.value" style="flex:1;min-width:0">
@@ -1165,6 +1175,7 @@ window.togglePwd                      = togglePwd;
 window.sendPwdReset                   = sendPwdReset;
 window.importLocalProductsToSupabase  = importLocalProductsToSupabase;
 window.syncLocalProductMetadata       = syncLocalProductMetadata;
+window.setGroupField                  = setGroupField;
 window.addOptGroup                    = addOptGroup;
 window.removeOptGroup                 = removeOptGroup;
 window.addOptItem                     = addOptItem;

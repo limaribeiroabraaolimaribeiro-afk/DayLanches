@@ -1076,42 +1076,41 @@ a { text-decoration: none; color: inherit; }
 }
 
 .opt-radio-pill {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: .8rem;
   font-weight: 600;
   color: var(--text-med);
-  padding: 6px 12px;
+  padding: 7px 14px;
   border: 1.5px solid var(--border);
   border-radius: 20px;
   cursor: pointer;
   user-select: none;
-  transition: all .15s;
+  transition: border-color .15s, background .15s, color .15s;
+  background: var(--white);
+  font-family: inherit;
 }
-.opt-radio-pill input { display: none; }
-.opt-radio-pill.selected,
-.opt-radio-pill:has(input:checked) {
+.opt-radio-pill:hover { border-color: var(--primary-dark); }
+.opt-radio-pill.selected {
   border-color: var(--primary);
   background: var(--primary-light);
   color: var(--primary-dark);
+  font-weight: 700;
 }
 
 .opt-inline-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: .8rem;
   font-weight: 600;
   color: var(--text-med);
-  padding: 6px 12px;
+  padding: 7px 14px;
   border: 1.5px solid var(--border);
   border-radius: 20px;
-  cursor: pointer;
 }
-.opt-inline-row input[type="radio"] { display: none; }
-.opt-inline-row.selected,
-.opt-inline-row:has(input[type="radio"]:checked) {
+.opt-inline-row.selected {
   border-color: var(--primary);
   background: var(--primary-light);
   color: var(--primary-dark);
