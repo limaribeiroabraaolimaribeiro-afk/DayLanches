@@ -2519,8 +2519,9 @@ a { text-decoration: none; color: inherit; }
 
 .pp-opt-inp { width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; }
 
-.pp-opt-name  { flex: 1; font-size: .88rem; font-weight: 500; color: var(--text); }
-.pp-opt-price { font-size: .82rem; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.pp-opt-name       { flex: 1; font-size: .88rem; font-weight: 500; color: var(--text); }
+.pp-opt-price      { font-size: .82rem; font-weight: 800; color: var(--primary); white-space: nowrap; }
+.pp-opt-price-free { font-size: .82rem; font-weight: 700; color: #16a34a; white-space: nowrap; }
 
 @media (max-width: 480px) {
   .pp-opt-group { padding: 14px 16px; }

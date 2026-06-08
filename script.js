@@ -1055,7 +1055,11 @@ function buildWhatsAppItemText(item) {
   if (paid.length) text += `\n  Adicionais: ${paid.join(', ')}`;
   if (item.options?.length) {
     item.options.forEach(og => {
-      text += `\n  ${og.groupTitle}: ${og.items.map(i=>i.name).join(', ')}`;
+      const parts = (og.items || []).map(i => {
+        if (!i.price || i.price === 0 || i.free) return `${i.name} (grátis)`;
+        return `${i.name} (+ R$ ${fmt(i.price)})`;
+      }).join(', ');
+      text += `\n  ${og.groupTitle}: ${parts}`;
     });
   }
   return text;
@@ -1735,9 +1739,9 @@ function renderProductOptions(product) {
                     class="pp-opt-inp"
                     onchange="ppHandleOptionChange('${gid}','${iid}','${group.type}',${item.price_delta})">
                   <span class="pp-opt-name">${esc(item.name)}</span>
-                  ${item.price_delta > 0
-                    ? `<span class="pp-opt-price">+ R$ ${fmt(item.price_delta)}</span>`
-                    : ''}
+                  <span class="${item.price_delta > 0 ? 'pp-opt-price' : 'pp-opt-price-free'}">
+                    ${item.price_delta > 0 ? `+ R$ ${fmt(item.price_delta)}` : 'Grátis'}
+                  </span>
                 </label>`;
             }).join('')}
           </div>
@@ -1839,8 +1843,11 @@ function getPpOptionsForCart() {
 function buildCartOptionsHTML(item) {
   if (!item.options?.length) return '';
   return item.options.map(og => {
-    const names = (og.items||[]).map(i => i.name).join(', ');
-    return `<div class="ci-addons">${esc(og.groupTitle)}: ${esc(names)}</div>`;
+    const parts = (og.items || []).map(i => {
+      if (!i.price || i.price === 0 || i.free) return i.name;
+      return `${i.name} (+ R$ ${fmt(i.price)})`;
+    }).join(', ');
+    return `<div class="ci-addons">${esc(og.groupTitle)}: ${esc(parts)}</div>`;
   }).join('');
 }
 
