@@ -107,12 +107,12 @@ async function handleCreatePayment(request, env) {
 
   /* 3. Chamar InfinitePay */
   const siteUrl    = env.SITE_URL || 'https://www.daylanches.com.br';
-  const workerUrl  = env.WEBHOOK_URL || 'https://api.daylanches.com.br';
+  const webhookUrl = env.WEBHOOK_URL || 'https://api.daylanches.com.br/infinitepay/webhook';
 
   const ipPayload = {
     handle:       env.INFINITEPAY_HANDLE,
     redirect_url: `${siteUrl}/obrigado.html?order=${encodeURIComponent(orderNumber)}`,
-    webhook_url:  `${workerUrl}/infinitepay/webhook`,
+    webhook_url:  webhookUrl,
     order_nsu:    orderNumber,
     items:        ipItems,
   };
