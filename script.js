@@ -1789,14 +1789,27 @@ function ppHandleOptionChange(groupId, itemId, type, priceDelta) {
       s.add(itemId);
     }
 
-    /* Atualiza contador */
+    /* Atualiza contador — só itens pagos consomem o free_limit */
     const countEl = el(`pp-opt-cnt-${groupId}`);
     if (countEl) {
-      const n = (ppOptionSelections[groupId]).size;
-      const fl = group.free_limit;
-      countEl.textContent = n > 0
-        ? (fl > 0 ? `${Math.min(n,fl)} grátis${n>fl?' + '+(n-fl)+' pago':''}` : `${n} selecionado${n>1?'s':''}`)
-        : '';
+      const s  = ppOptionSelections[groupId];
+      const n  = s instanceof Set ? s.size : 0;
+      const fl = Number(group.free_limit || 0);
+      if (n === 0) {
+        countEl.textContent = '';
+      } else if (fl > 0) {
+        const paidCount = [...s].filter(id => {
+          const it = group.items.find(i => i.id === id);
+          return it && it.price_delta > 0;
+        }).length;
+        const freeUsed  = Math.min(paidCount, fl);
+        const charged   = Math.max(0, paidCount - fl);
+        countEl.textContent = charged > 0
+          ? `${freeUsed} grátis + ${charged} cobrado${charged > 1 ? 's' : ''}`
+          : `${freeUsed} grátis`;
+      } else {
+        countEl.textContent = `${n} selecionado${n > 1 ? 's' : ''}`;
+      }
     }
   }
   updatePpAddButton();
@@ -1806,14 +1819,18 @@ function getPpOptionsTotal() {
   let extra = 0;
   for (const group of ppOptionGroups) {
     const sel = ppOptionSelections[group.id];
-    const fl  = group.free_limit || 0;
+    const fl  = Number(group.free_limit || 0);
     if (group.type === 'radio') {
       const item = group.items.find(i => i.id === sel);
       if (item) extra += item.price_delta;
     } else if (sel instanceof Set) {
-      [...sel].forEach((id, idx) => {
-        const item = group.items.find(i => i.id === id);
-        if (item && idx >= fl) extra += item.price_delta;
+      const selected = [...sel].map(id => group.items.find(i => i.id === id)).filter(Boolean);
+      /* Opções com preço 0 são sempre grátis e NÃO consomem o free_limit */
+      const paidSelected = selected.filter(i => i.price_delta > 0);
+      paidSelected.forEach((item, idx) => {
+        /* As primeiras fl opções pagas são grátis */
+        if (fl > 0 && idx < fl) return;
+        extra += item.price_delta;
       });
     }
   }
@@ -1824,15 +1841,23 @@ function getPpOptionsForCart() {
   const result = [];
   for (const group of ppOptionGroups) {
     const sel = ppOptionSelections[group.id];
-    const fl  = group.free_limit || 0;
+    const fl  = Number(group.free_limit || 0);
     const chosen = [];
     if (group.type === 'radio') {
       const item = group.items.find(i => i.id === sel);
-      if (item) chosen.push({ name:item.name, price:item.price_delta, free:false });
+      if (item) chosen.push({ name:item.name, price:item.price_delta, free:item.price_delta <= 0 });
     } else if (sel instanceof Set) {
-      [...sel].forEach((id, idx) => {
-        const item = group.items.find(i => i.id === id);
-        if (item) chosen.push({ name:item.name, price:idx < fl ? 0 : item.price_delta, free:idx < fl });
+      const selected = [...sel].map(id => group.items.find(i => i.id === id)).filter(Boolean);
+      /* Separar: preço 0 (sempre grátis) e preço > 0 (pode usar free_limit) */
+      const nativeFree = selected.filter(i => i.price_delta <= 0);
+      const paidItems  = selected.filter(i => i.price_delta > 0);
+
+      nativeFree.forEach(item => {
+        chosen.push({ name:item.name, price:0, free:true });
+      });
+      paidItems.forEach((item, idx) => {
+        const freeByLimit = fl > 0 && idx < fl;
+        chosen.push({ name:item.name, price:freeByLimit ? 0 : item.price_delta, free:freeByLimit });
       });
     }
     if (chosen.length) result.push({ groupTitle:group.title, items:chosen });
