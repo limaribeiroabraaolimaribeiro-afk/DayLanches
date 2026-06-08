@@ -1733,12 +1733,15 @@ function renderProductOptions(product) {
             ${group.items.map(item => {
               const iid = esc(item.id);
               return `
-                <label class="pp-opt-item" onclick="event.preventDefault();ppToggleOption('${gid}','${iid}')">
+                <label class="pp-opt-item" id="pp-opt-lbl-${gid}-${iid}" onclick="event.preventDefault();ppToggleOption('${gid}','${iid}')">
                   <input type="${group.type === 'radio' ? 'radio' : 'checkbox'}"
                     name="ppopt_${gid}" value="${iid}"
                     class="pp-opt-inp"
                     onclick="event.preventDefault()">
-                  <span class="pp-opt-name">${esc(item.name)}</span>
+                  <div class="pp-opt-left">
+                    <span class="pp-opt-fake-check" id="pp-opt-fk-${gid}-${iid}"></span>
+                    <span class="pp-opt-name">${esc(item.name)}</span>
+                  </div>
                   <span class="${item.price_delta > 0 ? 'pp-opt-price' : 'pp-opt-price-free'}">
                     ${item.price_delta > 0 ? `+ R$ ${fmt(item.price_delta)}` : 'Grátis'}
                   </span>
@@ -1828,7 +1831,23 @@ function ppToggleOption(groupId, itemId) {
     }
   }
 
+  ppSyncVisuals(groupId);
   updatePpAddButton();
+}
+
+function ppSyncVisuals(groupId) {
+  const group = ppOptionGroups.find(g => g.id === groupId);
+  if (!group) return;
+  const sel = ppOptionSelections[groupId];
+  group.items.forEach(item => {
+    const isSelected = group.type === 'radio'
+      ? sel === item.id
+      : (sel instanceof Set && sel.has(item.id));
+    const lbl = document.getElementById(`pp-opt-lbl-${groupId}-${item.id}`);
+    const fk  = document.getElementById(`pp-opt-fk-${groupId}-${item.id}`);
+    if (lbl) lbl.classList.toggle('selected', isSelected);
+    if (fk)  fk.classList.toggle('checked', isSelected);
+  });
 }
 
 /* Mantido para compatibilidade — não mais chamado pelo template */

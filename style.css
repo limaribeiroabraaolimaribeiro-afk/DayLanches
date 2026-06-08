@@ -2512,14 +2512,50 @@ a { text-decoration: none; color: inherit; }
   user-select: none;
 }
 .pp-opt-item:hover { border-color: var(--primary); background: var(--primary-light, #FFF3EB); }
+.pp-opt-item.selected,
 .pp-opt-item:has(.pp-opt-inp:checked) {
   border-color: var(--primary);
   background: var(--primary-light, #FFF3EB);
 }
 
-.pp-opt-inp { width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; }
+.pp-opt-inp { display: none; }
 
-.pp-opt-name       { flex: 1; font-size: .88rem; font-weight: 500; color: var(--text); }
+.pp-opt-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pp-opt-fake-check {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #9ca3af;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .15s, border-color .15s;
+}
+.pp-opt-fake-check::after {
+  content: '';
+  display: none;
+  width: 5px;
+  height: 9px;
+  border: 2px solid white;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg) translateY(-1px);
+}
+.pp-opt-fake-check.checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.pp-opt-fake-check.checked::after { display: block; }
+
+.pp-opt-name       { flex: 1; font-size: .88rem; font-weight: 500; color: var(--text); min-width: 0; }
 .pp-opt-price      { font-size: .82rem; font-weight: 800; color: var(--primary); white-space: nowrap; }
 .pp-opt-price-free { font-size: .82rem; font-weight: 700; color: #16a34a; white-space: nowrap; }
 
