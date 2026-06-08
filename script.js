@@ -608,6 +608,18 @@ async function loadProductsFromDatabase() {
       return;
     }
     if (data && data.length > 0) {
+      /* Descobrir quais produtos têm grupos de opções ativos */
+      const productIds = data.map(p => p.id);
+      let withOptions = new Set();
+      try {
+        const { data: optGroups } = await db
+          .from('product_option_groups')
+          .select('product_id')
+          .in('product_id', productIds)
+          .eq('active', true);
+        withOptions = new Set((optGroups || []).map(g => g.product_id));
+      } catch(_) { /* opcional — não bloqueia carregamento */ }
+
       PRODUCTS_DATA = data.map(p => ({
         id:             p.id,
         localId:        p.local_id != null ? String(p.local_id) : null,
@@ -623,6 +635,7 @@ async function loadProductsFromDatabase() {
         slug:           p.slug || '',
         featured:       !!p.featured,
         hero:           !!p.hero,
+        hasOptions:     withOptions.has(p.id),
       }));
       console.log('Produtos carregados do Supabase:', PRODUCTS_DATA.length);
     } else {
@@ -834,6 +847,12 @@ function isAcaiCustomProduct(productOrId) {
   return ACAI_CUSTOM_PRODUCT_IDS.includes(Number(productOrId));
 }
 
+/* Produto que precisa que o cliente abra a página para escolher opções */
+function productNeedsChoice(product) {
+  if (!product) return false;
+  return !!(product.hasOptions || product.allowAcaiAddons || Number(product.freeAddonLimit || 0) > 0);
+}
+
 function getBaseCartKey(id) {
   return `p${id}_base`;
 }
@@ -882,8 +901,8 @@ function addToCart(id) {
   const product = findProductByAnyId(id);
   if (!product) return;
 
-  if (isAcaiCustomProduct(product)) {
-    openProductPage(id);
+  if (productNeedsChoice(product)) {
+    openProductPage(product.id);
     return;
   }
 
@@ -1170,8 +1189,8 @@ function renderProducts() {
 
 function buildProductControl(p, qty) {
   const pid = p.id;
-  if (isAcaiCustomProduct(p)) {
-    return `<button class="btn-add" id="ctrl-${pid}" onclick="event.stopPropagation();openProductPage('${pid}')" aria-label="Escolher adicionais de ${p.name}">
+  if (productNeedsChoice(p)) {
+    return `<button class="btn-add" id="ctrl-${pid}" onclick="event.stopPropagation();openProductPage('${pid}')" aria-label="Escolher opções de ${p.name}">
       <i class="fas fa-sliders"></i> Escolher
     </button>`;
   }
@@ -1231,7 +1250,7 @@ function refreshProductCard(id) {
   const ctrl = card.querySelector(`#ctrl-${id}`);
   if (!ctrl || !p) return;
 
-  if (isAcaiCustomProduct(p)) {
+  if (productNeedsChoice(p)) {
     ctrl.outerHTML = buildProductControl(p, qty);
     return;
   }
@@ -2138,8 +2157,8 @@ function buildSpResultCard(p) {
   const imgHTML = p.img
     ? `<img src="${p.img}" alt="${p.name}" loading="lazy" onerror="handleCardImgError(this,'${icon}')">`
     : `<div class="card-img-placeholder"><i class="fas ${icon}"></i></div>`;
-  const btnHTML = isAcaiCustomProduct(p)
-    ? `<button class="btn-add" onclick="event.stopPropagation();spChooseProduct('${p.id}')" aria-label="Escolher adicionais">
+  const btnHTML = productNeedsChoice(p)
+    ? `<button class="btn-add" onclick="event.stopPropagation();spChooseProduct('${p.id}')" aria-label="Escolher opções">
         <i class="fas fa-sliders"></i> Escolher
       </button>`
     : `<button class="btn-add" onclick="event.stopPropagation();addToCart('${p.id}');showToast('${safeN} adicionado!')" aria-label="Adicionar">
