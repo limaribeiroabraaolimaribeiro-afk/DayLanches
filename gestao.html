@@ -111,17 +111,26 @@
 
     <!-- SECTION: Pedidos -->
     <section id="section-pedidos" class="dash-section">
-      <div class="section-toolbar">
-        <div class="filter-row">
-          <button class="filter-btn active" onclick="filterOrders('all',this)">Todos</button>
-          <button class="filter-btn" onclick="filterOrders('novo',this)">Novos</button>
-          <button class="filter-btn" onclick="filterOrders('em_preparo',this)">Em preparo</button>
-          <button class="filter-btn" onclick="filterOrders('saiu_para_entrega',this)">Saiu p/ entrega</button>
-          <button class="filter-btn" onclick="filterOrders('finalizado',this)">Finalizados</button>
+      <div class="orders-toolbar">
+        <div class="orders-search-row">
+          <div class="orders-search-wrap">
+            <i class="fas fa-search orders-search-icon"></i>
+            <input type="text" id="orders-search" class="orders-search-input"
+              placeholder="Buscar por pedido, nome ou telefone…"
+              oninput="renderOrders()">
+          </div>
+          <button class="btn-refresh-orders" onclick="loadOrders()" title="Atualizar pedidos">
+            <i class="fas fa-rotate-right"></i> Atualizar
+          </button>
         </div>
-        <button class="btn-refresh-orders" onclick="loadOrders()" title="Atualizar pedidos">
-          <i class="fas fa-rotate-right"></i> Atualizar
-        </button>
+        <div class="filter-row">
+          <button class="filter-btn active" id="fbtn-all"               onclick="filterOrders('all',this)">Todos <span class="filter-count" id="filter-count-all"></span></button>
+          <button class="filter-btn" id="fbtn-novo"                     onclick="filterOrders('novo',this)">Novos <span class="filter-count" id="filter-count-novo"></span></button>
+          <button class="filter-btn" id="fbtn-em_preparo"               onclick="filterOrders('em_preparo',this)">Em preparo <span class="filter-count" id="filter-count-em_preparo"></span></button>
+          <button class="filter-btn" id="fbtn-saiu_para_entrega"        onclick="filterOrders('saiu_para_entrega',this)">Saiu p/ entrega <span class="filter-count" id="filter-count-saiu_para_entrega"></span></button>
+          <button class="filter-btn" id="fbtn-finalizado"               onclick="filterOrders('finalizado',this)">Finalizados <span class="filter-count" id="filter-count-finalizado"></span></button>
+          <button class="filter-btn" id="fbtn-cancelado"                onclick="filterOrders('cancelado',this)">Cancelados <span class="filter-count" id="filter-count-cancelado"></span></button>
+        </div>
       </div>
       <div id="orders-list"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
     </section>

@@ -850,15 +850,51 @@ async function loadOrders() {
 
 function renderOrders() {
   const wrap = elid('orders-list');
-  const list = gs.orderFilter === 'all'
+  let list = gs.orderFilter === 'all'
     ? gs.orders
     : gs.orders.filter(o => o.status === gs.orderFilter);
+
+  const q = (elid('orders-search')?.value || '').trim().toLowerCase();
+  if (q) {
+    list = list.filter(o =>
+      (o.order_number||'').toLowerCase().includes(q) ||
+      (o.customer_name||'').toLowerCase().includes(q) ||
+      (o.customer_phone||'').toLowerCase().includes(q)
+    );
+  }
+
+  updateOrderFilterCounts();
 
   if (!list.length) {
     wrap.innerHTML = '<p class="empty-msg">Nenhum pedido encontrado.</p>';
     return;
   }
   wrap.innerHTML = list.map(orderCard).join('');
+}
+
+function updateOrderFilterCounts() {
+  const keys = ['all','novo','em_preparo','saiu_para_entrega','finalizado','cancelado'];
+  keys.forEach(k => {
+    const el = elid(`filter-count-${k}`);
+    if (!el) return;
+    const n = k === 'all' ? gs.orders.length : gs.orders.filter(o => o.status === k).length;
+    el.textContent = n > 0 ? `(${n})` : '';
+  });
+}
+
+function toggleOrderDetails(orderId) {
+  const det = elid(`ocdet-${orderId}`);
+  const btn = elid(`ocdet-btn-${orderId}`);
+  if (!det) return;
+  const open = det.style.display !== 'none';
+  det.style.display = open ? 'none' : 'block';
+  if (btn) btn.innerHTML = open
+    ? '<i class="fas fa-chevron-down"></i> Ver detalhes'
+    : '<i class="fas fa-chevron-up"></i> Ocultar detalhes';
+}
+
+function confirmCancelOrder(id) {
+  if (confirm('Cancelar este pedido?')) updateOrderStatus(id, 'cancelado');
 }
 
 function orderCard(o) {
@@ -873,63 +909,116 @@ function orderCard(o) {
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
   const payLabels = { pix:'PIX', card:'Cartão', cash:'Dinheiro' };
-  const date  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const date  = o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) + ' — ' + new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
   const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
   const loc   = o.location && typeof o.location === 'object' ? o.location : null;
   const phone = (o.customer_phone || '').replace(/\D/g, '');
   const waLink = phone ? `https://wa.me/55${phone}` : '';
-
-  /* Texto completo do pedido para copiar */
-  const copyText = [
-    `Pedido: ${num}`,
-    `Nome: ${o.customer_name||'—'}`,
-    `Telefone: ${o.customer_phone||'—'}`,
-    `Tipo: ${o.delivery_type==='pickup'?'Retirada':'Entrega'}`,
-    `Pagamento: ${payLabels[o.payment_method]||o.payment_method||'—'}`,
-    o.troco ? `Troco para: R$ ${o.troco}` : '',
-    `Total: R$ ${fmt(o.total)}`,
-    '',
-    ...items.map(i => {
-      const opts = (i.options||[]).map(og=>`  ${og.groupTitle}: ${(og.items||[]).map(oi=>oi.name).join(', ')}`).join('\n');
-      return `• ${i.qty}x ${i.name} — R$ ${fmt(i.total||0)}${opts?'\n'+opts:''}`;
-    }),
-    o.notes ? `\nObs: ${o.notes}` : '',
-    loc?.mapsLink ? `\nLocalização: ${loc.mapsLink}` : '',
-  ].filter(Boolean).join('\n');
+  const hasOpts = items.some(i => (i.options||[]).length > 0);
 
   return `
-    <div class="order-card ${stClass[o.status]||''}">
-      <div class="order-hd">
-        <div>
-          <span class="order-num">#${esc(num)}</span>
-          <span class="order-customer">${esc(o.customer_name||'Cliente')}</span>
+    <div class="oc ${stClass[o.status]||''}">
+
+      <!-- CABEÇALHO -->
+      <div class="oc-head">
+        <div class="oc-head-left">
+          <span class="oc-num">#${esc(num)}</span>
+          <span class="oc-date">${date}</span>
         </div>
-        <span class="order-status ${stClass[o.status]||''}">${statusLabels[o.status]||o.status}</span>
+        <span class="oc-badge ${stClass[o.status]||''}">${statusLabels[o.status]||o.status}</span>
       </div>
-      <div class="order-meta">
-        <span><i class="fas fa-clock"></i> ${date}</span>
-        <span><i class="fas fa-${o.delivery_type==='pickup'?'store':'motorcycle'}"></i> ${o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
-        <span><i class="fas fa-tag"></i> R$ ${fmt(o.total)}</span>
-        <span><i class="fas fa-credit-card"></i> ${payLabels[o.payment_method]||esc(o.payment_method||'—')}</span>
-        ${o.customer_phone ? `<span><i class="fas fa-phone"></i> ${esc(o.customer_phone)}</span>` : ''}
-        ${o.troco ? `<span><i class="fas fa-money-bill-wave"></i> Troco p/ R$ ${esc(String(o.troco))}</span>` : ''}
+
+      <!-- GRID DE INFORMAÇÕES -->
+      <div class="oc-grid">
+        <div class="oc-field">
+          <span class="oc-field-label">Cliente</span>
+          <span class="oc-field-value">${esc(o.customer_name||'—')}</span>
+        </div>
+        <div class="oc-field">
+          <span class="oc-field-label">Telefone</span>
+          <span class="oc-field-value">${o.customer_phone ? esc(o.customer_phone) : '<span class="oc-no-info">Não informado</span>'}</span>
+        </div>
+        <div class="oc-field">
+          <span class="oc-field-label">Entrega</span>
+          <span class="oc-field-value"><i class="fas fa-${o.delivery_type==='pickup'?'store':'motorcycle'}" style="color:var(--primary)"></i> ${o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
+        </div>
+        <div class="oc-field">
+          <span class="oc-field-label">Pagamento</span>
+          <span class="oc-field-value">${payLabels[o.payment_method]||esc(o.payment_method||'—')}${o.troco?` <small class="oc-troco">troco p/ R$ ${esc(String(o.troco))}</small>`:''}</span>
+        </div>
+        <div class="oc-field">
+          <span class="oc-field-label">Total</span>
+          <span class="oc-field-value oc-total-val">R$ ${fmt(o.total||0)}</span>
+        </div>
+        <div class="oc-field">
+          <span class="oc-field-label">Localização</span>
+          <span class="oc-field-value">${loc ? '<span class="oc-loc-yes"><i class="fas fa-location-dot"></i> Enviada</span>' : '<span class="oc-no-info">Não enviada</span>'}</span>
+        </div>
       </div>
-      <div class="order-items">${items.map(i => {
-        const optStr = (i.options||[]).map(og=>`${og.groupTitle}: ${(og.items||[]).map(oi=>oi.name).join(', ')}`).join(' | ');
-        return `<span class="order-item-tag">${i.qty}x ${esc(i.name)}${optStr?` <small style="opacity:.7">(${esc(optStr)})</small>`:''}</span>`;
-      }).join('')}</div>
-      ${o.notes?`<div class="order-meta"><span><i class="fas fa-comment"></i> ${esc(o.notes)}</span></div>`:''}
-      ${loc ? `
-      <div class="order-loc-links">
-        ${loc.mapsLink  ? `<a class="btn-order-link" href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>` : ''}
-        ${loc.routeLink ? `<a class="btn-order-link btn-order-link-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>` : ''}
-      </div>` : ''}
-      <div class="order-actions">
-        ${nextStatusBtns(o)}
-        ${waLink ? `<a class="btn-order-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar</a>` : ''}
-        <button class="btn-order-copy" onclick="copyOrderText('${esc(o.id)}')"><i class="fas fa-copy"></i> Copiar</button>
+
+      <!-- RESUMO DOS ITENS -->
+      <div class="oc-items-summary">
+        <span class="oc-items-label">${items.length} ${items.length===1?'produto':'produtos'}${hasOpts?' · contém adicionais':''}</span>
+        <div class="oc-items-list">
+          ${items.map(i=>`<span class="oc-item-line">${i.qty}x ${esc(i.name)}</span>`).join('')}
+        </div>
       </div>
+
+      <!-- DETALHES EXPANSÍVEIS -->
+      <div class="oc-details" id="ocdet-${o.id}" style="display:none">
+
+        <div class="oc-det-section">
+          <h4 class="oc-det-title"><i class="fas fa-list-ul"></i> Produtos</h4>
+          ${items.map(i => {
+            const opts = (i.options||[]);
+            const total = i.total || (i.finalUnitPrice||i.unitPrice||0)*i.qty || 0;
+            return `<div class="oc-det-item">
+              <div class="oc-det-item-main">
+                <span class="oc-det-item-name">${i.qty}x ${esc(i.name)}</span>
+                <span class="oc-det-item-price">R$ ${fmt(total)}</span>
+              </div>
+              ${opts.map(og=>`<div class="oc-det-opt"><span class="oc-det-opt-group">${esc(og.groupTitle)}:</span> ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</div>`).join('')}
+            </div>`;
+          }).join('')}
+        </div>
+
+        <div class="oc-det-section">
+          <h4 class="oc-det-title"><i class="fas fa-receipt"></i> Resumo financeiro</h4>
+          <div class="oc-finance">
+            <span>Subtotal</span><span>R$ ${fmt(o.subtotal||0)}</span>
+            <span>Frete</span><span>${(o.delivery_fee||0)>0?`R$ ${fmt(o.delivery_fee)}`:'Grátis'}</span>
+            ${o.troco?`<span>Troco para</span><span>R$ ${esc(String(o.troco))}</span>`:''}
+            <span class="oc-finance-bold">Total</span><span class="oc-finance-bold">R$ ${fmt(o.total||0)}</span>
+          </div>
+        </div>
+
+        ${o.notes?`<div class="oc-det-section"><h4 class="oc-det-title"><i class="fas fa-comment-dots"></i> Observação</h4><p class="oc-obs">${esc(o.notes)}</p></div>`:''}
+
+        ${loc?`<div class="oc-det-section">
+          <h4 class="oc-det-title"><i class="fas fa-map-location-dot"></i> Localização</h4>
+          <div class="oc-loc-btns">
+            ${loc.mapsLink  ?`<a class="btn-oc-map"   href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>`:''}
+            ${loc.routeLink ?`<a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>`:''}
+          </div>
+        </div>`:''}
+
+        <!-- Ações dos detalhes -->
+        <div class="oc-det-actions">
+          ${waLink?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
+          <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
+          ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
+        </div>
+      </div>
+
+      <!-- RODAPÉ: ver detalhes + avançar status -->
+      <div class="oc-footer">
+        <button class="btn-oc-toggle" id="ocdet-btn-${o.id}" onclick="toggleOrderDetails('${o.id}')">
+          <i class="fas fa-chevron-down"></i> Ver detalhes
+        </button>
+        <div class="oc-status-btns">${statusBtns(o)}</div>
+      </div>
+
     </div>`;
 }
 
@@ -962,13 +1051,18 @@ function copyOrderText(orderId) {
   navigator.clipboard.writeText(lines).then(() => toast('Pedido copiado!')).catch(() => toast('Erro ao copiar.', true));
 }
 
-function nextStatusBtns(o) {
-  const next  = { novo:['em_preparo','cancelado'], em_preparo:['saiu_para_entrega','cancelado'], saiu_para_entrega:['finalizado'], finalizado:[], cancelado:[] };
-  const label = { em_preparo:'Em preparo', saiu_para_entrega:'Saiu p/ entrega', finalizado:'Finalizado', cancelado:'Cancelar' };
-  return (next[o.status]||[]).map(s =>
-    `<button class="btn-status btn-status-${s}" onclick="updateOrderStatus('${o.id}','${s}')">${label[s]}</button>`
-  ).join('');
+function statusBtns(o) {
+  const forward = { novo:'em_preparo', em_preparo:'saiu_para_entrega', saiu_para_entrega:'finalizado' };
+  const label   = { em_preparo:'Em preparo', saiu_para_entrega:'Saiu p/ entrega', finalizado:'Finalizado' };
+  const next = forward[o.status];
+  if (!next) return '';
+  return `<button class="btn-oc-status btn-oc-status-${next}" onclick="updateOrderStatus('${o.id}','${next}')">
+    <i class="fas fa-arrow-right"></i> ${label[next]}
+  </button>`;
 }
+
+/* mantido para compatibilidade interna */
+function nextStatusBtns(o) { return statusBtns(o); }
 
 async function updateOrderStatus(id, status) {
   const { error } = await getSb().from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
@@ -981,6 +1075,8 @@ function filterOrders(filter, btn) {
   gs.orderFilter = filter;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  const inp = elid('orders-search');
+  if (inp) inp.value = '';
   renderOrders();
 }
 
@@ -1263,3 +1359,6 @@ window.createAcaiDefaultOptions       = createAcaiDefaultOptions;
 window.updateProductPreview           = updateProductPreview;
 window.applyProductTemplate           = applyProductTemplate;
 window.copyOrderText                  = copyOrderText;
+window.toggleOrderDetails             = toggleOrderDetails;
+window.confirmCancelOrder             = confirmCancelOrder;
+window.renderOrders                   = renderOrders;
