@@ -848,8 +848,15 @@ async function handleOnlinePayment(method) {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ orderNumber }),
     });
-    if (!res.ok) throw new Error(`Worker ${res.status}`);
     const data = await res.json();
+    if (!res.ok) {
+      if (data.minValue) {
+        showToast('Para pagamento online, o pedido precisa ser maior que R$ 1,00.');
+      } else {
+        showToast('Não foi possível gerar o pagamento. Tente novamente.');
+      }
+      return;
+    }
     checkoutUrl = data.checkoutUrl;
   } catch (err) {
     console.error('[DayLanches] Erro ao criar pagamento:', err);

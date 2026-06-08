@@ -89,20 +89,36 @@ async function handleCreatePayment(request, env) {
   if (!orders?.length) return json({ error: 'Order not found' }, 404);
   const order = orders[0];
 
-  /* 2. Montar itens InfinitePay */
+  /* 2. Montar itens InfinitePay (preços em centavos, inteiros) */
   const rawItems = Array.isArray(order.items) ? order.items : [];
-  let ipItems = rawItems.map(i => ({
-    quantity:    i.qty || 1,
-    price:       Math.round((i.total || 0) * 100),
-    description: (i.name || 'Produto').substring(0, 60),
-  })).filter(i => i.price > 0);
 
+  /* Cada item: price = total do item em centavos (quantity já embutida) */
+  let ipItems = rawItems
+    .map(i => ({
+      quantity:    1,
+      price:       Math.round((Number(i.total) || 0) * 100),
+      description: String(i.name || 'Produto').substring(0, 60),
+    }))
+    .filter(i => i.price > 1);   /* descarta itens grátis ou de 1 centavo */
+
+  /* Fallback: 1 item com total do pedido */
   if (!ipItems.length) {
-    ipItems = [{ quantity: 1, price: Math.round((order.total || 0) * 100), description: 'Pedido Day Lanches' }];
+    const fallbackCents = Math.round((Number(order.total) || 0) * 100);
+    if (fallbackCents > 1) {
+      ipItems = [{ quantity: 1, price: fallbackCents, description: 'Pedido Day Lanches' }];
+    }
   }
 
-  if ((order.delivery_fee || 0) > 0) {
-    ipItems.push({ quantity: 1, price: Math.round(order.delivery_fee * 100), description: 'Frete' });
+  /* Frete como item separado (se cobrado) */
+  const freightCents = Math.round((Number(order.delivery_fee) || 0) * 100);
+  if (freightCents > 1) {
+    ipItems.push({ quantity: 1, price: freightCents, description: 'Frete' });
+  }
+
+  /* Validação do total antes de chamar a InfinitePay */
+  const totalCents = ipItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  if (totalCents <= 1) {
+    return json({ error: 'Valor mínimo para pagamento online é R$ 2,00', minValue: true }, 422);
   }
 
   /* 3. Chamar InfinitePay */
