@@ -293,17 +293,28 @@
         <div class="pay-methods-new">
           <button class="pay-method-btn" onclick="handlePixPayment()">
             <div class="pm-icon pm-pix-ico"><i class="fas fa-qrcode"></i></div>
-            <div class="pm-text"><strong>PIX</strong><small>Copiar chave e pagar</small></div>
+            <div class="pm-text">
+              <strong>PIX <span class="pm-badge">Online</span></strong>
+              <small>Pague agora via PIX · confirmação automática</small>
+            </div>
             <i class="fas fa-chevron-right pay-method-arrow"></i>
           </button>
           <button class="pay-method-btn" onclick="handleCardPayment()">
             <div class="pm-icon pm-card-ico"><i class="fas fa-credit-card"></i></div>
-            <div class="pm-text"><strong>Cartão</strong><small>Débito ou crédito na entrega</small></div>
+            <div class="pm-text">
+              <strong>Cartão online <span class="pm-badge">Online</span></strong>
+              <small>Débito ou crédito · confirmação automática</small>
+            </div>
+            <i class="fas fa-chevron-right pay-method-arrow"></i>
+          </button>
+          <button class="pay-method-btn" onclick="handleCardDeliveryPayment()">
+            <div class="pm-icon pm-card-ico" style="background:#F3F4F6"><i class="fas fa-credit-card" style="color:#6B7280"></i></div>
+            <div class="pm-text"><strong>Cartão na entrega</strong><small>Débito ou crédito na hora da entrega</small></div>
             <i class="fas fa-chevron-right pay-method-arrow"></i>
           </button>
           <button class="pay-method-btn" onclick="handleCashPayment()">
             <div class="pm-icon pm-cash-ico"><i class="fas fa-money-bill-wave"></i></div>
-            <div class="pm-text"><strong>Dinheiro</strong><small>Pagamento na entrega</small></div>
+            <div class="pm-text"><strong>Dinheiro</strong><small>Pagamento em dinheiro na entrega</small></div>
             <i class="fas fa-chevron-right pay-method-arrow"></i>
           </button>
         </div>

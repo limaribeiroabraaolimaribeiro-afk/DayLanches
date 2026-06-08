@@ -760,18 +760,18 @@ function requestGeoLocation() {
   );
 }
 
-function handlePixPayment() {
-  if (state.deliveryType === 'delivery' && !state.geo.lat) {
-    showToast('Para entrega, use o botão de localização antes de continuar.');
-    navigateTo('delivery');
-    return;
-  }
-  state.payMethod = 'pix';
-  state.orderId   = Math.floor(Math.random() * 90000) + 10000;
-  openPixPage();
+/* PIX online via InfinitePay */
+async function handlePixPayment() {
+  await handleOnlinePayment('pix_online');
 }
 
+/* Cartão online via InfinitePay */
 async function handleCardPayment() {
+  await handleOnlinePayment('card_online');
+}
+
+/* Cartão na entrega (manual, sem InfinitePay) */
+async function handleCardDeliveryPayment() {
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para entrega, use o botão de localização antes de continuar.');
     navigateTo('delivery');
@@ -781,6 +781,84 @@ async function handleCardPayment() {
   state.orderId   = Math.floor(Math.random() * 90000) + 10000;
   const ok = await sendWhatsApp();
   if (ok) navigateTo('confirmation');
+}
+
+/* Fluxo InfinitePay: salva pedido → cria checkout → redireciona */
+async function handleOnlinePayment(method) {
+  if (state.deliveryType === 'delivery' && !state.geo.lat) {
+    showToast('Para entrega, use o botão de localização antes de continuar.');
+    navigateTo('delivery');
+    return;
+  }
+
+  state.payMethod = method;
+  state.orderId   = Math.floor(Math.random() * 90000) + 10000;
+
+  const f = state.form;
+  const orderNumber = `DL-${state.orderId}`;
+  const orderData = {
+    order_number:     orderNumber,
+    customer_name:    f.name,
+    customer_phone:   f.phone || '',
+    delivery_type:    state.deliveryType,
+    items: state.cart.map(i => ({
+      id:             i.id,
+      name:           i.name,
+      qty:            i.qty,
+      unitPrice:      i.basePrice || getItemUnitPrice(i),
+      finalUnitPrice: getItemUnitPrice(i),
+      options:        i.options || [],
+      addons:         i.addons  || [],
+      total:          getItemTotal(i),
+    })),
+    subtotal:         getSubtotal(),
+    delivery_fee:     getDeliveryFee(),
+    total:            getTotal(),
+    payment_method:   method,
+    payment_status:   'aguardando_pagamento',
+    payment_provider: 'infinitepay',
+    notes:            f.notes || '',
+    troco:            null,
+    location: state.geo.lat ? {
+      lat:       state.geo.lat,
+      lng:       state.geo.lon,
+      accuracy:  state.geo.accuracy || null,
+      mapsLink:  state.geo.link,
+      routeLink: state.geo.routeLink,
+    } : null,
+    status:           'aguardando_pagamento',
+    whatsapp_sent:    false,
+  };
+
+  /* 1. Salvar pedido no Supabase */
+  try {
+    await saveOrderToSupabase(orderData);
+  } catch (err) {
+    console.error('[DayLanches] Erro ao salvar pedido online:', err);
+    showToast('Não foi possível registrar seu pedido. Tente novamente.');
+    return;
+  }
+
+  /* 2. Criar checkout InfinitePay via Worker */
+  showToast('Gerando link de pagamento…');
+  let checkoutUrl;
+  try {
+    const res = await fetch(`${WORKER_URL}/create-payment`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ orderNumber }),
+    });
+    if (!res.ok) throw new Error(`Worker ${res.status}`);
+    const data = await res.json();
+    checkoutUrl = data.checkoutUrl;
+  } catch (err) {
+    console.error('[DayLanches] Erro ao criar pagamento:', err);
+    showToast('Não foi possível gerar o pagamento. Tente novamente.');
+    return;
+  }
+
+  /* 3. Redirecionar para checkout InfinitePay */
+  window.location.href = checkoutUrl;
 }
 
 function handleCashPayment() {
@@ -2671,6 +2749,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 /* Expõe funções usadas em onclick do HTML no escopo global */
 window.handlePixPayment        = handlePixPayment;
 window.handleCardPayment       = handleCardPayment;
+window.handleCardDeliveryPayment = handleCardDeliveryPayment;
 window.handleCashPayment       = handleCashPayment;
 window.openPixPage             = openPixPage;
 window.closePixPage            = closePixPage;

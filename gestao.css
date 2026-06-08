@@ -522,6 +522,29 @@ a { text-decoration: none; color: inherit; }
 }
 .btn-oc-cancel:hover { opacity: .8; }
 
+.btn-oc-receipt {
+  font-size: .78rem; font-weight: 700;
+  padding: 7px 14px; border-radius: 8px;
+  background: #EFF6FF; color: #3B82F6;
+  border: 1px solid #BFDBFE;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: opacity .15s;
+}
+.btn-oc-receipt:hover { opacity: .8; }
+
+/* Badges de status de pagamento */
+.oc-ps-badge {
+  font-size: .72rem; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px;
+  white-space: nowrap; display: inline-block;
+}
+.ps-paid     { background: #DCFCE7; color: #16a34a; }
+.ps-waiting  { background: #FFFBEB; color: #D97706; }
+.ps-created  { background: #EFF6FF; color: #3B82F6; }
+.ps-delivery { background: #F3F4F6; color: #6B7280; }
+.ps-cancelled{ background: var(--danger-bg); color: var(--danger); }
+
 /* Rodapé do card */
 .oc-footer {
   display: flex; align-items: center; justify-content: space-between;

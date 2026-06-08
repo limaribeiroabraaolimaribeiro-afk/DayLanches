@@ -908,7 +908,16 @@ function orderCard(o) {
     saiu_para_entrega:'st-entrega',
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
-  const payLabels = { pix:'PIX', card:'Cartão', cash:'Dinheiro' };
+  const payLabels = { pix:'PIX', pix_online:'PIX online', card:'Cartão', card_online:'Cartão online', cash:'Dinheiro' };
+  const payStatusLabel = {
+    aguardando_pagamento: { text:'Aguardando pag.', cls:'ps-waiting' },
+    aguardando_comprovante: { text:'Aguardando comprovante', cls:'ps-waiting' },
+    checkout_criado:      { text:'Checkout criado', cls:'ps-created' },
+    pago:                 { text:'Pago ✓', cls:'ps-paid' },
+    pagamento_na_entrega: { text:'Na entrega', cls:'ps-delivery' },
+    cancelado:            { text:'Cancelado', cls:'ps-cancelled' },
+  };
+  const psInfo = payStatusLabel[o.payment_status] || null;
   const date  = o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) + ' — ' + new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
   const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
@@ -946,6 +955,10 @@ function orderCard(o) {
         <div class="oc-field">
           <span class="oc-field-label">Pagamento</span>
           <span class="oc-field-value">${payLabels[o.payment_method]||esc(o.payment_method||'—')}${o.troco?` <small class="oc-troco">troco p/ R$ ${esc(String(o.troco))}</small>`:''}</span>
+        </div>
+        <div class="oc-field">
+          <span class="oc-field-label">Status pagamento</span>
+          <span class="oc-field-value">${psInfo?`<span class="oc-ps-badge ${psInfo.cls}">${psInfo.text}</span>`:'<span class="oc-no-info">—</span>'}</span>
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Total</span>
@@ -1007,6 +1020,7 @@ function orderCard(o) {
         <div class="oc-det-actions">
           ${waLink?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
           <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
+          ${o.receipt_url?`<a class="btn-oc-receipt" href="${esc(o.receipt_url)}" target="_blank" rel="noopener"><i class="fas fa-file-invoice"></i> Ver comprovante</a>`:''}
           ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
         </div>
       </div>

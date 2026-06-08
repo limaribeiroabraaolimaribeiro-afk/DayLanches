@@ -1,0 +1,20 @@
+name            = "day-lanches-worker"
+main            = "index.js"
+compatibility_date = "2024-09-23"
+
+# Variáveis não-secretas
+[vars]
+INFINITEPAY_HANDLE = "daiane-66669934-0"
+SITE_URL           = "https://www.daylanches.com.br"
+WEBHOOK_URL        = "https://api.daylanches.com.br"
+
+# Variáveis secretas — configurar via:
+#   wrangler secret put SUPABASE_URL
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#
+# Nunca colocar essas chaves no código.
+
+# Rota de domínio customizado (requer zona daylanches.com.br no Cloudflare)
+# [[routes]]
+# pattern  = "api.daylanches.com.br/*"
+# zone_name = "daylanches.com.br"
