@@ -1733,11 +1733,11 @@ function renderProductOptions(product) {
             ${group.items.map(item => {
               const iid = esc(item.id);
               return `
-                <label class="pp-opt-item">
+                <label class="pp-opt-item" onclick="event.preventDefault();ppToggleOption('${gid}','${iid}')">
                   <input type="${group.type === 'radio' ? 'radio' : 'checkbox'}"
                     name="ppopt_${gid}" value="${iid}"
                     class="pp-opt-inp"
-                    onchange="ppHandleOptionChange('${gid}','${iid}','${group.type}',${item.price_delta})">
+                    onclick="event.preventDefault()">
                   <span class="pp-opt-name">${esc(item.name)}</span>
                   <span class="${item.price_delta > 0 ? 'pp-opt-price' : 'pp-opt-price-free'}">
                     ${item.price_delta > 0 ? `+ R$ ${fmt(item.price_delta)}` : 'Grátis'}
@@ -1767,33 +1767,48 @@ function renderProductOptions(product) {
   updatePpAddButton();
 }
 
-function ppHandleOptionChange(groupId, itemId, type, priceDelta) {
+function ppToggleOption(groupId, itemId) {
   const group = ppOptionGroups.find(g => g.id === groupId);
   if (!group) return;
 
-  if (type === 'radio') {
-    ppOptionSelections[groupId] = itemId;
+  if (group.type === 'radio') {
+    const current = ppOptionSelections[groupId];
+    if (current === itemId && !group.required) {
+      /* Deselect: radio opcional clicado novamente */
+      ppOptionSelections[groupId] = null;
+      group.items.forEach(item => {
+        const inp = document.querySelector(`input[name="ppopt_${groupId}"][value="${item.id}"]`);
+        if (inp) inp.checked = false;
+      });
+    } else {
+      ppOptionSelections[groupId] = itemId;
+      group.items.forEach(item => {
+        const inp = document.querySelector(`input[name="ppopt_${groupId}"][value="${item.id}"]`);
+        if (inp) inp.checked = item.id === itemId;
+      });
+    }
   } else {
-    const sel = ppOptionSelections[groupId];
-    if (!(sel instanceof Set)) { ppOptionSelections[groupId] = new Set(); }
+    /* Checkbox */
+    if (!(ppOptionSelections[groupId] instanceof Set)) ppOptionSelections[groupId] = new Set();
     const s = ppOptionSelections[groupId];
+
     if (s.has(itemId)) {
       s.delete(itemId);
     } else {
       if (group.max_select > 0 && s.size >= group.max_select) {
-        const inp = document.querySelector(`input[name="ppopt_${groupId}"][value="${itemId}"]`);
-        if (inp) inp.checked = false;
         showToast(`Máximo de ${group.max_select} ${group.max_select === 1 ? 'opção' : 'opções'} para "${group.title}".`);
         return;
       }
       s.add(itemId);
     }
 
+    const inp = document.querySelector(`input[name="ppopt_${groupId}"][value="${itemId}"]`);
+    if (inp) inp.checked = s.has(itemId);
+
     /* Atualiza contador — só itens pagos consomem o free_limit */
     const countEl = el(`pp-opt-cnt-${groupId}`);
     if (countEl) {
-      const s  = ppOptionSelections[groupId];
-      const n  = s instanceof Set ? s.size : 0;
+      const n  = s.size;
       const fl = Number(group.free_limit || 0);
       if (n === 0) {
         countEl.textContent = '';
@@ -1802,8 +1817,8 @@ function ppHandleOptionChange(groupId, itemId, type, priceDelta) {
           const it = group.items.find(i => i.id === id);
           return it && it.price_delta > 0;
         }).length;
-        const freeUsed  = Math.min(paidCount, fl);
-        const charged   = Math.max(0, paidCount - fl);
+        const freeUsed = Math.min(paidCount, fl);
+        const charged  = Math.max(0, paidCount - fl);
         countEl.textContent = charged > 0
           ? `${freeUsed} grátis + ${charged} cobrado${charged > 1 ? 's' : ''}`
           : `${freeUsed} grátis`;
@@ -1812,7 +1827,13 @@ function ppHandleOptionChange(groupId, itemId, type, priceDelta) {
       }
     }
   }
+
   updatePpAddButton();
+}
+
+/* Mantido para compatibilidade — não mais chamado pelo template */
+function ppHandleOptionChange(groupId, itemId) {
+  ppToggleOption(groupId, itemId);
 }
 
 function getPpOptionsTotal() {
@@ -2626,6 +2647,7 @@ window.closeTrocoModal         = closeTrocoModal;
 window.closeTrocoModalOutside  = closeTrocoModalOutside;
 window.confirmCashPayment      = confirmCashPayment;
 window.ppToggleAddon           = ppToggleAddon;
+window.ppToggleOption          = ppToggleOption;
 window.spChooseProduct         = spChooseProduct;
 window.toggleMenu              = toggleMenu;
 window.openMenu                = openMenu;
