@@ -317,7 +317,7 @@ function renderOptionGroupsUI() {
   const container = elid('option-groups-list');
   if (!container) return;
   const active = _editGroups.filter(g => !g._deleted);
-  if (!active.length) { container.innerHTML = ''; return; }
+  if (!active.length) { container.innerHTML = ''; updateProductPreview(); return; }
 
   container.innerHTML = active.map(group => {
     const ri          = _editGroups.indexOf(group);
@@ -333,7 +333,7 @@ function renderOptionGroupsUI() {
           <div class="form-group" style="flex:1;margin:0">
             <label class="form-label">Título da escolha</label>
             <input class="form-input" placeholder="Ex: Adicionais, Deseja batata palha?" value="${esc(group.title)}"
-              oninput="_editGroups[${ri}].title=this.value">
+              oninput="_editGroups[${ri}].title=this.value;updateProductPreview()">
           </div>
           <button type="button" class="opt-choice-remove" onclick="removeOptGroup(${ri})">
             <i class="fas fa-trash"></i> Remover
@@ -423,7 +423,7 @@ function renderOptionGroupsUI() {
               const pv = item.price_delta > 0 ? String(item.price_delta.toFixed(2)).replace('.', ',') : '';
               return `<div class="opt-item-row">
                 <input class="form-input" placeholder="Ex: Nutella, Bacon extra, Gelada…" value="${esc(item.name)}"
-                  oninput="_editGroups[${ri}].items[${ii}].name=this.value" style="flex:1;min-width:0">
+                  oninput="_editGroups[${ri}].items[${ii}].name=this.value;updateProductPreview()" style="flex:1;min-width:0">
                 <div class="opt-item-price-wrap">
                   <span class="opt-price-prefix">+R$</span>
                   <input type="text" inputmode="decimal" class="form-input opt-price-input" placeholder="0,00" value="${pv}"
@@ -441,6 +441,7 @@ function renderOptionGroupsUI() {
         </div>
       </div>`;
   }).join('');
+  updateProductPreview();
 }
 
 function addOptGroup() {
@@ -1082,6 +1083,15 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ══════════════════════════════════════
    PREVIEW + TEMPLATE
 ══════════════════════════════════════ */
+function productFormHasOptions() {
+  return _editGroups.some(g => {
+    if (g._deleted) return false;
+    const hasTitle = g.title && g.title.trim();
+    const hasItems = Array.isArray(g.items) && g.items.some(i => !i._deleted && i.name && i.name.trim());
+    return hasTitle && hasItems;
+  });
+}
+
 function updateProductPreview() {
   const name  = (elid('p-name')?.value || '').trim();
   const desc  = (elid('p-desc')?.value || '').trim();
@@ -1123,6 +1133,13 @@ function updateProductPreview() {
     } else {
       pricePreview.style.display = 'none';
     }
+  }
+
+  const ppcBtn = elid('ppc-add-btn');
+  if (ppcBtn) {
+    ppcBtn.innerHTML = productFormHasOptions()
+      ? '<i class="fa-solid fa-sliders"></i> Escolher'
+      : '<i class="fa-solid fa-cart-shopping"></i> Adicionar';
   }
 }
 
