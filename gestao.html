@@ -119,6 +119,9 @@
           <button class="filter-btn" onclick="filterOrders('saiu_para_entrega',this)">Saiu p/ entrega</button>
           <button class="filter-btn" onclick="filterOrders('finalizado',this)">Finalizados</button>
         </div>
+        <button class="btn-refresh-orders" onclick="loadOrders()" title="Atualizar pedidos">
+          <i class="fas fa-rotate-right"></i> Atualizar
+        </button>
       </div>
       <div id="orders-list"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
     </section>

@@ -558,9 +558,9 @@ const state = {
   search:      '',
   deliveryType: 'delivery',  /* delivery | pickup */
   form: {
-    name: '', notes: '',
+    name: '', phone: '', notes: '', troco: '',
   },
-  geo: { lat: null, lon: null, link: '', routeLink: '', distanceKm: null, straightDistanceKm: null },
+  geo: { lat: null, lon: null, accuracy: null, link: '', routeLink: '', distanceKm: null, straightDistanceKm: null },
   payMethod:   '',
   payStatus:   'idle',     /* idle | waiting | confirmed | production */
   couponApplied: false,
@@ -585,10 +585,9 @@ function getSb() {
 
 async function saveOrderToSupabase(orderData) {
   const sb = getSb();
-  if (!sb) return;
-  try {
-    await sb.from('orders').insert(orderData);
-  } catch(e) { console.warn('Pedido não salvo no Supabase (não crítico):', e); }
+  if (!sb) throw new Error('Supabase não disponível');
+  const { error } = await sb.from('orders').insert(orderData);
+  if (error) throw error;
 }
 
 async function loadProductsFromDatabase() {
@@ -731,7 +730,7 @@ function requestGeoLocation() {
       const straight    = calculateDistanceKm(STORE_LAT, STORE_LON, Number(lat), Number(lon));
       const estimated   = straight * DELIVERY_ROUTE_FACTOR;
       const fee         = Math.ceil(estimated * DELIVERY_PRICE_PER_KM);
-      state.geo = { lat, lon, link, routeLink, straightDistanceKm: straight, distanceKm: estimated };
+      state.geo = { lat, lon, accuracy: pos.coords.accuracy || null, link, routeLink, straightDistanceKm: straight, distanceKm: estimated };
 
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
       if (stat) {
@@ -772,7 +771,7 @@ function handlePixPayment() {
   openPixPage();
 }
 
-function handleCardPayment() {
+async function handleCardPayment() {
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para entrega, use o botão de localização antes de continuar.');
     navigateTo('delivery');
@@ -780,8 +779,8 @@ function handleCardPayment() {
   }
   state.payMethod = 'card';
   state.orderId   = Math.floor(Math.random() * 90000) + 10000;
-  sendWhatsApp();
-  navigateTo('confirmation');
+  const ok = await sendWhatsApp();
+  if (ok) navigateTo('confirmation');
 }
 
 function handleCashPayment() {
@@ -810,12 +809,12 @@ function closeTrocoModalOutside(e) {
   if (e.target === el('troco-modal')) closeTrocoModal();
 }
 
-function confirmCashPayment() {
+async function confirmCashPayment() {
   state.payMethod = 'cash';
   state.orderId   = state.orderId || Math.floor(Math.random() * 90000) + 10000;
   closeTrocoModal();
-  sendWhatsApp();
-  navigateTo('confirmation');
+  const ok = await sendWhatsApp();
+  if (ok) navigateTo('confirmation');
 }
 
 function openPixPage() {
@@ -1305,10 +1304,11 @@ function goToCheckout() {
 }
 
 function goToPayment() {
-  const name = document.getElementById('f-name').value.trim();
+  const name  = document.getElementById('f-name').value.trim();
+  const phone = document.getElementById('f-phone')?.value.trim() || '';
   const errBox = document.getElementById('delivery-error');
 
-  if (!name) {
+  if (!name || !phone) {
     errBox.style.display = 'flex';
     errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
@@ -1322,6 +1322,7 @@ function goToPayment() {
   }
 
   state.form.name  = name;
+  state.form.phone = phone;
   state.form.notes = el('f-notes')?.value.trim() || '';
   navigateTo('payment');
 }
@@ -1391,8 +1392,9 @@ function copyPixKey() {
   }, 2500);
 }
 
-function sendWhatsAppPixContact() {
-  sendWhatsApp();
+async function sendWhatsAppPixContact() {
+  const ok = await sendWhatsApp();
+  if (ok) { closePixPage(); navigateTo('confirmation'); }
 }
 
 // Futuramente:
@@ -1432,56 +1434,69 @@ function updateConfirmationPage() {
 /* ──────────────────────────────────────────
    13. WHATSAPP
 ────────────────────────────────────────── */
-function sendWhatsApp() {
-  const f         = state.form;
-  const items     = state.cart.map(i => buildWhatsAppItemText(i)).join('\n');
-  const payLabels = {
-    pix:  'PIX',
-    card: 'Cartão na entrega/retirada',
-    cash: 'Dinheiro na entrega/retirada',
-  };
+async function sendWhatsApp() {
+  const f     = state.form;
   const troco = state.payMethod === 'cash' ? (el('troco-input')?.value.trim() || '') : '';
+  if (troco) state.form.troco = troco;
 
-  const tipoEntrega = state.deliveryType === 'pickup' ? 'Retirada no local' : 'Entrega';
-  const freteTxt    = state.deliveryType === 'pickup'
-    ? 'Grátis'
-    : (getDeliveryFee() > 0 ? `R$ ${fmt(getDeliveryFee())}` : 'Grátis');
-
-  const locTxt = state.deliveryType === 'delivery' && state.geo.lat
-    ? `\n\n📍 *Localização do cliente:*\n${state.geo.link}` +
-      `\n\n🧭 *Rota para entrega:*\n${state.geo.routeLink}`
-    : '';
-
-  const message =
-    `Olá, Day Lanches! Quero fazer um pedido.\n\n` +
-    `👤 *Nome:* ${f.name}\n\n` +
-    `📦 *Tipo do pedido:* ${tipoEntrega}\n\n` +
-    `🛒 *Pedido:*\n${items}\n\n` +
-    `🏍️ *Frete:* ${freteTxt}\n` +
-    `💰 *Total:* R$ ${fmt(getTotal())}\n\n` +
-    `💳 *Forma de pagamento:* ${payLabels[state.payMethod] || state.payMethod}` +
-    (troco ? `\n💵 *Troco para:* R$ ${troco}` : '') +
-    (f.notes ? `\n\n📝 *Observações:*\n${f.notes}` : '') +
-    locTxt;
-
-  /* Salvar pedido no Supabase (não bloqueia o WhatsApp) */
-  saveOrderToSupabase({
+  const orderData = {
     order_number:    `DL-${state.orderId}`,
-    customer_name:   state.form.name,
+    customer_name:   f.name,
+    customer_phone:  f.phone || '',
     delivery_type:   state.deliveryType,
-    items:           state.cart.map(i => ({ id:i.id, name:i.name, qty:i.qty, unitPrice:getItemUnitPrice(i), options:i.options||[], total:getItemTotal(i) })),
+    items: state.cart.map(i => ({
+      id:             i.id,
+      name:           i.name,
+      qty:            i.qty,
+      unitPrice:      i.basePrice || getItemUnitPrice(i),
+      finalUnitPrice: getItemUnitPrice(i),
+      options:        i.options || [],
+      addons:         i.addons  || [],
+      total:          getItemTotal(i),
+    })),
     subtotal:        getSubtotal(),
     delivery_fee:    getDeliveryFee(),
     total:           getTotal(),
     payment_method:  state.payMethod,
     payment_status:  state.payMethod === 'pix' ? 'aguardando_comprovante' : 'pagamento_na_entrega',
-    notes:           state.form.notes || '',
-    location:        state.geo.lat ? { lat: state.geo.lat, lon: state.geo.lon, link: state.geo.link } : null,
+    notes:           f.notes || '',
+    troco:           troco   || null,
+    location: state.geo.lat ? {
+      lat:         state.geo.lat,
+      lng:         state.geo.lon,
+      accuracy:    state.geo.accuracy || null,
+      mapsLink:    state.geo.link,
+      routeLink:   state.geo.routeLink,
+    } : null,
     status:          'novo',
     whatsapp_sent:   true,
-  });
+  };
+
+  try {
+    await saveOrderToSupabase(orderData);
+  } catch (err) {
+    console.error('[DayLanches] Erro ao salvar pedido:', err);
+    showToast('Não foi possível registrar seu pedido. Tente novamente.');
+    return false;
+  }
+
+  const payLabels = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro' };
+  const payNote = {
+    pix:  '\nJá vou enviar o comprovante por aqui.',
+    card: '\nPagamento no cartão na entrega/retirada.',
+    cash: `\nPagamento em dinheiro na entrega/retirada.${troco ? `\nTroco para: R$ ${troco}` : ''}`,
+  };
+
+  const message =
+    `Olá, fiz meu pedido pelo site da Day Lanches.\n\n` +
+    `Pedido: DL-${state.orderId}\n` +
+    `Nome: ${f.name}\n` +
+    `Total: R$ ${fmt(getTotal())}\n` +
+    `Pagamento: ${payLabels[state.payMethod] || state.payMethod}` +
+    (payNote[state.payMethod] || '');
 
   window.open(`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
+  return true;
 }
 
 /* ──────────────────────────────────────────

@@ -872,9 +872,31 @@ function orderCard(o) {
     saiu_para_entrega:'st-entrega',
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
-  const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
-  const num  = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const payLabels = { pix:'PIX', card:'Cartão', cash:'Dinheiro' };
+  const date  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
+  const loc   = o.location && typeof o.location === 'object' ? o.location : null;
+  const phone = (o.customer_phone || '').replace(/\D/g, '');
+  const waLink = phone ? `https://wa.me/55${phone}` : '';
+
+  /* Texto completo do pedido para copiar */
+  const copyText = [
+    `Pedido: ${num}`,
+    `Nome: ${o.customer_name||'—'}`,
+    `Telefone: ${o.customer_phone||'—'}`,
+    `Tipo: ${o.delivery_type==='pickup'?'Retirada':'Entrega'}`,
+    `Pagamento: ${payLabels[o.payment_method]||o.payment_method||'—'}`,
+    o.troco ? `Troco para: R$ ${o.troco}` : '',
+    `Total: R$ ${fmt(o.total)}`,
+    '',
+    ...items.map(i => {
+      const opts = (i.options||[]).map(og=>`  ${og.groupTitle}: ${(og.items||[]).map(oi=>oi.name).join(', ')}`).join('\n');
+      return `• ${i.qty}x ${i.name} — R$ ${fmt(i.total||0)}${opts?'\n'+opts:''}`;
+    }),
+    o.notes ? `\nObs: ${o.notes}` : '',
+    loc?.mapsLink ? `\nLocalização: ${loc.mapsLink}` : '',
+  ].filter(Boolean).join('\n');
 
   return `
     <div class="order-card ${stClass[o.status]||''}">
@@ -889,15 +911,55 @@ function orderCard(o) {
         <span><i class="fas fa-clock"></i> ${date}</span>
         <span><i class="fas fa-${o.delivery_type==='pickup'?'store':'motorcycle'}"></i> ${o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
         <span><i class="fas fa-tag"></i> R$ ${fmt(o.total)}</span>
-        <span><i class="fas fa-credit-card"></i> ${esc(o.payment_method||'—')}</span>
+        <span><i class="fas fa-credit-card"></i> ${payLabels[o.payment_method]||esc(o.payment_method||'—')}</span>
+        ${o.customer_phone ? `<span><i class="fas fa-phone"></i> ${esc(o.customer_phone)}</span>` : ''}
+        ${o.troco ? `<span><i class="fas fa-money-bill-wave"></i> Troco p/ R$ ${esc(String(o.troco))}</span>` : ''}
       </div>
       <div class="order-items">${items.map(i => {
         const optStr = (i.options||[]).map(og=>`${og.groupTitle}: ${(og.items||[]).map(oi=>oi.name).join(', ')}`).join(' | ');
         return `<span class="order-item-tag">${i.qty}x ${esc(i.name)}${optStr?` <small style="opacity:.7">(${esc(optStr)})</small>`:''}</span>`;
       }).join('')}</div>
       ${o.notes?`<div class="order-meta"><span><i class="fas fa-comment"></i> ${esc(o.notes)}</span></div>`:''}
-      <div class="order-actions">${nextStatusBtns(o)}</div>
+      ${loc ? `
+      <div class="order-loc-links">
+        ${loc.mapsLink  ? `<a class="btn-order-link" href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>` : ''}
+        ${loc.routeLink ? `<a class="btn-order-link btn-order-link-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>` : ''}
+      </div>` : ''}
+      <div class="order-actions">
+        ${nextStatusBtns(o)}
+        ${waLink ? `<a class="btn-order-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar</a>` : ''}
+        <button class="btn-order-copy" onclick="copyOrderText('${esc(o.id)}')"><i class="fas fa-copy"></i> Copiar</button>
+      </div>
     </div>`;
+}
+
+function copyOrderText(orderId) {
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const items = Array.isArray(o.items) ? o.items : [];
+  const payLabels = { pix:'PIX', card:'Cartão', cash:'Dinheiro' };
+  const loc = o.location && typeof o.location === 'object' ? o.location : null;
+  const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const lines = [
+    `Pedido: ${num}`,
+    `Nome: ${o.customer_name||'—'}`,
+    `Telefone: ${o.customer_phone||'—'}`,
+    `Tipo: ${o.delivery_type==='pickup'?'Retirada':'Entrega'}`,
+    `Pagamento: ${payLabels[o.payment_method]||o.payment_method||'—'}`,
+    o.troco ? `Troco para: R$ ${o.troco}` : null,
+    `Subtotal: R$ ${fmt(o.subtotal||0)}`,
+    `Frete: R$ ${fmt(o.delivery_fee||0)}`,
+    `Total: R$ ${fmt(o.total||0)}`,
+    '',
+    ...items.map(i => {
+      const opts = (i.options||[]).map(og=>`  ${og.groupTitle}: ${(og.items||[]).map(oi=>oi.name).join(', ')}`).join('\n');
+      return `• ${i.qty}x ${i.name} — R$ ${fmt(i.total||0)}${opts?'\n'+opts:''}`;
+    }),
+    o.notes ? `\nObs: ${o.notes}` : null,
+    loc?.mapsLink ? `\nLocalização: ${loc.mapsLink}` : null,
+  ].filter(v => v !== null).join('\n');
+
+  navigator.clipboard.writeText(lines).then(() => toast('Pedido copiado!')).catch(() => toast('Erro ao copiar.', true));
 }
 
 function nextStatusBtns(o) {
@@ -1200,3 +1262,4 @@ window.removeOptItem                  = removeOptItem;
 window.createAcaiDefaultOptions       = createAcaiDefaultOptions;
 window.updateProductPreview           = updateProductPreview;
 window.applyProductTemplate           = applyProductTemplate;
+window.copyOrderText                  = copyOrderText;
