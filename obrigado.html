@@ -47,9 +47,12 @@
     }
     .ty-msg {
       font-size: .88rem; color: #6B7280;
-      line-height: 1.6; margin-bottom: 24px;
+      line-height: 1.6; margin-bottom: 8px;
     }
-
+    .ty-hint {
+      font-size: .8rem; color: #9CA3AF;
+      margin-bottom: 20px;
+    }
     .ty-countdown {
       font-size: .82rem; color: #9CA3AF;
       margin-bottom: 20px;
@@ -88,16 +91,14 @@
     <div class="ty-icon"><i class="fas fa-check"></i></div>
     <h1 class="ty-title">Pedido recebido!</h1>
     <p class="ty-order" id="ty-order"></p>
-    <p class="ty-msg">
-      Estamos aguardando a confirmação do pagamento.<br>
-      Se precisar, fale com a Day Lanches pelo WhatsApp.
-    </p>
+    <p class="ty-msg">Estamos aguardando a confirmação do pagamento.</p>
+    <p class="ty-hint">Se o WhatsApp não abrir automaticamente, toque no botão abaixo.</p>
     <p class="ty-countdown" id="ty-countdown"></p>
     <div class="ty-btns">
-      <a id="btn-wapp" class="btn-wapp" href="#" target="_blank" rel="noopener">
+      <a id="btn-wapp" class="btn-wapp" href="#">
         <i class="fab fa-whatsapp"></i> Falar com a Day Lanches
       </a>
-      <a href="/" class="btn-back">
+      <a href="https://www.daylanches.com.br/" class="btn-back">
         <i class="fas fa-arrow-left"></i> Voltar ao cardápio
       </a>
     </div>
@@ -115,51 +116,38 @@
       document.getElementById('ty-order').textContent = 'Pedido ' + orderNumber;
     }
 
-    /* Monta mensagem do WhatsApp */
-    function buildWaMessage() {
-      if (orderNumber) {
-        return 'Olá, acabei de fazer um pedido pelo site da Day Lanches.'
-          + '\n\nPedido: ' + orderNumber
-          + '\nPagamento: online'
-          + '\nAguardando confirmação.';
-      }
-      return 'Olá, acabei de fazer um pedido pelo site da Day Lanches e estou aguardando a confirmação do pagamento.';
-    }
+    /* Monta mensagem */
+    const waMessage = orderNumber
+      ? 'Olá, acabei de fazer um pedido pelo site da Day Lanches.\nPedido: ' + orderNumber + '\nEstou aguardando a confirmação.'
+      : 'Olá, acabei de fazer um pedido pelo site da Day Lanches e estou aguardando a confirmação.';
 
-    function openWa() {
-      const url = 'https://wa.me/' + STORE_WHATSAPP
-                + '?text=' + encodeURIComponent(buildWaMessage());
-      window.open(url, '_blank');
-    }
+    const whatsappUrl = 'https://wa.me/' + STORE_WHATSAPP
+                      + '?text=' + encodeURIComponent(waMessage);
 
-    /* Atualiza href do botão */
-    document.getElementById('btn-wapp').href =
-      'https://wa.me/' + STORE_WHATSAPP
-      + '?text=' + encodeURIComponent(buildWaMessage());
-
-    /* Sobrescreve onclick para garantir que abre na aba correta */
-    document.getElementById('btn-wapp').addEventListener('click', function(e) {
+    /* Botão abre via location.href para não ser bloqueado como pop-up */
+    const btnWapp = document.getElementById('btn-wapp');
+    btnWapp.href = whatsappUrl;
+    btnWapp.addEventListener('click', function(e) {
       e.preventDefault();
-      openWa();
+      window.location.href = whatsappUrl;
     });
 
-    /* Countdown de 5 segundos */
+    /* Countdown + redirecionamento automático via location.href (não pop-up) */
     const countdownEl = document.getElementById('ty-countdown');
-    let seconds = 5;
+    let seconds = 7;
 
     function tick() {
       if (seconds > 0) {
         countdownEl.innerHTML =
-          'Você será direcionado para o WhatsApp em <strong>' + seconds + 's</strong>.';
+          'Abrindo WhatsApp em <strong>' + seconds + 's</strong>…';
         seconds--;
         setTimeout(tick, 1000);
       } else {
         countdownEl.textContent = '';
-        openWa();
+        window.location.href = whatsappUrl;
       }
     }
 
-    /* Inicia countdown com 1s de delay para o cliente ver a página */
     setTimeout(tick, 1000);
   </script>
 </body>
