@@ -20,11 +20,15 @@
       background: #fff;
       border-radius: 20px;
       box-shadow: 0 4px 24px rgba(0,0,0,.10);
-      padding: 40px 32px;
+      padding: 40px 28px;
       text-align: center;
       max-width: 420px;
       width: 100%;
     }
+    .ty-logo { margin-bottom: 24px; }
+    .logo-day     { font-size: 1.4rem; font-weight: 800; color: #FF6B00; }
+    .logo-lanches { font-size: 1.4rem; font-weight: 800; color: #1a1a1a; }
+
     .ty-icon {
       width: 72px; height: 72px;
       background: #F0FDF4;
@@ -33,37 +37,47 @@
       margin: 0 auto 20px;
       font-size: 2rem; color: #16a34a;
     }
-    .ty-icon.waiting {
-      background: #FFFBEB;
-      color: #D97706;
-    }
     .ty-title {
       font-size: 1.5rem; font-weight: 800; color: #1a1a1a;
       margin-bottom: 8px;
     }
     .ty-order {
       font-size: .95rem; font-weight: 700; color: #FF6B00;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
     .ty-msg {
-      font-size: .9rem; color: #6B7280;
-      line-height: 1.6; margin-bottom: 28px;
+      font-size: .88rem; color: #6B7280;
+      line-height: 1.6; margin-bottom: 24px;
     }
-    .ty-msg.confirmed { color: #16a34a; font-weight: 600; }
-    .btn-back {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: #FF6B00; color: #fff;
+
+    .ty-countdown {
+      font-size: .82rem; color: #9CA3AF;
+      margin-bottom: 20px;
+      min-height: 20px;
+    }
+    .ty-countdown strong { color: #FF6B00; }
+
+    .ty-btns {
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .btn-wapp {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #25D366; color: #fff;
       font-family: inherit; font-size: .95rem; font-weight: 700;
-      padding: 14px 28px; border-radius: 12px;
+      padding: 15px 24px; border-radius: 12px;
       border: none; cursor: pointer; text-decoration: none;
       transition: background .15s;
     }
-    .btn-back:hover { background: #E05A00; }
-    .ty-logo {
-      margin-bottom: 24px;
+    .btn-wapp:hover { background: #1ebe5a; }
+    .btn-back {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      background: #F3F4F6; color: #374151;
+      font-family: inherit; font-size: .9rem; font-weight: 600;
+      padding: 13px 24px; border-radius: 12px;
+      border: none; cursor: pointer; text-decoration: none;
+      transition: background .15s;
     }
-    .logo-day     { font-size: 1.4rem; font-weight: 800; color: #FF6B00; }
-    .logo-lanches { font-size: 1.4rem; font-weight: 800; color: #1a1a1a; }
+    .btn-back:hover { background: #E5E7EB; }
   </style>
 </head>
 <body>
@@ -71,27 +85,82 @@
     <div class="ty-logo">
       <span class="logo-day">Day</span><span class="logo-lanches">Lanches</span>
     </div>
-    <div class="ty-icon" id="ty-icon"><i class="fas fa-check"></i></div>
-    <h1 class="ty-title" id="ty-title">Pedido recebido!</h1>
+    <div class="ty-icon"><i class="fas fa-check"></i></div>
+    <h1 class="ty-title">Pedido recebido!</h1>
     <p class="ty-order" id="ty-order"></p>
-    <p class="ty-msg" id="ty-msg">Estamos aguardando a confirmação do pagamento.</p>
-    <a href="/" class="btn-back"><i class="fas fa-arrow-left"></i> Voltar ao cardápio</a>
+    <p class="ty-msg">
+      Estamos aguardando a confirmação do pagamento.<br>
+      Se precisar, fale com a Day Lanches pelo WhatsApp.
+    </p>
+    <p class="ty-countdown" id="ty-countdown"></p>
+    <div class="ty-btns">
+      <a id="btn-wapp" class="btn-wapp" href="#" target="_blank" rel="noopener">
+        <i class="fab fa-whatsapp"></i> Falar com a Day Lanches
+      </a>
+      <a href="/" class="btn-back">
+        <i class="fas fa-arrow-left"></i> Voltar ao cardápio
+      </a>
+    </div>
   </div>
 
   <script>
-    const params   = new URLSearchParams(window.location.search);
-    const order    = params.get('order') || '';
-    const status   = params.get('status') || '';
+    const STORE_WHATSAPP = '5547991559926';
 
-    if (order) {
-      document.getElementById('ty-order').textContent = 'Pedido ' + order;
+    /* Lê número do pedido: URL → localStorage */
+    const params      = new URLSearchParams(window.location.search);
+    const orderNumber = params.get('pedido') || params.get('order')
+                      || localStorage.getItem('lastOrderNumber') || '';
+
+    if (orderNumber) {
+      document.getElementById('ty-order').textContent = 'Pedido ' + orderNumber;
     }
 
-    if (status === 'pago') {
-      document.getElementById('ty-icon').innerHTML = '<i class="fas fa-check-double"></i>';
-      document.getElementById('ty-msg').textContent = 'Pagamento confirmado! Em breve sua loja iniciará o preparo.';
-      document.getElementById('ty-msg').className = 'ty-msg confirmed';
+    /* Monta mensagem do WhatsApp */
+    function buildWaMessage() {
+      if (orderNumber) {
+        return 'Olá, acabei de fazer um pedido pelo site da Day Lanches.'
+          + '\n\nPedido: ' + orderNumber
+          + '\nPagamento: online'
+          + '\nAguardando confirmação.';
+      }
+      return 'Olá, acabei de fazer um pedido pelo site da Day Lanches e estou aguardando a confirmação do pagamento.';
     }
+
+    function openWa() {
+      const url = 'https://wa.me/' + STORE_WHATSAPP
+                + '?text=' + encodeURIComponent(buildWaMessage());
+      window.open(url, '_blank');
+    }
+
+    /* Atualiza href do botão */
+    document.getElementById('btn-wapp').href =
+      'https://wa.me/' + STORE_WHATSAPP
+      + '?text=' + encodeURIComponent(buildWaMessage());
+
+    /* Sobrescreve onclick para garantir que abre na aba correta */
+    document.getElementById('btn-wapp').addEventListener('click', function(e) {
+      e.preventDefault();
+      openWa();
+    });
+
+    /* Countdown de 5 segundos */
+    const countdownEl = document.getElementById('ty-countdown');
+    let seconds = 5;
+
+    function tick() {
+      if (seconds > 0) {
+        countdownEl.innerHTML =
+          'Você será direcionado para o WhatsApp em <strong>' + seconds + 's</strong>.';
+        seconds--;
+        setTimeout(tick, 1000);
+      } else {
+        countdownEl.textContent = '';
+        openWa();
+      }
+    }
+
+    /* Inicia countdown com 1s de delay para o cliente ver a página */
+    setTimeout(tick, 1000);
   </script>
 </body>
 </html>

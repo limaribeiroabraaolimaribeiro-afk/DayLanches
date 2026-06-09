@@ -668,7 +668,7 @@ function calculateDeliveryFeeByKm() {
 
 /* ── CONFIGURAÇÕES DA LOJA ── */
 // Trocar pelo número real no formato internacional (sem + e sem espaços)
-const STORE_WHATSAPP = "554791559926";
+const STORE_WHATSAPP = "5547991559926";
 // Trocar pela chave PIX real da loja (celular, CPF, email ou chave aleatória)
 const PIX_KEY = "47997483342";
 
@@ -841,7 +841,14 @@ async function handleOnlinePayment(method) {
     return;
   }
 
-  /* 3. Redirecionar para checkout InfinitePay */
+  /* 3. Salvar dados no localStorage para a página obrigado */
+  try {
+    localStorage.setItem('lastOrderNumber', orderNumber);
+    localStorage.setItem('lastOrderTotal',  String(getTotal()));
+    localStorage.setItem('lastOrderMethod', method);
+  } catch(_) {}
+
+  /* 4. Redirecionar para checkout InfinitePay */
   window.location.href = checkoutUrl;
 }
 
@@ -1365,17 +1372,45 @@ function goToCheckout() {
   navigateTo('delivery');
 }
 
-function goToPayment() {
-  const name  = document.getElementById('f-name').value.trim();
-  const phone = document.getElementById('f-phone')?.value.trim() || '';
-  const errBox = document.getElementById('delivery-error');
+function formatPhone(input) {
+  let v = input.value.replace(/\D/g, '').substring(0, 11);
+  if (v.length > 6) {
+    v = '(' + v.substring(0,2) + ') ' + v.substring(2,7) + '-' + v.substring(7);
+  } else if (v.length > 2) {
+    v = '(' + v.substring(0,2) + ') ' + v.substring(2);
+  } else if (v.length > 0) {
+    v = '(' + v;
+  }
+  input.value = v;
+  const err = document.getElementById('phone-error');
+  if (err) err.style.display = 'none';
+}
 
-  if (!name || !phone) {
+function goToPayment() {
+  const name     = document.getElementById('f-name').value.trim();
+  const phone    = document.getElementById('f-phone')?.value.trim() || '';
+  const rawPhone = phone.replace(/\D/g, '');
+  const errBox   = document.getElementById('delivery-error');
+  const phoneErr = document.getElementById('phone-error');
+
+  errBox.style.display = 'none';
+  if (phoneErr) phoneErr.style.display = 'none';
+
+  if (!name) {
     errBox.style.display = 'flex';
     errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  errBox.style.display = 'none';
+
+  if (rawPhone.length < 10 || rawPhone.length > 11) {
+    if (phoneErr) {
+      phoneErr.style.display = 'flex';
+      phoneErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      showToast('Informe um WhatsApp válido com DDD.');
+    }
+    return;
+  }
 
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para calcular o frete, permita o acesso à localização.');
@@ -1384,7 +1419,7 @@ function goToPayment() {
   }
 
   state.form.name  = name;
-  state.form.phone = phone;
+  state.form.phone = rawPhone;   /* salva só dígitos */
   state.form.notes = el('f-notes')?.value.trim() || '';
   navigateTo('payment');
 }
@@ -2732,6 +2767,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 /* Expõe funções usadas em onclick do HTML no escopo global */
 window.handleOnlinePayment       = handleOnlinePayment;
+window.formatPhone               = formatPhone;
 window.handleCashPayment       = handleCashPayment;
 window.openPixPage             = openPixPage;
 window.closePixPage            = closePixPage;
