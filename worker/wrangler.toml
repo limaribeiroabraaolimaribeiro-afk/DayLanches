@@ -4,13 +4,17 @@ compatibility_date = "2024-09-23"
 
 # Variáveis não-secretas
 [vars]
-INFINITEPAY_HANDLE = "daiane-66669934-0f6"
-SITE_URL           = "https://www.daylanches.com.br"
-WEBHOOK_URL        = "https://day-lanches-worker.limaribeiroabraaolimaribeiro.workers.dev/infinitepay/webhook"
+INFINITEPAY_HANDLE    = "daiane-66669934-0f6"
+SITE_URL              = "https://www.daylanches.com.br"
+WEBHOOK_URL           = "https://day-lanches-worker.limaribeiroabraaolimaribeiro.workers.dev/infinitepay/webhook"
+WHATSAPP_TEMPLATE_NAME = "pedido_recebido"
+WHATSAPP_LANGUAGE_CODE = "pt_BR"
 
-# Variáveis secretas — configurar via:
+# Variáveis secretas — configurar via wrangler secret put:
 #   wrangler secret put SUPABASE_URL
 #   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put WHATSAPP_TOKEN
+#   wrangler secret put WHATSAPP_PHONE_NUMBER_ID
 #
 # Nunca colocar essas chaves no código.
 

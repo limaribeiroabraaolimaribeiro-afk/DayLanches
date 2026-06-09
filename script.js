@@ -804,6 +804,7 @@ async function handleOnlinePayment(method) {
       routeLink: state.geo.routeLink,
     } : null,
     status:           'aguardando_pagamento',
+    whatsapp_opt_in:  f.optIn !== false,
     whatsapp_sent:    false,
   };
 
@@ -1418,9 +1419,12 @@ function goToPayment() {
     return;
   }
 
-  state.form.name  = name;
-  state.form.phone = rawPhone;   /* salva só dígitos */
-  state.form.notes = el('f-notes')?.value.trim() || '';
+  /* Salva com prefixo 55 para E.164 — garante não duplicar */
+  const e164Phone = rawPhone.startsWith('55') ? rawPhone : '55' + rawPhone;
+  state.form.name    = name;
+  state.form.phone   = e164Phone;
+  state.form.optIn   = document.getElementById('f-wapp-optin')?.checked !== false;
+  state.form.notes   = el('f-notes')?.value.trim() || '';
   navigateTo('payment');
 }
 
@@ -1566,6 +1570,7 @@ async function sendWhatsApp() {
       routeLink:   state.geo.routeLink,
     } : null,
     status:          'novo',
+    whatsapp_opt_in: state.form.optIn !== false,
     whatsapp_sent:   true,
   };
 

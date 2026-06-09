@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Acompanhar pedido — Day Lanches</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Poppins', system-ui, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+    .wrap {
+      max-width: 480px; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .card {
+      background: #fff; border-radius: 16px;
+      padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,.08);
+    }
+    .logo { text-align: center; padding: 8px 0 4px; }
+    .logo-day     { font-size: 1.5rem; font-weight: 800; color: #FF6B00; }
+    .logo-lanches { font-size: 1.5rem; font-weight: 800; color: #1a1a1a; }
+    .order-num {
+      font-size: 1.2rem; font-weight: 800; color: #1a1a1a;
+      margin-bottom: 4px;
+    }
+    .order-time { font-size: .78rem; color: #9CA3AF; margin-bottom: 16px; }
+
+    /* Status timeline */
+    .timeline { display: flex; flex-direction: column; gap: 0; }
+    .tl-step {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 8px 0;
+    }
+    .tl-dot-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      flex-shrink: 0; width: 28px;
+    }
+    .tl-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .75rem; flex-shrink: 0;
+      background: #E5E7EB; color: #9CA3AF;
+    }
+    .tl-dot.done  { background: #DCFCE7; color: #16a34a; }
+    .tl-dot.active{ background: #FF6B00; color: #fff; }
+    .tl-dot.cancelled { background: #FEF2F2; color: #EF4444; }
+    .tl-line {
+      width: 2px; flex: 1; min-height: 12px;
+      background: #E5E7EB; margin: 2px 0;
+    }
+    .tl-line.done { background: #16a34a; }
+    .tl-label { padding-top: 4px; }
+    .tl-label strong { font-size: .9rem; font-weight: 700; color: #1a1a1a; }
+    .tl-label small  { display: block; font-size: .74rem; color: #9CA3AF; }
+    .tl-label strong.active-text { color: #FF6B00; }
+
+    /* Pagamento */
+    .pay-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size: .88rem;
+    }
+    .pay-row:last-child { border-bottom: none; }
+    .pay-row .label { color: #6B7280; }
+    .pay-row .val   { font-weight: 700; color: #1a1a1a; }
+    .pay-row .val.paid { color: #16a34a; }
+    .pay-row .val.waiting { color: #D97706; }
+    .pay-total .val { font-size: 1rem; color: #FF6B00; }
+
+    /* Itens */
+    .item-line {
+      font-size: .85rem; color: #4B5563; padding: 4px 0;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .item-line:last-child { border-bottom: none; }
+    .item-line .item-price { float: right; color: #FF6B00; font-weight: 700; }
+
+    .section-title {
+      font-size: .72rem; font-weight: 700; color: #9CA3AF;
+      text-transform: uppercase; letter-spacing: .05em;
+      margin-bottom: 10px;
+    }
+
+    .btn-wapp {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #25D366; color: #fff;
+      font-family: inherit; font-size: .95rem; font-weight: 700;
+      padding: 14px; border-radius: 12px;
+      border: none; cursor: pointer; text-decoration: none;
+      width: 100%; transition: background .15s;
+    }
+    .btn-wapp:hover { background: #1ebe5a; }
+    .btn-back {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      background: #F3F4F6; color: #374151;
+      font-family: inherit; font-size: .88rem; font-weight: 600;
+      padding: 12px; border-radius: 12px;
+      border: none; cursor: pointer; text-decoration: none;
+      width: 100%; transition: background .15s;
+    }
+    .btn-back:hover { background: #E5E7EB; }
+
+    .loading-txt { text-align: center; color: #9CA3AF; font-size: .9rem; padding: 32px 0; }
+    .error-txt   { text-align: center; color: #EF4444; font-size: .88rem; padding: 24px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card logo">
+      <span class="logo-day">Day</span><span class="logo-lanches">Lanches</span>
+    </div>
+
+    <div id="app-content">
+      <p class="loading-txt"><i class="fas fa-spinner fa-spin"></i> Carregando pedido…</p>
+    </div>
+
+    <a href="https://www.daylanches.com.br/" class="btn-back" style="text-decoration:none">
+      <i class="fas fa-arrow-left"></i> Voltar ao cardápio
+    </a>
+  </div>
+
+  <script>
+    const WORKER_URL      = 'https://day-lanches-worker.limaribeiroabraaolimaribeiro.workers.dev';
+    const STORE_WHATSAPP  = '5547991559926';
+
+    const statusSteps = [
+      { key: 'aguardando_pagamento', label: 'Aguardando pagamento', icon: 'fa-clock' },
+      { key: 'novo',                 label: 'Pedido recebido',       icon: 'fa-check' },
+      { key: 'em_preparo',           label: 'Em preparo',            icon: 'fa-fire' },
+      { key: 'saiu_para_entrega',    label: 'Saiu para entrega',     icon: 'fa-motorcycle' },
+      { key: 'finalizado',           label: 'Finalizado',            icon: 'fa-check-double' },
+    ];
+
+    const payStatusMap = {
+      aguardando_pagamento:   { text: 'Aguardando pagamento', cls: 'waiting' },
+      aguardando_comprovante: { text: 'Aguardando comprovante', cls: 'waiting' },
+      checkout_criado:        { text: 'Checkout criado', cls: 'waiting' },
+      pago:                   { text: 'Pago ✓', cls: 'paid' },
+      pagamento_na_entrega:   { text: 'Na entrega', cls: '' },
+    };
+
+    function fmt(n) {
+      return Number(n || 0).toFixed(2).replace('.', ',');
+    }
+
+    function renderOrder(o) {
+      const appDiv = document.getElementById('app-content');
+      const createdDate = o.created_at
+        ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+        : '';
+
+      /* Timeline */
+      const isCancelled = o.status === 'cancelado';
+      const steps       = isCancelled
+        ? [{ key:'cancelado', label:'Pedido cancelado', icon:'fa-times' }]
+        : statusSteps;
+
+      const currentIdx = steps.findIndex(s => s.key === o.status);
+
+      const timelineHtml = steps.map((step, idx) => {
+        const done   = !isCancelled && idx < currentIdx;
+        const active = idx === currentIdx;
+        const dotCls = isCancelled ? 'cancelled' : (active ? 'active' : (done ? 'done' : ''));
+        const lineCls = done ? 'done' : '';
+        const showLine = idx < steps.length - 1;
+
+        return `<div class="tl-step">
+          <div class="tl-dot-wrap">
+            <div class="tl-dot ${dotCls}"><i class="fas ${step.icon}"></i></div>
+            ${showLine ? `<div class="tl-line ${lineCls}"></div>` : ''}
+          </div>
+          <div class="tl-label">
+            <strong class="${active ? 'active-text' : ''}">${step.label}</strong>
+            ${active ? '<small>Status atual</small>' : ''}
+          </div>
+        </div>`;
+      }).join('');
+
+      /* Itens */
+      const items = Array.isArray(o.items_summary) ? o.items_summary : [];
+      const itemsHtml = items.length
+        ? items.map(i => `<div class="item-line">
+            ${i.qty}x ${i.name}
+            <span class="item-price">R$ ${fmt(i.total || 0)}</span>
+          </div>`).join('')
+        : '<p style="color:#9CA3AF;font-size:.82rem">—</p>';
+
+      /* Pagamento */
+      const ps    = payStatusMap[o.payment_status] || { text: o.payment_status || '—', cls: '' };
+      const fee   = Number(o.delivery_fee || 0);
+      const total = Number(o.total || 0);
+
+      /* WhatsApp */
+      const waMsg = `Olá, preciso de informações sobre meu pedido ${o.order_number}.`;
+      const waUrl = `https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent(waMsg)}`;
+
+      appDiv.innerHTML = `
+        <div class="card">
+          <p class="order-num">#${o.order_number || '—'}</p>
+          <p class="order-time">${createdDate}</p>
+          <p class="section-title">Status do pedido</p>
+          <div class="timeline">${timelineHtml}</div>
+        </div>
+
+        <div class="card">
+          <p class="section-title">Pagamento</p>
+          <div class="pay-row">
+            <span class="label">Status</span>
+            <span class="val ${ps.cls}">${ps.text}</span>
+          </div>
+          <div class="pay-row">
+            <span class="label">Entrega</span>
+            <span class="val">${o.delivery_type === 'pickup' ? 'Retirada' : fee > 0 ? `R$ ${fmt(fee)}` : 'Grátis'}</span>
+          </div>
+          <div class="pay-row pay-total">
+            <span class="label"><strong>Total</strong></span>
+            <span class="val">R$ ${fmt(total)}</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <p class="section-title">Itens</p>
+          ${itemsHtml}
+        </div>
+
+        <button class="btn-wapp" onclick="openWa('${waUrl.replace(/'/g, "\\'")}')">
+          <i class="fab fa-whatsapp"></i> Falar com a Day Lanches
+        </button>
+      `;
+    }
+
+    function openWa(url) {
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile) {
+        const appUrl = url.replace('https://wa.me/', 'whatsapp://send?phone=').replace('?text=', '&text=');
+        window.location.href = appUrl;
+        setTimeout(() => { window.location.href = url; }, 1800);
+      } else {
+        window.location.href = url;
+      }
+    }
+
+    /* Init */
+    (async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const token  = params.get('token');
+
+      if (!token) {
+        document.getElementById('app-content').innerHTML =
+          '<p class="error-txt"><i class="fas fa-exclamation-circle"></i> Link inválido. Verifique o link recebido.</p>';
+        return;
+      }
+
+      try {
+        const res  = await fetch(`${WORKER_URL}/order-tracking?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao carregar pedido');
+        renderOrder(data);
+      } catch (err) {
+        document.getElementById('app-content').innerHTML =
+          `<p class="error-txt"><i class="fas fa-exclamation-circle"></i> ${err.message}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>

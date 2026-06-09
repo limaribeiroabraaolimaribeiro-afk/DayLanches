@@ -2,9 +2,11 @@
 /* ─────────────────────────────────────────────────────────
    Day Lanches — Cloudflare Worker
    Rotas:
-     POST /create-payment       → cria checkout InfinitePay
-     POST /infinitepay/webhook  → recebe confirmação de pagamento
-     GET  /health               → health check
+     POST /create-payment            → cria checkout InfinitePay
+     POST /infinitepay/webhook       → confirma pagamento e envia WhatsApp ao cliente
+     POST /send-order-whatsapp       → reenvio manual de WhatsApp (gestão)
+     GET  /order-tracking?token=     → dados públicos do pedido (página acompanhar)
+     GET  /health                    → health check
    ───────────────────────────────────────────────────────── */
 
 const CORS = {
@@ -50,7 +52,8 @@ async function sbPatch(env, table, params, body) {
 ══════════════════════════════════════════════════════════ */
 export default {
   async fetch(request, env) {
-    const { pathname } = new URL(request.url);
+    const url      = new URL(request.url);
+    const pathname = url.pathname;
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS });
@@ -66,6 +69,14 @@ export default {
 
     if (pathname === '/infinitepay/webhook' && request.method === 'POST') {
       return handleWebhook(request, env);
+    }
+
+    if (pathname === '/send-order-whatsapp' && request.method === 'POST') {
+      return handleSendWhatsApp(request, env);
+    }
+
+    if (pathname === '/order-tracking' && request.method === 'GET') {
+      return handleOrderTracking(url, env);
     }
 
     return json({ error: 'Not found' }, 404);
@@ -92,16 +103,14 @@ async function handleCreatePayment(request, env) {
   /* 2. Montar itens InfinitePay (preços em centavos, inteiros) */
   const rawItems = Array.isArray(order.items) ? order.items : [];
 
-  /* Cada item: price = total do item em centavos (quantity já embutida) */
   let ipItems = rawItems
     .map(i => ({
       quantity:    1,
       price:       Math.round((Number(i.total) || 0) * 100),
       description: String(i.name || 'Produto').substring(0, 60),
     }))
-    .filter(i => i.price > 1);   /* descarta itens grátis ou de 1 centavo */
+    .filter(i => i.price > 1);
 
-  /* Fallback: 1 item com total do pedido */
   if (!ipItems.length) {
     const fallbackCents = Math.round((Number(order.total) || 0) * 100);
     if (fallbackCents > 1) {
@@ -109,25 +118,23 @@ async function handleCreatePayment(request, env) {
     }
   }
 
-  /* Frete como item separado (se cobrado) */
   const freightCents = Math.round((Number(order.delivery_fee) || 0) * 100);
   if (freightCents > 1) {
     ipItems.push({ quantity: 1, price: freightCents, description: 'Frete' });
   }
 
-  /* Validação do total antes de chamar a InfinitePay */
   const totalCents = ipItems.reduce((s, i) => s + i.price * i.quantity, 0);
   if (totalCents <= 1) {
     return json({ error: 'Valor mínimo para pagamento online é R$ 2,00', minValue: true }, 422);
   }
 
   /* 3. Chamar InfinitePay */
-  const siteUrl    = env.SITE_URL || 'https://www.daylanches.com.br';
+  const siteUrl    = env.SITE_URL    || 'https://www.daylanches.com.br';
   const webhookUrl = env.WEBHOOK_URL || 'https://api.daylanches.com.br/infinitepay/webhook';
 
   const ipPayload = {
     handle:       env.INFINITEPAY_HANDLE,
-    redirect_url: `${siteUrl}/obrigado.html?order=${encodeURIComponent(orderNumber)}`,
+    redirect_url: `${siteUrl}/obrigado.html?pedido=${encodeURIComponent(orderNumber)}`,
     webhook_url:  webhookUrl,
     order_nsu:    orderNumber,
     items:        ipItems,
@@ -145,12 +152,11 @@ async function handleCreatePayment(request, env) {
     return json({ error: 'Falha ao criar checkout', detail }, 502);
   }
 
-  const ipData     = await ipRes.json();
+  const ipData      = await ipRes.json();
   const checkoutUrl = ipData.url || ipData.payment_url || ipData.link
                     || ipData.checkout_url || ipData.short_url || ipData.payment_link;
 
   if (!checkoutUrl) {
-    console.error('[DayLanches] InfinitePay sem URL', JSON.stringify(ipData));
     return json({ error: 'URL de checkout não retornada', detail: ipData }, 502);
   }
 
@@ -175,31 +181,28 @@ async function handleWebhook(request, env) {
   try { payload = await request.json(); }
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
-  /* InfinitePay pode enviar o nsu em diferentes campos */
-  const orderNsu = payload.order_nsu
-    || payload.order?.order_nsu
-    || payload.nsu
-    || null;
+  const orderNsu = payload.order_nsu || payload.order?.order_nsu || payload.nsu || null;
 
   if (!orderNsu) {
     console.warn('[DayLanches] Webhook sem order_nsu:', JSON.stringify(payload));
-    return json({ ok: true }); /* 200 para evitar retentativas */
+    return json({ ok: true });
   }
 
-  /* Buscar pedido */
+  /* Buscar pedido completo para enviar WhatsApp depois */
   const orders = await sbGet(env, 'orders',
-    `order_number=eq.${encodeURIComponent(orderNsu)}&select=id`);
+    `order_number=eq.${encodeURIComponent(orderNsu)}&select=*`);
 
   if (!orders?.length) {
     console.warn('[DayLanches] Webhook: pedido não encontrado:', orderNsu);
     return json({ error: 'Order not found' }, 404);
   }
 
-  const orderId   = orders[0].id;
-  /* InfinitePay envia valores em centavos */
+  const order     = orders[0];
+  const orderId   = order.id;
   const paidCents = Number(payload.paid_amount || payload.amount || 0);
   const paidBRL   = paidCents > 0 ? paidCents / 100 : null;
 
+  /* Atualizar pagamento */
   await sbPatch(env, 'orders', `id=eq.${orderId}`, {
     payment_status:   'pago',
     status:           'novo',
@@ -211,5 +214,132 @@ async function handleWebhook(request, env) {
     updated_at:       new Date().toISOString(),
   });
 
+  /* Enviar WhatsApp automático ao cliente (não bloqueia a resposta ao webhook) */
+  const fullOrder = { ...order, payment_status: 'pago' };
+  sendWhatsAppOrderConfirmation(env, fullOrder, orderId).catch(err =>
+    console.error('[DayLanches] WhatsApp automático falhou silenciosamente:', err)
+  );
+
   return json({ ok: true });
+}
+
+/* ══════════════════════════════════════════════════════════
+   POST /send-order-whatsapp  (reenvio manual pela gestão)
+══════════════════════════════════════════════════════════ */
+async function handleSendWhatsApp(request, env) {
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ error: 'Invalid JSON' }, 400); }
+
+  const { orderId } = body;
+  if (!orderId) return json({ error: 'orderId required' }, 400);
+
+  const orders = await sbGet(env, 'orders', `id=eq.${orderId}&select=*`);
+  if (!orders?.length) return json({ error: 'Order not found' }, 404);
+  const order = orders[0];
+
+  try {
+    await sendWhatsAppOrderConfirmation(env, order, orderId, /* forceResend */ true);
+    return json({ ok: true });
+  } catch (err) {
+    return json({ error: err.message }, 502);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   GET /order-tracking?token=TOKEN  (página acompanhar.html)
+══════════════════════════════════════════════════════════ */
+async function handleOrderTracking(url, env) {
+  const token = url.searchParams.get('token');
+  if (!token) return json({ error: 'token required' }, 400);
+
+  const orders = await sbGet(env, 'orders',
+    `tracking_token=eq.${encodeURIComponent(token)}&select=order_number,status,payment_status,total,delivery_fee,created_at,items,delivery_type`);
+
+  if (!orders?.length) return json({ error: 'Pedido não encontrado' }, 404);
+  const o = orders[0];
+
+  /* Retorna apenas dados seguros — sem telefone, endereço ou dados internos */
+  const items = Array.isArray(o.items) ? o.items : [];
+  return json({
+    order_number:   o.order_number,
+    status:         o.status,
+    payment_status: o.payment_status,
+    total:          o.total,
+    delivery_fee:   o.delivery_fee,
+    delivery_type:  o.delivery_type,
+    created_at:     o.created_at,
+    items_summary:  items.map(i => ({ name: i.name, qty: i.qty, total: i.total })),
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   FUNÇÃO: enviar WhatsApp ao cliente via Cloud API
+══════════════════════════════════════════════════════════ */
+async function sendWhatsAppOrderConfirmation(env, order, orderId, forceResend = false) {
+  /* Verificações */
+  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) return; /* não configurado */
+  if (!order.customer_phone) return;
+  if (!order.whatsapp_opt_in) return;
+  if (order.customer_notified_at && !forceResend) return; /* já enviado */
+
+  /* Número em E.164 (sem +): garante prefixo 55 */
+  const rawPhone = String(order.customer_phone).replace(/\D/g, '');
+  const toPhone  = rawPhone.startsWith('55') ? rawPhone : '55' + rawPhone;
+
+  const siteUrl     = env.SITE_URL    || 'https://www.daylanches.com.br';
+  const trackingUrl = order.tracking_token
+    ? `${siteUrl}/acompanhar.html?token=${order.tracking_token}`
+    : siteUrl;
+
+  const templateName = env.WHATSAPP_TEMPLATE_NAME || 'pedido_recebido';
+  const languageCode = env.WHATSAPP_LANGUAGE_CODE || 'pt_BR';
+
+  const waPayload = {
+    messaging_product: 'whatsapp',
+    to:   toPhone,
+    type: 'template',
+    template: {
+      name:     templateName,
+      language: { code: languageCode },
+      components: [{
+        type: 'body',
+        parameters: [
+          { type: 'text', text: order.customer_name || 'cliente' },
+          { type: 'text', text: order.order_number  || '' },
+          { type: 'text', text: trackingUrl },
+        ],
+      }],
+    },
+  };
+
+  let notifiedAt  = null;
+  let notifError  = null;
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v20.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        method:  'POST',
+        headers: {
+          Authorization:  `Bearer ${env.WHATSAPP_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(waPayload),
+      }
+    );
+    const text = await res.text();
+    if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${text}`);
+    notifiedAt = new Date().toISOString();
+  } catch (err) {
+    notifError = err.message.substring(0, 300);
+    throw err; /* propaga para o caller registrar e decidir */
+  } finally {
+    /* Atualiza Supabase independente de sucesso ou erro */
+    await sbPatch(env, 'orders', `id=eq.${orderId}`, {
+      customer_notified_at:         notifiedAt,
+      customer_notification_error:  notifError,
+      updated_at:                   new Date().toISOString(),
+    }).catch(() => {});
+  }
 }
