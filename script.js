@@ -760,19 +760,6 @@ function requestGeoLocation() {
   );
 }
 
-/* Cartão na entrega (manual, sem InfinitePay) */
-async function handleCardDeliveryPayment() {
-  if (state.deliveryType === 'delivery' && !state.geo.lat) {
-    showToast('Para entrega, use o botão de localização antes de continuar.');
-    navigateTo('delivery');
-    return;
-  }
-  state.payMethod = 'card';
-  state.orderId   = Math.floor(Math.random() * 90000) + 10000;
-  const ok = await sendWhatsApp();
-  if (ok) navigateTo('confirmation');
-}
-
 /* Fluxo InfinitePay: salva pedido → cria checkout → redireciona */
 async function handleOnlinePayment(method) {
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
@@ -2745,7 +2732,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 /* Expõe funções usadas em onclick do HTML no escopo global */
 window.handleOnlinePayment       = handleOnlinePayment;
-window.handleCardDeliveryPayment = handleCardDeliveryPayment;
 window.handleCashPayment       = handleCashPayment;
 window.openPixPage             = openPixPage;
 window.closePixPage            = closePixPage;
