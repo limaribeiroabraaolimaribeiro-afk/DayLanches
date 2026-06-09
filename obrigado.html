@@ -28,7 +28,6 @@
     .ty-logo { margin-bottom: 24px; }
     .logo-day     { font-size: 1.4rem; font-weight: 800; color: #FF6B00; }
     .logo-lanches { font-size: 1.4rem; font-weight: 800; color: #1a1a1a; }
-
     .ty-icon {
       width: 72px; height: 72px;
       background: #F0FDF4;
@@ -43,23 +42,16 @@
     }
     .ty-order {
       font-size: .95rem; font-weight: 700; color: #FF6B00;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
     .ty-msg {
       font-size: .88rem; color: #6B7280;
-      line-height: 1.6; margin-bottom: 8px;
+      line-height: 1.6; margin-bottom: 6px;
     }
     .ty-hint {
-      font-size: .8rem; color: #9CA3AF;
-      margin-bottom: 20px;
-    }
-    .ty-countdown {
       font-size: .82rem; color: #9CA3AF;
-      margin-bottom: 20px;
-      min-height: 20px;
+      margin-bottom: 24px;
     }
-    .ty-countdown strong { color: #FF6B00; }
-
     .ty-btns {
       display: flex; flex-direction: column; gap: 12px;
     }
@@ -92,12 +84,11 @@
     <h1 class="ty-title">Pedido recebido!</h1>
     <p class="ty-order" id="ty-order"></p>
     <p class="ty-msg">Estamos aguardando a confirmação do pagamento.</p>
-    <p class="ty-hint">Se o WhatsApp não abrir automaticamente, toque no botão abaixo.</p>
-    <p class="ty-countdown" id="ty-countdown"></p>
+    <p class="ty-hint">Toque no botão abaixo para falar com a Day Lanches pelo WhatsApp.</p>
     <div class="ty-btns">
-      <a id="btn-wapp" class="btn-wapp" href="#">
+      <button id="whatsappButton" class="btn-wapp">
         <i class="fab fa-whatsapp"></i> Falar com a Day Lanches
-      </a>
+      </button>
       <a href="https://www.daylanches.com.br/" class="btn-back">
         <i class="fas fa-arrow-left"></i> Voltar ao cardápio
       </a>
@@ -105,7 +96,7 @@
   </div>
 
   <script>
-    const STORE_WHATSAPP = '5547991559926';
+    const STORE_WHATSAPP_NUMBER = '5547991559926';
 
     /* Lê número do pedido: URL → localStorage */
     const params      = new URLSearchParams(window.location.search);
@@ -117,38 +108,30 @@
     }
 
     /* Monta mensagem */
-    const waMessage = orderNumber
+    const message = orderNumber
       ? 'Olá, acabei de fazer um pedido pelo site da Day Lanches.\nPedido: ' + orderNumber + '\nEstou aguardando a confirmação.'
       : 'Olá, acabei de fazer um pedido pelo site da Day Lanches e estou aguardando a confirmação.';
 
-    const whatsappUrl = 'https://wa.me/' + STORE_WHATSAPP
-                      + '?text=' + encodeURIComponent(waMessage);
+    const encodedMessage  = encodeURIComponent(message);
+    const whatsappAppUrl  = 'whatsapp://send?phone=' + STORE_WHATSAPP_NUMBER + '&text=' + encodedMessage;
+    const whatsappWebUrl  = 'https://wa.me/' + STORE_WHATSAPP_NUMBER + '?text=' + encodedMessage;
 
-    /* Botão abre via location.href para não ser bloqueado como pop-up */
-    const btnWapp = document.getElementById('btn-wapp');
-    btnWapp.href = whatsappUrl;
-    btnWapp.addEventListener('click', function(e) {
-      e.preventDefault();
-      window.location.href = whatsappUrl;
-    });
+    /* Botão: tenta abrir o app no celular, fallback para wa.me */
+    document.getElementById('whatsappButton').addEventListener('click', function(event) {
+      event.preventDefault();
 
-    /* Countdown + redirecionamento automático via location.href (não pop-up) */
-    const countdownEl = document.getElementById('ty-countdown');
-    let seconds = 7;
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    function tick() {
-      if (seconds > 0) {
-        countdownEl.innerHTML =
-          'Abrindo WhatsApp em <strong>' + seconds + 's</strong>…';
-        seconds--;
-        setTimeout(tick, 1000);
+      if (isMobile) {
+        window.location.href = whatsappAppUrl;
+        /* Se o app não abrir em 1,8s, redireciona para wa.me */
+        setTimeout(function() {
+          window.location.href = whatsappWebUrl;
+        }, 1800);
       } else {
-        countdownEl.textContent = '';
-        window.location.href = whatsappUrl;
+        window.location.href = whatsappWebUrl;
       }
-    }
-
-    setTimeout(tick, 1000);
+    });
   </script>
 </body>
 </html>
