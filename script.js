@@ -760,16 +760,6 @@ function requestGeoLocation() {
   );
 }
 
-/* PIX online via InfinitePay */
-async function handlePixPayment() {
-  await handleOnlinePayment('pix_online');
-}
-
-/* Cartão online via InfinitePay */
-async function handleCardPayment() {
-  await handleOnlinePayment('card_online');
-}
-
 /* Cartão na entrega (manual, sem InfinitePay) */
 async function handleCardDeliveryPayment() {
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
@@ -1565,7 +1555,7 @@ async function sendWhatsApp() {
     return false;
   }
 
-  const payLabels = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro' };
+  const payLabels = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro', online: 'Online', pix_online: 'PIX online', card_online: 'Cartão online' };
   const payNote = {
     pix:  '\nJá vou enviar o comprovante por aqui.',
     card: '\nPagamento no cartão na entrega/retirada.',
@@ -2754,8 +2744,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* Expõe funções usadas em onclick do HTML no escopo global */
-window.handlePixPayment        = handlePixPayment;
-window.handleCardPayment       = handleCardPayment;
+window.handleOnlinePayment       = handleOnlinePayment;
 window.handleCardDeliveryPayment = handleCardDeliveryPayment;
 window.handleCashPayment       = handleCashPayment;
 window.openPixPage             = openPixPage;

@@ -1789,9 +1789,10 @@ a { text-decoration: none; color: inherit; }
   display: flex; align-items: center; justify-content: center;
   font-size: 1rem;
 }
-.pm-pix-ico  { background: #E0F2F1; color: #00897B; }
-.pm-card-ico { background: #EDE7F6; color: #5E35B1; }
-.pm-cash-ico { background: #E8F5E9; color: #2E7D32; }
+.pm-pix-ico    { background: #E0F2F1; color: #00897B; }
+.pm-card-ico   { background: #EDE7F6; color: #5E35B1; }
+.pm-cash-ico   { background: #E8F5E9; color: #2E7D32; }
+.pm-online-ico { background: #FFF3EB; color: #FF6B00; }
 .pm-badge {
   font-size: .58rem; font-weight: 800;
   background: #FF6B00; color: #fff;

@@ -908,7 +908,18 @@ function orderCard(o) {
     saiu_para_entrega:'st-entrega',
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
-  const payLabels = { pix:'PIX', pix_online:'PIX online', card:'Cartão', card_online:'Cartão online', cash:'Dinheiro' };
+  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online' };
+
+  /* Após webhook: resolve label a partir do capture_method da InfinitePay */
+  function resolvePayLabel(order) {
+    if (order.payment_status === 'pago' && order.capture_method) {
+      const cm = String(order.capture_method).toLowerCase();
+      if (cm.includes('pix'))            return 'PIX';
+      if (cm.includes('credit') || cm.includes('debit') || cm.includes('card') || cm.includes('cartao') || cm.includes('credito') || cm.includes('debito')) return 'Cartão';
+      return 'Online confirmado';
+    }
+    return payLabels[order.payment_method] || esc(order.payment_method || '—');
+  }
   const payStatusLabel = {
     aguardando_pagamento: { text:'Aguardando pag.', cls:'ps-waiting' },
     aguardando_comprovante: { text:'Aguardando comprovante', cls:'ps-waiting' },
@@ -954,7 +965,7 @@ function orderCard(o) {
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Pagamento</span>
-          <span class="oc-field-value">${payLabels[o.payment_method]||esc(o.payment_method||'—')}${o.troco?` <small class="oc-troco">troco p/ R$ ${esc(String(o.troco))}</small>`:''}</span>
+          <span class="oc-field-value">${resolvePayLabel(o)}${o.troco?` <small class="oc-troco">troco p/ R$ ${esc(String(o.troco))}</small>`:''}</span>
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Status pagamento</span>
@@ -1040,7 +1051,17 @@ function copyOrderText(orderId) {
   const o = gs.orders.find(x => x.id === orderId);
   if (!o) return;
   const items = Array.isArray(o.items) ? o.items : [];
-  const payLabels = { pix:'PIX', card:'Cartão', cash:'Dinheiro' };
+  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online' };
+  /* Após webhook usa capture_method */
+  const payDisplay = (() => {
+    if (o.payment_status === 'pago' && o.capture_method) {
+      const cm = String(o.capture_method).toLowerCase();
+      if (cm.includes('pix')) return 'PIX';
+      if (cm.includes('credit') || cm.includes('debit') || cm.includes('card') || cm.includes('cartao') || cm.includes('credito') || cm.includes('debito')) return 'Cartão';
+      return 'Online confirmado';
+    }
+    return payLabels[o.payment_method] || o.payment_method || '—';
+  })();
   const loc = o.location && typeof o.location === 'object' ? o.location : null;
   const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const lines = [
@@ -1048,7 +1069,7 @@ function copyOrderText(orderId) {
     `Nome: ${o.customer_name||'—'}`,
     `Telefone: ${o.customer_phone||'—'}`,
     `Tipo: ${o.delivery_type==='pickup'?'Retirada':'Entrega'}`,
-    `Pagamento: ${payLabels[o.payment_method]||o.payment_method||'—'}`,
+    `Pagamento: ${payDisplay}`,
     o.troco ? `Troco para: R$ ${o.troco}` : null,
     `Subtotal: R$ ${fmt(o.subtotal||0)}`,
     `Frete: R$ ${fmt(o.delivery_fee||0)}`,
