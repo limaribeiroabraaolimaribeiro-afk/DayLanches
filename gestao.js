@@ -1020,88 +1020,69 @@ function orderCard(o) {
         </div>
       </div>
 
-      <!-- RESUMO DOS ITENS -->
-      <div class="oc-items-summary">
-        <span class="oc-items-label">${items.length} ${items.length===1?'produto':'produtos'}${hasOpts?' · contém adicionais':''}</span>
-        <div class="oc-items-list">
-          ${items.map(i=>`<span class="oc-item-line">${i.qty}x ${esc(i.name)}</span>`).join('')}
-        </div>
-      </div>
-
       <!-- DETALHES EXPANSÍVEIS -->
       <div class="oc-details" id="ocdet-${o.id}" style="display:none">
-        <div class="order-details-grid">
+        <div class="order-expanded-body">
+          <div class="order-details-compact-grid">
 
-          <!-- COLUNA ESQUERDA: Produtos + Finanças + Obs + WhatsApp -->
-          <div class="order-details-left">
-
-            <div class="oc-det-section">
-              <h4 class="oc-det-title"><i class="fas fa-list-ul"></i> Produtos</h4>
-              ${items.map(i => {
-                const opts = (i.options||[]);
-                const total = i.total || (i.finalUnitPrice||i.unitPrice||0)*i.qty || 0;
-                return `<div class="oc-det-item">
-                  <div class="oc-det-item-main">
-                    <span class="oc-det-item-name">${i.qty}x ${esc(i.name)}</span>
-                    <span class="oc-det-item-price">R$ ${fmt(total)}</span>
-                  </div>
-                  ${opts.map(og=>`<div class="oc-det-opt"><span class="oc-det-opt-group">${esc(og.groupTitle)}:</span> ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</div>`).join('')}
-                </div>`;
-              }).join('')}
+            <div class="order-detail-box">
+              <div class="order-detail-box-title"><i class="fas fa-list-ul"></i> Produtos</div>
+              <div class="order-products-list">
+                ${items.map(i => {
+                  const opts = (i.options||[]);
+                  const total = i.total || (i.finalUnitPrice||i.unitPrice||0)*i.qty || 0;
+                  return `<div class="order-product-row">
+                    <span class="order-product-name">${i.qty}x ${esc(i.name)}${opts.length?`<div class="order-product-opts">${opts.map(og=>`<span class="oc-det-opt"><span class="oc-det-opt-group">${esc(og.groupTitle)}:</span> ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</span>`).join('')}</div>`:''}</span>
+                    <span class="order-product-price">R$ ${fmt(total)}</span>
+                  </div>`;
+                }).join('')}
+              </div>
+              ${o.notes?`<p class="oc-obs order-obs-inline">${esc(o.notes)}</p>`:''}
             </div>
 
-            <div class="oc-det-section">
-              <h4 class="oc-det-title"><i class="fas fa-receipt"></i> Resumo financeiro</h4>
-              <div class="oc-finance-compact">
+            <div class="order-detail-box">
+              <div class="order-detail-box-title"><i class="fas fa-receipt"></i> Resumo financeiro</div>
+              <div class="order-financial-list">
                 <div class="order-financial-row">
-                  <span class="order-financial-label">Subtotal:</span>
+                  <span class="order-financial-label">Subtotal</span>
                   <span class="order-financial-value">R$ ${fmt(o.subtotal||0)}</span>
                 </div>
                 <div class="order-financial-row">
-                  <span class="order-financial-label">Frete:</span>
+                  <span class="order-financial-label">Frete</span>
                   <span class="order-financial-value">${(o.delivery_fee||0)>0?`R$ ${fmt(o.delivery_fee)}`:'Grátis'}</span>
                 </div>
                 ${o.troco?`<div class="order-financial-row">
-                  <span class="order-financial-label">Troco para:</span>
+                  <span class="order-financial-label">Troco para</span>
                   <span class="order-financial-value">R$ ${esc(String(o.troco))}</span>
                 </div>`:''}
-                <div class="order-financial-row order-financial-total">
-                  <span class="order-financial-label">Total:</span>
+                <div class="order-financial-row order-financial-row--total">
+                  <span class="order-financial-label">Total</span>
                   <span class="order-financial-value">R$ ${fmt(o.total||0)}</span>
                 </div>
               </div>
+              ${notifSection}
             </div>
 
-            ${o.notes?`<div class="oc-det-section"><h4 class="oc-det-title"><i class="fas fa-comment-dots"></i> Observação</h4><p class="oc-obs">${esc(o.notes)}</p></div>`:''}
-
-            ${notifSection}
-
-          </div>
-
-          <!-- COLUNA DIREITA: Localização + Ações -->
-          <div class="order-actions-panel">
-
-            ${loc?`<div class="order-actions-section">
-              <h4 class="oc-det-title"><i class="fas fa-map-location-dot"></i> Localização</h4>
-              <div class="order-actions-group">
+            ${loc?`<div class="order-detail-box">
+              <div class="order-detail-box-title"><i class="fas fa-map-location-dot"></i> Localização</div>
+              <div class="order-actions-grid">
                 ${loc.mapsLink  ?`<a class="btn-oc-map"   href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>`:''}
                 ${loc.routeLink ?`<a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>`:''}
               </div>
             </div>`:''}
 
-            <div class="order-actions-section">
-              <h4 class="oc-det-title"><i class="fas fa-bolt"></i> Ações</h4>
-              <div class="order-actions-group">
+            <div class="order-detail-box${!loc?' order-detail-box--full':''}">
+              <div class="order-detail-box-title"><i class="fas fa-bolt"></i> Ações</div>
+              <div class="order-actions-grid">
                 ${waLink?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
                 <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
                 ${o.receipt_url?`<a class="btn-oc-receipt" href="${esc(o.receipt_url)}" target="_blank" rel="noopener"><i class="fas fa-file-invoice"></i> Ver comprovante</a>`:''}
                 ${o.customer_phone&&o.whatsapp_opt_in?`<button class="btn-oc-resend" id="btn-resend-${o.id}" onclick="resendWhatsApp('${o.id}')"><i class="fab fa-whatsapp"></i> Reenviar WhatsApp</button>`:''}
-                ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
+                ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel order-action-full" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
               </div>
             </div>
 
           </div>
-
         </div>
       </div>
 
