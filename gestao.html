@@ -365,6 +365,28 @@
   </div><!-- /pform-modal -->
 </div>
 
+<!-- ===================== MODAL: CONFIRMAR AÇÃO ===================== -->
+<div id="confirm-overlay" class="modal-overlay confirm-overlay" style="display:none" onclick="_confirmModalBgClick(event)">
+  <div class="modal-box confirm-modal" id="confirm-modal">
+    <div class="cmod-header">
+      <div class="cmod-brand">
+        <span class="logo-day">Day</span><span class="logo-lanches">Lanches</span>
+      </div>
+      <div class="cmod-icon-wrap">
+        <i class="fas fa-triangle-exclamation"></i>
+      </div>
+    </div>
+    <div class="cmod-body">
+      <h2 class="cmod-title" id="cmod-title">Confirmar</h2>
+      <p class="cmod-message" id="cmod-message"></p>
+    </div>
+    <div class="cmod-actions">
+      <button class="cmod-btn cmod-btn-cancel" id="cmod-btn-cancel" onclick="_confirmModalCancel()">Cancelar</button>
+      <button class="cmod-btn cmod-btn-confirm" id="cmod-btn-confirm" onclick="_confirmModalConfirm()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="g-toast" class="g-toast"></div>
 
@@ -372,6 +394,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=5"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=11"></script>
+<script src="gestao.js?v=12"></script>
 </body>
 </html>

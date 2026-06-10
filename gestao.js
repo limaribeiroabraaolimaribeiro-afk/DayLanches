@@ -734,12 +734,12 @@ async function handleSaveProduct(e) {
     let savedProductId = existingId;
     if (existingId) {
       ({ error: err } = await getSb().from('products').update(data).eq('id', existingId));
-      if (!err) toast('Produto atualizado!');
+      if (!err) showToast('Produto salvo com sucesso.', 'success');
     } else {
       data.created_at = now;
       const { data: inserted, error: insertErr } = await getSb().from('products').insert(data).select('id').single();
       err = insertErr;
-      if (!err) { savedProductId = inserted?.id; toast('Produto cadastrado!'); }
+      if (!err) { savedProductId = inserted?.id; showToast('Produto salvo com sucesso.', 'success'); }
     }
     if (err) throw err;
     if (savedProductId) await saveOptionGroups(savedProductId);
@@ -754,11 +754,21 @@ async function handleSaveProduct(e) {
   }
 }
 
-async function confirmDeleteProduct(id, name) {
-  if (!confirm(`Excluir "${name}"? Esta ação não pode ser desfeita.`)) return;
+function confirmDeleteProduct(id, name) {
+  showConfirmModal({
+    title: 'Excluir produto?',
+    message: `Tem certeza que deseja excluir <strong>"${esc(name)}"</strong>?<br>Essa ação não pode ser desfeita.`,
+    confirmText: 'Excluir produto',
+    cancelText: 'Cancelar',
+    danger: true,
+    onConfirm: () => deleteProduct(id),
+  });
+}
+
+async function deleteProduct(id) {
   const { error } = await getSb().from('products').delete().eq('id', id);
-  if (error) { toast('Erro ao excluir.', true); return; }
-  toast('Produto excluído.');
+  if (error) { showToast('Não foi possível concluir a ação. Tente novamente.', 'error'); return; }
+  showToast('Produto excluído com sucesso.', 'success');
   loadProducts();
 }
 
@@ -894,7 +904,14 @@ function toggleOrderDetails(orderId) {
 }
 
 function confirmCancelOrder(id) {
-  if (confirm('Cancelar este pedido?')) updateOrderStatus(id, 'cancelado');
+  showConfirmModal({
+    title: 'Cancelar pedido?',
+    message: 'Tem certeza que deseja cancelar este pedido?<br>Essa ação não pode ser desfeita.',
+    confirmText: 'Cancelar pedido',
+    cancelText: 'Voltar',
+    danger: true,
+    onConfirm: () => updateOrderStatus(id, 'cancelado'),
+  });
 }
 
 function orderCard(o) {
@@ -1249,11 +1266,48 @@ function setv(id, val) { if (elid(id)) elid(id).value = val; }
 function fmt(n)   { return Number(n||0).toFixed(2).replace('.', ','); }
 function esc(s)   { return String(s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function toast(msg, isErr) {
+function showToast(message, type = 'success') {
   const t = elid('g-toast');
-  t.textContent = msg;
-  t.className = 'g-toast show' + (isErr ? ' error' : '');
-  setTimeout(() => t.className = 'g-toast', 3000);
+  t.textContent = message;
+  t.className = `g-toast show toast-${type}`;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = 'g-toast'; }, 3500);
+}
+
+function toast(msg, isErr) {
+  showToast(msg, isErr ? 'error' : 'success');
+}
+
+/* ── Confirm Modal ── */
+let _confirmCb = null;
+
+function showConfirmModal({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false, onConfirm } = {}) {
+  _confirmCb = onConfirm || null;
+  elid('cmod-title').textContent      = title || 'Confirmar';
+  elid('cmod-message').innerHTML      = message || '';
+  elid('cmod-btn-confirm').textContent = confirmText;
+  elid('cmod-btn-cancel').textContent  = cancelText;
+  elid('cmod-btn-confirm').className   = 'cmod-btn cmod-btn-confirm' + (danger ? ' cmod-btn-danger' : '');
+  elid('confirm-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => elid('cmod-btn-cancel').focus(), 50);
+}
+
+function _confirmModalConfirm() {
+  _closeConfirmModal();
+  if (_confirmCb) _confirmCb();
+}
+
+function _confirmModalCancel()  { _closeConfirmModal(); }
+
+function _confirmModalBgClick(e) {
+  if (e.target === elid('confirm-overlay')) _closeConfirmModal();
+}
+
+function _closeConfirmModal() {
+  elid('confirm-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  _confirmCb = null;
 }
 
 function show(id, msg) {
@@ -1440,3 +1494,8 @@ window.resendWhatsApp                 = resendWhatsApp;
 window.toggleOrderDetails             = toggleOrderDetails;
 window.confirmCancelOrder             = confirmCancelOrder;
 window.renderOrders                   = renderOrders;
+window.showToast                      = showToast;
+window.showConfirmModal               = showConfirmModal;
+window._confirmModalConfirm           = _confirmModalConfirm;
+window._confirmModalCancel            = _confirmModalCancel;
+window._confirmModalBgClick           = _confirmModalBgClick;
