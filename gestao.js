@@ -899,9 +899,11 @@ function toggleOrderDetails(orderId) {
   if (!det) return;
   const open = det.style.display !== 'none';
   det.style.display = open ? 'none' : 'block';
-  if (btn) btn.innerHTML = open
-    ? '<i class="fas fa-chevron-down"></i> Ver detalhes'
-    : '<i class="fas fa-chevron-up"></i> Ocultar detalhes';
+  /* Footer toggle: visível quando colapsado, escondido quando expandido */
+  if (btn) {
+    btn.style.display = open ? '' : 'none';
+    if (open) btn.innerHTML = '<i class="fas fa-chevron-down"></i> Ver detalhes';
+  }
 }
 
 async function confirmCancelOrder(id) {
@@ -1014,10 +1016,6 @@ function orderCard(o) {
           <span class="oc-field-label">Total</span>
           <span class="oc-field-value oc-total-val">R$ ${fmt(o.total||0)}</span>
         </div>
-        <div class="oc-field">
-          <span class="oc-field-label">Localização</span>
-          <span class="oc-field-value">${loc ? '<span class="oc-loc-yes"><i class="fas fa-location-dot"></i> Enviada</span>' : '<span class="oc-no-info">Não enviada</span>'}</span>
-        </div>
       </div>
 
       <!-- DETALHES EXPANSÍVEIS -->
@@ -1082,6 +1080,11 @@ function orderCard(o) {
               </div>
             </div>
 
+          </div>
+          <div class="order-details-footer">
+            <button class="btn-oc-toggle" onclick="toggleOrderDetails('${o.id}')">
+              <i class="fas fa-chevron-up"></i> Ocultar detalhes
+            </button>
           </div>
         </div>
       </div>

@@ -609,14 +609,20 @@ a { text-decoration: none; color: inherit; }
 }
 
 .order-expanded-body {
-  padding: 16px 20px 18px;
+  padding: 16px 20px;
 }
 
 .order-details-compact-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(220px, .8fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(240px, .7fr);
+  gap: 14px 16px;
   align-items: start;
+}
+
+.order-details-footer {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
 }
 
 .order-detail-box {
@@ -636,7 +642,7 @@ a { text-decoration: none; color: inherit; }
   text-transform: uppercase;
   letter-spacing: .06em;
   color: #9CA3AF;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
   gap: 5px;
