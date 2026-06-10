@@ -754,20 +754,21 @@ async function handleSaveProduct(e) {
   }
 }
 
-function confirmDeleteProduct(id, name) {
-  showConfirmModal({
+async function confirmDeleteProduct(id, name) {
+  const confirmed = await showConfirmModal({
     title: 'Excluir produto?',
-    message: `Tem certeza que deseja excluir <strong>"${esc(name)}"</strong>?<br>Essa ação não pode ser desfeita.`,
+    message: `Tem certeza que deseja excluir <strong>"${esc(name)}"</strong>?<br>Essa ação é permanente e não poderá ser desfeita.`,
     confirmText: 'Excluir produto',
     cancelText: 'Cancelar',
     danger: true,
-    onConfirm: () => deleteProduct(id),
   });
-}
 
-async function deleteProduct(id) {
+  console.log('[Gestão] confirmação exclusão:', confirmed);
+  if (!confirmed) return;
+
+  console.log('[Gestão] excluindo produto:', id, name);
   const { error } = await getSb().from('products').delete().eq('id', id);
-  if (error) { showToast('Não foi possível concluir a ação. Tente novamente.', 'error'); return; }
+  if (error) { showToast('Não foi possível excluir o produto. Tente novamente.', 'error'); return; }
   showToast('Produto excluído com sucesso.', 'success');
   loadProducts();
 }
@@ -903,15 +904,16 @@ function toggleOrderDetails(orderId) {
     : '<i class="fas fa-chevron-up"></i> Ocultar detalhes';
 }
 
-function confirmCancelOrder(id) {
-  showConfirmModal({
+async function confirmCancelOrder(id) {
+  const confirmed = await showConfirmModal({
     title: 'Cancelar pedido?',
     message: 'Tem certeza que deseja cancelar este pedido?<br>Essa ação não pode ser desfeita.',
     confirmText: 'Cancelar pedido',
     cancelText: 'Voltar',
     danger: true,
-    onConfirm: () => updateOrderStatus(id, 'cancelado'),
   });
+  if (!confirmed) return;
+  updateOrderStatus(id, 'cancelado');
 }
 
 function orderCard(o) {
@@ -1279,42 +1281,49 @@ function toast(msg, isErr) {
 }
 
 /* ── Confirm Modal ── */
-let _confirmCb = null;
+let _confirmResolve = null;
 
-function showConfirmModal({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false, onConfirm } = {}) {
-  _confirmCb = onConfirm || null;
-  elid('gestao-modal-title').textContent       = title || 'Confirmar';
-  elid('gestao-modal-message').innerHTML       = message || '';
-  elid('gestao-modal-btn-confirm').textContent = confirmText;
-  elid('gestao-modal-btn-cancel').textContent  = cancelText;
-  elid('gestao-modal-btn-confirm').className   = 'gestao-modal-btn ' + (danger ? 'gestao-modal-btn-danger' : 'gestao-modal-btn-primary');
-  elid('gestao-modal-overlay').style.display   = 'flex';
-  document.body.style.overflow = 'hidden';
-  setTimeout(() => elid('gestao-modal-btn-confirm').focus(), 60);
+function showConfirmModal({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false } = {}) {
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    elid('gestao-modal-title').textContent       = title || 'Confirmar';
+    elid('gestao-modal-message').innerHTML       = message || '';
+    elid('gestao-modal-btn-confirm').textContent = confirmText;
+    elid('gestao-modal-btn-cancel').textContent  = cancelText;
+    elid('gestao-modal-btn-confirm').className   = 'gestao-modal-btn ' + (danger ? 'gestao-modal-btn-danger' : 'gestao-modal-btn-primary');
+    elid('gestao-modal-overlay').style.display   = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => elid('gestao-modal-btn-confirm').focus(), 60);
+  });
 }
 
 function _confirmModalConfirm() {
+  const resolve = _confirmResolve;
   _closeConfirmModal();
-  if (_confirmCb) _confirmCb();
+  if (resolve) resolve(true);
 }
 
-function _confirmModalCancel()  { _closeConfirmModal(); }
+function _confirmModalCancel() {
+  const resolve = _confirmResolve;
+  _closeConfirmModal();
+  if (resolve) resolve(false);
+}
 
 function _confirmModalBgClick(e) {
-  if (e.target === elid('gestao-modal-overlay')) _closeConfirmModal();
+  if (e.target === elid('gestao-modal-overlay')) _confirmModalCancel();
 }
 
 function _closeConfirmModal() {
   const ov = elid('gestao-modal-overlay');
   if (ov) ov.style.display = 'none';
   document.body.style.overflow = '';
-  _confirmCb = null;
+  _confirmResolve = null;
 }
 
 document.addEventListener('keydown', e => {
   const ov = elid('gestao-modal-overlay');
   if (!ov || ov.style.display === 'none') return;
-  if (e.key === 'Escape') { e.preventDefault(); _closeConfirmModal(); }
+  if (e.key === 'Escape') { e.preventDefault(); _confirmModalCancel(); }
   if (e.key === 'Enter')  { e.preventDefault(); _confirmModalConfirm(); }
 });
 
