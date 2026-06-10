@@ -6,6 +6,8 @@
      POST /infinitepay/webhook       → confirma pagamento e envia WhatsApp ao cliente
      POST /send-order-whatsapp       → reenvio manual de WhatsApp (gestão)
      GET  /order-tracking?token=     → dados públicos do pedido (página acompanhar)
+     GET  /whatsapp/webhook          → verificação de webhook Meta WhatsApp Cloud API
+     POST /whatsapp/webhook          → recebe eventos WhatsApp Cloud API
      GET  /health                    → health check
    ───────────────────────────────────────────────────────── */
 
@@ -77,6 +79,14 @@ export default {
 
     if (pathname === '/order-tracking' && request.method === 'GET') {
       return handleOrderTracking(url, env);
+    }
+
+    if (pathname === '/whatsapp/webhook' && request.method === 'GET') {
+      return handleWhatsAppVerify(url, env);
+    }
+
+    if (pathname === '/whatsapp/webhook' && request.method === 'POST') {
+      return handleWhatsAppEvent(request);
     }
 
     return json({ error: 'Not found' }, 404);
@@ -271,6 +281,33 @@ async function handleOrderTracking(url, env) {
     created_at:     o.created_at,
     items_summary:  items.map(i => ({ name: i.name, qty: i.qty, total: i.total })),
   });
+}
+
+/* ══════════════════════════════════════════════════════════
+   GET /whatsapp/webhook  (verificação Meta)
+══════════════════════════════════════════════════════════ */
+function handleWhatsAppVerify(url, env) {
+  const mode      = url.searchParams.get('hub.mode');
+  const token     = url.searchParams.get('hub.verify_token');
+  const challenge = url.searchParams.get('hub.challenge');
+
+  if (mode === 'subscribe' && token === env.WHATSAPP_VERIFY_TOKEN) {
+    return new Response(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
+  }
+
+  return new Response('Forbidden', { status: 403 });
+}
+
+/* ══════════════════════════════════════════════════════════
+   POST /whatsapp/webhook  (eventos Meta)
+══════════════════════════════════════════════════════════ */
+async function handleWhatsAppEvent(request) {
+  let body;
+  try { body = await request.json(); }
+  catch { return new Response('OK', { status: 200 }); }
+
+  console.log('WhatsApp webhook:', JSON.stringify(body));
+  return new Response('OK', { status: 200 });
 }
 
 /* ══════════════════════════════════════════════════════════

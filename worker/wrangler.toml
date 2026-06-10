@@ -15,6 +15,7 @@ WHATSAPP_LANGUAGE_CODE = "pt_BR"
 #   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 #   wrangler secret put WHATSAPP_TOKEN
 #   wrangler secret put WHATSAPP_PHONE_NUMBER_ID
+#   wrangler secret put WHATSAPP_VERIFY_TOKEN
 #
 # Nunca colocar essas chaves no código.
 
