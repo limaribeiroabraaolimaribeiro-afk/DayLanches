@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css">
+  <link rel="stylesheet" href="gestao.css?v=2">
 </head>
 <body>
 
@@ -366,23 +366,23 @@
 </div>
 
 <!-- ===================== MODAL: CONFIRMAR AÇÃO ===================== -->
-<div id="confirm-overlay" class="modal-overlay confirm-overlay" style="display:none" onclick="_confirmModalBgClick(event)">
-  <div class="modal-box confirm-modal" id="confirm-modal">
-    <div class="cmod-header">
-      <div class="cmod-brand">
+<div id="gestao-modal-overlay" class="gestao-modal-overlay" style="display:none" onclick="_confirmModalBgClick(event)">
+  <div class="gestao-modal" id="gestao-modal-box" role="dialog" aria-modal="true" aria-labelledby="gestao-modal-title">
+    <div class="gestao-modal-header">
+      <span class="gestao-modal-brand">
         <span class="logo-day">Day</span><span class="logo-lanches">Lanches</span>
-      </div>
-      <div class="cmod-icon-wrap">
+      </span>
+      <div class="gestao-modal-icon">
         <i class="fas fa-triangle-exclamation"></i>
       </div>
     </div>
-    <div class="cmod-body">
-      <h2 class="cmod-title" id="cmod-title">Confirmar</h2>
-      <p class="cmod-message" id="cmod-message"></p>
+    <div class="gestao-modal-body">
+      <h2 class="gestao-modal-title" id="gestao-modal-title">Confirmar</h2>
+      <p class="gestao-modal-message" id="gestao-modal-message"></p>
     </div>
-    <div class="cmod-actions">
-      <button class="cmod-btn cmod-btn-cancel" id="cmod-btn-cancel" onclick="_confirmModalCancel()">Cancelar</button>
-      <button class="cmod-btn cmod-btn-confirm" id="cmod-btn-confirm" onclick="_confirmModalConfirm()">Confirmar</button>
+    <div class="gestao-modal-actions">
+      <button class="gestao-modal-btn gestao-modal-btn-cancel" id="gestao-modal-btn-cancel" onclick="_confirmModalCancel()">Cancelar</button>
+      <button class="gestao-modal-btn gestao-modal-btn-danger" id="gestao-modal-btn-confirm" onclick="_confirmModalConfirm()">Confirmar</button>
     </div>
   </div>
 </div>

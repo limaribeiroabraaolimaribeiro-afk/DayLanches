@@ -1283,14 +1283,14 @@ let _confirmCb = null;
 
 function showConfirmModal({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false, onConfirm } = {}) {
   _confirmCb = onConfirm || null;
-  elid('cmod-title').textContent      = title || 'Confirmar';
-  elid('cmod-message').innerHTML      = message || '';
-  elid('cmod-btn-confirm').textContent = confirmText;
-  elid('cmod-btn-cancel').textContent  = cancelText;
-  elid('cmod-btn-confirm').className   = 'cmod-btn cmod-btn-confirm' + (danger ? ' cmod-btn-danger' : '');
-  elid('confirm-overlay').style.display = 'flex';
+  elid('gestao-modal-title').textContent       = title || 'Confirmar';
+  elid('gestao-modal-message').innerHTML       = message || '';
+  elid('gestao-modal-btn-confirm').textContent = confirmText;
+  elid('gestao-modal-btn-cancel').textContent  = cancelText;
+  elid('gestao-modal-btn-confirm').className   = 'gestao-modal-btn ' + (danger ? 'gestao-modal-btn-danger' : 'gestao-modal-btn-primary');
+  elid('gestao-modal-overlay').style.display   = 'flex';
   document.body.style.overflow = 'hidden';
-  setTimeout(() => elid('cmod-btn-cancel').focus(), 50);
+  setTimeout(() => elid('gestao-modal-btn-confirm').focus(), 60);
 }
 
 function _confirmModalConfirm() {
@@ -1301,14 +1301,22 @@ function _confirmModalConfirm() {
 function _confirmModalCancel()  { _closeConfirmModal(); }
 
 function _confirmModalBgClick(e) {
-  if (e.target === elid('confirm-overlay')) _closeConfirmModal();
+  if (e.target === elid('gestao-modal-overlay')) _closeConfirmModal();
 }
 
 function _closeConfirmModal() {
-  elid('confirm-overlay').style.display = 'none';
+  const ov = elid('gestao-modal-overlay');
+  if (ov) ov.style.display = 'none';
   document.body.style.overflow = '';
   _confirmCb = null;
 }
+
+document.addEventListener('keydown', e => {
+  const ov = elid('gestao-modal-overlay');
+  if (!ov || ov.style.display === 'none') return;
+  if (e.key === 'Escape') { e.preventDefault(); _closeConfirmModal(); }
+  if (e.key === 'Enter')  { e.preventDefault(); _confirmModalConfirm(); }
+});
 
 function show(id, msg) {
   const el_ = elid(id);
