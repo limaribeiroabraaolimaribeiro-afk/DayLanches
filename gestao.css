@@ -434,12 +434,8 @@ a { text-decoration: none; color: inherit; }
   font-size: .83rem; color: var(--text-med);
 }
 
-/* Detalhes expansíveis */
-.oc-details {
-  border-bottom: 1px solid var(--border);
-  background: #fafafa;
-  padding: 0 16px;
-}
+/* Detalhes expansíveis — estilo movido para ORDER DETAILS COMPACT */
+.oc-details { padding: 0; }
 .oc-det-section {
   padding: 12px 0;
   border-bottom: 1px solid #f0f0f0;
@@ -606,21 +602,22 @@ a { text-decoration: none; color: inherit; }
 .oc-details {
   background: #F9FAFB;
   border-top: 1px solid var(--border);
+  padding: 0;
 }
 
 .order-expanded-body {
-  padding: 16px 20px;
+  padding: 14px 18px 16px;
 }
 
 .order-details-compact-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(240px, .7fr);
-  gap: 14px 16px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, .75fr);
+  gap: 10px 14px;
   align-items: start;
 }
 
 .order-details-footer {
-  margin-top: 14px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
 }
@@ -629,7 +626,8 @@ a { text-decoration: none; color: inherit; }
   background: #fff;
   border: 1px solid #E5E7EB;
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
+  min-height: unset;
 }
 
 .order-detail-box--full {
@@ -728,15 +726,18 @@ a { text-decoration: none; color: inherit; }
 .order-actions-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 .order-actions-grid > * {
   justify-content: center;
   text-align: center;
-  min-height: 40px;
+  min-height: 38px;
+  height: auto;
   width: 100%;
   font-size: .78rem;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 
 .order-action-full {
@@ -753,8 +754,8 @@ a { text-decoration: none; color: inherit; }
 }
 
 @media (max-width: 480px) {
-  .order-expanded-body { padding: 14px 16px; }
-  .order-details-compact-grid { gap: 10px; }
+  .order-expanded-body { padding: 12px 14px 14px; }
+  .order-details-compact-grid { gap: 8px; }
   .order-actions-grid { grid-template-columns: 1fr; }
   .order-action-full  { grid-column: 1; }
 }
