@@ -602,6 +602,127 @@ a { text-decoration: none; color: inherit; }
   .btn-refresh-orders { width: 100%; justify-content: center; }
 }
 
+/* ═══════════════════════ ORDER DETAILS GRID ═══════════════════════ */
+.order-details-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 0;
+  align-items: start;
+}
+
+.order-details-left {
+  border-right: 1px solid #f0f0f0;
+  padding-right: 16px;
+}
+
+/* Resumo financeiro compacto */
+.oc-finance-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.order-financial-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.order-financial-label {
+  font-size: .84rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.order-financial-value {
+  font-size: .84rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.order-financial-total {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.order-financial-total .order-financial-label,
+.order-financial-total .order-financial-value {
+  font-size: .95rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* Painel de ações (coluna direita) */
+.order-actions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 16px;
+  padding-top: 12px;
+  padding-bottom: 4px;
+}
+
+.order-actions-section {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.order-actions-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.order-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.order-actions-group .btn-oc-wapp,
+.order-actions-group .btn-oc-copy,
+.order-actions-group .btn-oc-receipt,
+.order-actions-group .btn-oc-resend,
+.order-actions-group .btn-oc-cancel,
+.order-actions-group .btn-oc-map,
+.order-actions-group .btn-oc-route {
+  flex: 1 1 auto;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .order-details-grid {
+    grid-template-columns: 1fr;
+  }
+  .order-details-left {
+    border-right: none;
+    padding-right: 0;
+    border-bottom: 1px solid #f0f0f0;
+    padding-bottom: 4px;
+  }
+  .order-actions-panel {
+    padding-left: 0;
+    padding-top: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .order-actions-group .btn-oc-wapp,
+  .order-actions-group .btn-oc-copy,
+  .order-actions-group .btn-oc-receipt,
+  .order-actions-group .btn-oc-resend,
+  .order-actions-group .btn-oc-cancel,
+  .order-actions-group .btn-oc-map,
+  .order-actions-group .btn-oc-route {
+    flex: 1 1 100%;
+  }
+}
+
 /* ═══════════════════════ STATS ═══════════════════════ */
 .stats-grid {
   display: grid;

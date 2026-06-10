@@ -1030,51 +1030,78 @@ function orderCard(o) {
 
       <!-- DETALHES EXPANSÍVEIS -->
       <div class="oc-details" id="ocdet-${o.id}" style="display:none">
+        <div class="order-details-grid">
 
-        <div class="oc-det-section">
-          <h4 class="oc-det-title"><i class="fas fa-list-ul"></i> Produtos</h4>
-          ${items.map(i => {
-            const opts = (i.options||[]);
-            const total = i.total || (i.finalUnitPrice||i.unitPrice||0)*i.qty || 0;
-            return `<div class="oc-det-item">
-              <div class="oc-det-item-main">
-                <span class="oc-det-item-name">${i.qty}x ${esc(i.name)}</span>
-                <span class="oc-det-item-price">R$ ${fmt(total)}</span>
+          <!-- COLUNA ESQUERDA: Produtos + Finanças + Obs + WhatsApp -->
+          <div class="order-details-left">
+
+            <div class="oc-det-section">
+              <h4 class="oc-det-title"><i class="fas fa-list-ul"></i> Produtos</h4>
+              ${items.map(i => {
+                const opts = (i.options||[]);
+                const total = i.total || (i.finalUnitPrice||i.unitPrice||0)*i.qty || 0;
+                return `<div class="oc-det-item">
+                  <div class="oc-det-item-main">
+                    <span class="oc-det-item-name">${i.qty}x ${esc(i.name)}</span>
+                    <span class="oc-det-item-price">R$ ${fmt(total)}</span>
+                  </div>
+                  ${opts.map(og=>`<div class="oc-det-opt"><span class="oc-det-opt-group">${esc(og.groupTitle)}:</span> ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</div>`).join('')}
+                </div>`;
+              }).join('')}
+            </div>
+
+            <div class="oc-det-section">
+              <h4 class="oc-det-title"><i class="fas fa-receipt"></i> Resumo financeiro</h4>
+              <div class="oc-finance-compact">
+                <div class="order-financial-row">
+                  <span class="order-financial-label">Subtotal:</span>
+                  <span class="order-financial-value">R$ ${fmt(o.subtotal||0)}</span>
+                </div>
+                <div class="order-financial-row">
+                  <span class="order-financial-label">Frete:</span>
+                  <span class="order-financial-value">${(o.delivery_fee||0)>0?`R$ ${fmt(o.delivery_fee)}`:'Grátis'}</span>
+                </div>
+                ${o.troco?`<div class="order-financial-row">
+                  <span class="order-financial-label">Troco para:</span>
+                  <span class="order-financial-value">R$ ${esc(String(o.troco))}</span>
+                </div>`:''}
+                <div class="order-financial-row order-financial-total">
+                  <span class="order-financial-label">Total:</span>
+                  <span class="order-financial-value">R$ ${fmt(o.total||0)}</span>
+                </div>
               </div>
-              ${opts.map(og=>`<div class="oc-det-opt"><span class="oc-det-opt-group">${esc(og.groupTitle)}:</span> ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</div>`).join('')}
-            </div>`;
-          }).join('')}
-        </div>
+            </div>
 
-        <div class="oc-det-section">
-          <h4 class="oc-det-title"><i class="fas fa-receipt"></i> Resumo financeiro</h4>
-          <div class="oc-finance">
-            <span>Subtotal</span><span>R$ ${fmt(o.subtotal||0)}</span>
-            <span>Frete</span><span>${(o.delivery_fee||0)>0?`R$ ${fmt(o.delivery_fee)}`:'Grátis'}</span>
-            ${o.troco?`<span>Troco para</span><span>R$ ${esc(String(o.troco))}</span>`:''}
-            <span class="oc-finance-bold">Total</span><span class="oc-finance-bold">R$ ${fmt(o.total||0)}</span>
+            ${o.notes?`<div class="oc-det-section"><h4 class="oc-det-title"><i class="fas fa-comment-dots"></i> Observação</h4><p class="oc-obs">${esc(o.notes)}</p></div>`:''}
+
+            ${notifSection}
+
           </div>
-        </div>
 
-        ${o.notes?`<div class="oc-det-section"><h4 class="oc-det-title"><i class="fas fa-comment-dots"></i> Observação</h4><p class="oc-obs">${esc(o.notes)}</p></div>`:''}
+          <!-- COLUNA DIREITA: Localização + Ações -->
+          <div class="order-actions-panel">
 
-        ${loc?`<div class="oc-det-section">
-          <h4 class="oc-det-title"><i class="fas fa-map-location-dot"></i> Localização</h4>
-          <div class="oc-loc-btns">
-            ${loc.mapsLink  ?`<a class="btn-oc-map"   href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>`:''}
-            ${loc.routeLink ?`<a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>`:''}
+            ${loc?`<div class="order-actions-section">
+              <h4 class="oc-det-title"><i class="fas fa-map-location-dot"></i> Localização</h4>
+              <div class="order-actions-group">
+                ${loc.mapsLink  ?`<a class="btn-oc-map"   href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>`:''}
+                ${loc.routeLink ?`<a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>`:''}
+              </div>
+            </div>`:''}
+
+            <div class="order-actions-section">
+              <h4 class="oc-det-title"><i class="fas fa-bolt"></i> Ações</h4>
+              <div class="order-actions-group">
+                ${waLink?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
+                <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
+                ${o.receipt_url?`<a class="btn-oc-receipt" href="${esc(o.receipt_url)}" target="_blank" rel="noopener"><i class="fas fa-file-invoice"></i> Ver comprovante</a>`:''}
+                ${o.customer_phone&&o.whatsapp_opt_in?`<button class="btn-oc-resend" id="btn-resend-${o.id}" onclick="resendWhatsApp('${o.id}')"><i class="fab fa-whatsapp"></i> Reenviar WhatsApp</button>`:''}
+                ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
+              </div>
+            </div>
+
           </div>
-        </div>`:''}
 
-        ${notifSection}
-
-        <!-- Ações dos detalhes -->
-        <div class="oc-det-actions">
-          ${waLink?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
-          <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
-          ${o.receipt_url?`<a class="btn-oc-receipt" href="${esc(o.receipt_url)}" target="_blank" rel="noopener"><i class="fas fa-file-invoice"></i> Ver comprovante</a>`:''}
-          ${o.customer_phone&&o.whatsapp_opt_in?`<button class="btn-oc-resend" id="btn-resend-${o.id}" onclick="resendWhatsApp('${o.id}')"><i class="fab fa-whatsapp"></i> Reenviar WhatsApp</button>`:''}
-          ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
         </div>
       </div>
 
