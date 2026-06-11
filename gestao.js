@@ -1190,21 +1190,31 @@ function filterOrders(filter, btn) {
 /* ══════════════════════════════════════
    SALES
 ══════════════════════════════════════ */
+function isPaidOrder(order) {
+  const status = String(order.payment_status || "").toLowerCase();
+
+  return (
+    ["pago", "paid", "confirmado", "confirmed", "pagamento_confirmado"].includes(status) ||
+    !!order.paid_at
+  );
+}
+
 function renderSales() {
   const today = new Date().toISOString().split('T')[0];
-  const todayOrders  = gs.orders.filter(o => o.created_at?.startsWith(today));
-  const openOrders   = gs.orders.filter(o => !['finalizado','cancelado'].includes(o.status));
-  const todayRevenue = todayOrders.reduce((s, o) => s + Number(o.total||0), 0);
+  const paidOrders     = gs.orders.filter(isPaidOrder);
+  const todayOrders    = paidOrders.filter(o => o.created_at?.startsWith(today));
+  const openPaidOrders = paidOrders.filter(o => !['finalizado','cancelado'].includes(o.status));
+  const todayRevenue   = todayOrders.reduce((s, o) => s + Number(o.total||0), 0);
 
   elid('sv-hoje').textContent    = todayOrders.length;
   elid('sv-receita').textContent = 'R$ ' + fmt(todayRevenue);
-  elid('sv-abertos').textContent = openOrders.length;
-  elid('sv-total').textContent   = gs.orders.length;
+  elid('sv-abertos').textContent = openPaidOrders.length;
+  elid('sv-total').textContent   = paidOrders.length;
 
   const salesList = elid('sales-list');
-  salesList.innerHTML = gs.orders.length
-    ? '<h3 style="margin-bottom:12px;font-size:.9rem;font-weight:700">Pedidos recentes</h3>' + gs.orders.slice(0,20).map(orderCard).join('')
-    : '<p class="empty-msg">Nenhum pedido registrado ainda.</p>';
+  salesList.innerHTML = paidOrders.length
+    ? '<h3 style="margin-bottom:12px;font-size:.9rem;font-weight:700">Vendas recentes</h3>' + paidOrders.slice(0,20).map(orderCard).join('')
+    : '<p class="empty-msg">Nenhuma venda confirmada ainda.<br>Quando um pagamento for confirmado, ele aparecerá aqui.</p>';
 }
 
 /* ══════════════════════════════════════
