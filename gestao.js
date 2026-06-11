@@ -918,6 +918,18 @@ async function confirmCancelOrder(id) {
   updateOrderStatus(id, 'cancelado');
 }
 
+function buildCallCustomerMessage(o) {
+  const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const lines = [
+    'Olá, tudo certo? Aqui é da Day Lanches.',
+    `Recebemos seu pedido #${num}.`,
+  ];
+  if (o.tracking_token) {
+    lines.push('', 'Se quiser acompanhar seu pedido, acesse:', `https://www.daylanches.com.br/acompanhar.html?token=${o.tracking_token}`);
+  }
+  return lines.join('\n');
+}
+
 function orderCard(o) {
   const statusLabels = {
     novo:'Novo', em_preparo:'Em preparo',
@@ -956,27 +968,8 @@ function orderCard(o) {
   const loc   = o.location && typeof o.location === 'object' ? o.location : null;
   const phone   = (o.customer_phone || '').replace(/\D/g, '');
   const waPhone = (phone.startsWith('55') && phone.length >= 12) ? phone : '55' + phone;
-  const waLink  = phone ? `https://wa.me/${waPhone}` : '';
+  const waLink  = phone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(buildCallCustomerMessage(o))}` : '';
   const hasOpts = items.some(i => (i.options||[]).length > 0);
-
-  /* Status de notificação automática */
-  const notifSection = (() => {
-    if (o.customer_notified_at) {
-      const t = new Date(o.customer_notified_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-      return `<div class="oc-det-section">
-        <h4 class="oc-det-title"><i class="fab fa-whatsapp"></i> WhatsApp automático</h4>
-        <span class="oc-notif-ok"><i class="fas fa-check-circle"></i> Enviado em ${t}</span>
-      </div>`;
-    }
-    if (o.customer_notification_error) {
-      const errMsg = esc(String(o.customer_notification_error).substring(0, 80));
-      return `<div class="oc-det-section">
-        <h4 class="oc-det-title"><i class="fab fa-whatsapp"></i> WhatsApp automático</h4>
-        <span class="oc-notif-err"><i class="fas fa-times-circle"></i> Falhou: ${errMsg}</span>
-      </div>`;
-    }
-    return '';
-  })();
 
   return `
     <div class="oc ${stClass[o.status]||''}">
@@ -1058,7 +1051,6 @@ function orderCard(o) {
                   <span class="order-financial-value">R$ ${fmt(o.total||0)}</span>
                 </div>
               </div>
-              ${notifSection}
             </div>
 
             ${loc?`<div class="order-detail-box">
@@ -1075,7 +1067,6 @@ function orderCard(o) {
                 ${waLink?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
                 <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
                 ${o.receipt_url?`<a class="btn-oc-receipt" href="${esc(o.receipt_url)}" target="_blank" rel="noopener"><i class="fas fa-file-invoice"></i> Ver comprovante</a>`:''}
-                ${o.customer_phone&&o.whatsapp_opt_in?`<button class="btn-oc-resend" id="btn-resend-${o.id}" onclick="resendWhatsApp('${o.id}')"><i class="fab fa-whatsapp"></i> Reenviar WhatsApp</button>`:''}
                 ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel order-action-full" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
               </div>
             </div>
@@ -1137,25 +1128,6 @@ function copyOrderText(orderId) {
   ].filter(v => v !== null).join('\n');
 
   navigator.clipboard.writeText(lines).then(() => toast('Pedido copiado!')).catch(() => toast('Erro ao copiar.', true));
-}
-
-async function resendWhatsApp(orderId) {
-  const btn = elid(`btn-resend-${orderId}`);
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando…'; }
-  try {
-    const res  = await fetch(`${WORKER_URL}/send-order-whatsapp`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ orderId }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Erro desconhecido');
-    toast('WhatsApp enviado ao cliente!');
-    loadOrders();
-  } catch (err) {
-    toast('Erro ao enviar: ' + err.message, true);
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fab fa-whatsapp"></i> Reenviar WhatsApp'; }
-  }
 }
 
 function statusBtns(o) {
@@ -1528,7 +1500,6 @@ window.createAcaiDefaultOptions       = createAcaiDefaultOptions;
 window.updateProductPreview           = updateProductPreview;
 window.applyProductTemplate           = applyProductTemplate;
 window.copyOrderText                  = copyOrderText;
-window.resendWhatsApp                 = resendWhatsApp;
 window.toggleOrderDetails             = toggleOrderDetails;
 window.confirmCancelOrder             = confirmCancelOrder;
 window.renderOrders                   = renderOrders;

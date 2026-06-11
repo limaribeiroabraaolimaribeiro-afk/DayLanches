@@ -3,11 +3,8 @@
    Day Lanches — Cloudflare Worker
    Rotas:
      POST /create-payment            → cria checkout InfinitePay
-     POST /infinitepay/webhook       → confirma pagamento e envia WhatsApp ao cliente
-     POST /send-order-whatsapp       → reenvio manual de WhatsApp (gestão)
+     POST /infinitepay/webhook       → confirma pagamento
      GET  /order-tracking?token=     → dados públicos do pedido (página acompanhar)
-     GET  /whatsapp/webhook          → verificação de webhook Meta WhatsApp Cloud API
-     POST /whatsapp/webhook          → recebe eventos WhatsApp Cloud API
      GET  /health                    → health check
    ───────────────────────────────────────────────────────── */
 
@@ -73,20 +70,8 @@ export default {
       return handleWebhook(request, env);
     }
 
-    if (pathname === '/send-order-whatsapp' && request.method === 'POST') {
-      return handleSendWhatsApp(request, env);
-    }
-
     if (pathname === '/order-tracking' && request.method === 'GET') {
       return handleOrderTracking(url, env);
-    }
-
-    if (pathname === '/whatsapp/webhook' && request.method === 'GET') {
-      return handleWhatsAppVerify(url, env);
-    }
-
-    if (pathname === '/whatsapp/webhook' && request.method === 'POST') {
-      return handleWhatsAppEvent(request);
     }
 
     return json({ error: 'Not found' }, 404);
@@ -224,36 +209,7 @@ async function handleWebhook(request, env) {
     updated_at:       new Date().toISOString(),
   });
 
-  /* Enviar WhatsApp automático ao cliente (não bloqueia a resposta ao webhook) */
-  const fullOrder = { ...order, payment_status: 'pago' };
-  sendWhatsAppOrderConfirmation(env, fullOrder, orderId).catch(err =>
-    console.error('[DayLanches] WhatsApp automático falhou silenciosamente:', err)
-  );
-
   return json({ ok: true });
-}
-
-/* ══════════════════════════════════════════════════════════
-   POST /send-order-whatsapp  (reenvio manual pela gestão)
-══════════════════════════════════════════════════════════ */
-async function handleSendWhatsApp(request, env) {
-  let body;
-  try { body = await request.json(); }
-  catch { return json({ error: 'Invalid JSON' }, 400); }
-
-  const { orderId } = body;
-  if (!orderId) return json({ error: 'orderId required' }, 400);
-
-  const orders = await sbGet(env, 'orders', `id=eq.${orderId}&select=*`);
-  if (!orders?.length) return json({ error: 'Order not found' }, 404);
-  const order = orders[0];
-
-  try {
-    await sendWhatsAppOrderConfirmation(env, order, orderId, /* forceResend */ true);
-    return json({ ok: true });
-  } catch (err) {
-    return json({ error: err.message }, 502);
-  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -281,102 +237,4 @@ async function handleOrderTracking(url, env) {
     created_at:     o.created_at,
     items_summary:  items.map(i => ({ name: i.name, qty: i.qty, total: i.total })),
   });
-}
-
-/* ══════════════════════════════════════════════════════════
-   GET /whatsapp/webhook  (verificação Meta)
-══════════════════════════════════════════════════════════ */
-function handleWhatsAppVerify(url, env) {
-  const mode      = url.searchParams.get('hub.mode');
-  const token     = url.searchParams.get('hub.verify_token');
-  const challenge = url.searchParams.get('hub.challenge');
-
-  if (mode === 'subscribe' && token === env.WHATSAPP_VERIFY_TOKEN) {
-    return new Response(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
-  }
-
-  return new Response('Forbidden', { status: 403 });
-}
-
-/* ══════════════════════════════════════════════════════════
-   POST /whatsapp/webhook  (eventos Meta)
-══════════════════════════════════════════════════════════ */
-async function handleWhatsAppEvent(request) {
-  let body;
-  try { body = await request.json(); }
-  catch { return new Response('OK', { status: 200 }); }
-
-  console.log('WhatsApp webhook:', JSON.stringify(body));
-  return new Response('OK', { status: 200 });
-}
-
-/* ══════════════════════════════════════════════════════════
-   FUNÇÃO: enviar WhatsApp ao cliente via Cloud API
-══════════════════════════════════════════════════════════ */
-async function sendWhatsAppOrderConfirmation(env, order, orderId, forceResend = false) {
-  /* Verificações */
-  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_NUMBER_ID) return; /* não configurado */
-  if (!order.customer_phone) return;
-  if (!order.whatsapp_opt_in) return;
-  if (order.customer_notified_at && !forceResend) return; /* já enviado */
-
-  /* Número em E.164 (sem +): garante prefixo 55 */
-  const rawPhone = String(order.customer_phone).replace(/\D/g, '');
-  const toPhone  = rawPhone.startsWith('55') ? rawPhone : '55' + rawPhone;
-
-  const siteUrl     = env.SITE_URL    || 'https://www.daylanches.com.br';
-  const trackingUrl = order.tracking_token
-    ? `${siteUrl}/acompanhar.html?token=${order.tracking_token}`
-    : siteUrl;
-
-  const templateName = env.WHATSAPP_TEMPLATE_NAME || 'pedido_recebido';
-  const languageCode = env.WHATSAPP_LANGUAGE_CODE || 'pt_BR';
-
-  const waPayload = {
-    messaging_product: 'whatsapp',
-    to:   toPhone,
-    type: 'template',
-    template: {
-      name:     templateName,
-      language: { code: languageCode },
-      components: [{
-        type: 'body',
-        parameters: [
-          { type: 'text', text: order.customer_name || 'cliente' },
-          { type: 'text', text: order.order_number  || '' },
-          { type: 'text', text: trackingUrl },
-        ],
-      }],
-    },
-  };
-
-  let notifiedAt  = null;
-  let notifError  = null;
-
-  try {
-    const res = await fetch(
-      `https://graph.facebook.com/v20.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      {
-        method:  'POST',
-        headers: {
-          Authorization:  `Bearer ${env.WHATSAPP_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(waPayload),
-      }
-    );
-    const text = await res.text();
-    if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${text}`);
-    notifiedAt = new Date().toISOString();
-  } catch (err) {
-    notifError = err.message.substring(0, 300);
-    throw err; /* propaga para o caller registrar e decidir */
-  } finally {
-    /* Atualiza Supabase independente de sucesso ou erro */
-    await sbPatch(env, 'orders', `id=eq.${orderId}`, {
-      customer_notified_at:         notifiedAt,
-      customer_notification_error:  notifError,
-      updated_at:                   new Date().toISOString(),
-    }).catch(() => {});
-  }
 }
