@@ -29,6 +29,7 @@ const gs = {
   productFilter: '',
   editId: null,
   uploadedUrl: '',
+  storeConfig: null,
 };
 
 /* ══════════════════════════════════════
@@ -1195,20 +1196,20 @@ function renderSales() {
 async function loadConfig() {
   try {
     const { data, error } = await getSb().from('store_settings').select('*').eq('id','store').single();
-    if (error || !data) return;
+    if (error || !data) { renderStoreLocationStatus(); return; }
     setv('cfg-wa',     data.whatsapp||'');
     setv('cfg-pix',    data.pix_key||'');
     setv('cfg-insta',  data.instagram||'');
     setv('cfg-hours',  typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text||''));
     setv('cfg-km',     data.delivery_price_per_km||'');
-    setv('cfg-factor', data.route_factor||'');
-    setv('cfg-lat',    data.store_lat||'');
-    setv('cfg-lon',    data.store_lon||'');
+    gs.storeConfig = data;
+    renderStoreLocationStatus();
   } catch (e) { console.warn('Erro config:', e); }
 }
 
 async function handleSaveConfig(e) {
   e.preventDefault();
+  const cfg = gs.storeConfig || {};
   const data = {
     id:                    'store',
     whatsapp:              getv('cfg-wa'),
@@ -1216,14 +1217,90 @@ async function handleSaveConfig(e) {
     instagram:             getv('cfg-insta'),
     schedule:              { text: getv('cfg-hours') },
     delivery_price_per_km: parseFloat(getv('cfg-km'))     || 2.5,
-    route_factor:          parseFloat(getv('cfg-factor'))  || 1.4,
-    store_lat:             parseFloat(getv('cfg-lat'))     || -26.74403627881803,
-    store_lon:             parseFloat(getv('cfg-lon'))     || -48.83443849068592,
+    route_factor:          cfg.route_factor || 1.4,
+    store_lat:             cfg.store_lat,
+    store_lon:             cfg.store_lon,
     updated_at:            new Date().toISOString(),
   };
   const { error } = await getSb().from('store_settings').upsert(data);
   if (error) { toast('Erro ao salvar: ' + error.message, true); return; }
   toast('Configurações salvas!');
+}
+
+/* ── Localização da loja ── */
+function renderStoreLocationStatus(message, type) {
+  const el = elid('store-location-status');
+  if (!el) return;
+  const cfg = gs.storeConfig || {};
+  if (message) {
+    el.textContent = message;
+    el.className = 'cfg-loc-status' + (type ? ' ' + type : '');
+    return;
+  }
+  if (cfg.store_lat != null && cfg.store_lon != null) {
+    el.textContent = 'Localização da loja configurada com sucesso.';
+    el.className = 'cfg-loc-status success';
+  } else {
+    el.textContent = 'Localização da loja ainda não configurada.';
+    el.className = 'cfg-loc-status';
+  }
+}
+
+function useStoreLocation() {
+  const btn = elid('btn-store-location');
+  const setBtn = (html, disabled) => {
+    if (!btn) return;
+    btn.innerHTML = html;
+    btn.disabled = !!disabled;
+  };
+
+  if (!navigator.geolocation) {
+    toast('Seu navegador não permite obter localização automaticamente.', true);
+    return;
+  }
+
+  setBtn('<i class="fas fa-spinner fa-spin"></i> Obtendo localização...', true);
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude, longitude, accuracy } = position.coords;
+
+      if (accuracy > 100) {
+        toast('A localização foi encontrada, mas com baixa precisão. Tente novamente estando na loja.', true);
+      }
+
+      const cfg = gs.storeConfig || {};
+      const data = {
+        id:         'store',
+        ...cfg,
+        store_lat:  latitude,
+        store_lon:  longitude,
+        route_factor: cfg.route_factor || 1.4,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await getSb().from('store_settings').upsert(data);
+      if (error) {
+        toast('Erro ao salvar localização: ' + error.message, true);
+        setBtn('<i class="fas fa-location-dot"></i> Usar minha localização atual', false);
+        return;
+      }
+
+      gs.storeConfig = data;
+      toast('Localização da loja salva com sucesso.');
+      renderStoreLocationStatus('Localização atualizada com sucesso.', 'success');
+      setBtn('<i class="fas fa-check"></i> Localização salva', false);
+    },
+    (err) => {
+      if (err.code === err.PERMISSION_DENIED) {
+        toast('Permita o acesso à localização para salvar o ponto da loja.', true);
+      } else {
+        toast('Não foi possível obter a localização. Tente novamente.', true);
+      }
+      setBtn('<i class="fas fa-location-dot"></i> Usar minha localização atual', false);
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
 }
 
 /* ══════════════════════════════════════
@@ -1487,6 +1564,7 @@ window.confirmDeleteProduct    = confirmDeleteProduct;
 window.filterOrders            = filterOrders;
 window.updateOrderStatus       = updateOrderStatus;
 window.handleSaveConfig               = handleSaveConfig;
+window.useStoreLocation                = useStoreLocation;
 window.togglePwd                      = togglePwd;
 window.sendPwdReset                   = sendPwdReset;
 window.importLocalProductsToSupabase  = importLocalProductsToSupabase;

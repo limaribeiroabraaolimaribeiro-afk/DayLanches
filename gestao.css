@@ -784,6 +784,19 @@ a { text-decoration: none; color: inherit; }
   color: var(--text);
 }
 
+.cfg-loc-hint {
+  font-size: .85rem; color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.cfg-loc-status {
+  margin-top: 12px;
+  font-size: .85rem; font-weight: 500;
+  color: var(--text-muted);
+}
+.cfg-loc-status.success { color: #16a34a; }
+.cfg-loc-status.warning { color: #D97706; }
+.cfg-loc-status.error   { color: var(--danger); }
+
 .user-info-row {
   display: flex; align-items: center;
   padding: 10px 0;
