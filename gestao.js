@@ -1207,12 +1207,18 @@ async function loadConfig() {
   } catch (e) { console.warn('Erro config:', e); }
 }
 
+function normalizeWhatsApp(raw) {
+  const digits = String(raw||'').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.startsWith('55') ? digits : '55' + digits;
+}
+
 async function handleSaveConfig(e) {
   e.preventDefault();
   const cfg = gs.storeConfig || {};
   const data = {
     id:                    'store',
-    whatsapp:              getv('cfg-wa'),
+    whatsapp:              normalizeWhatsApp(getv('cfg-wa')),
     pix_key:               getv('cfg-pix'),
     instagram:             getv('cfg-insta'),
     schedule:              { text: getv('cfg-hours') },
@@ -1238,11 +1244,11 @@ function renderStoreLocationStatus(message, type) {
     return;
   }
   if (cfg.store_lat != null && cfg.store_lon != null) {
-    el.textContent = 'Localização da loja configurada com sucesso.';
+    el.textContent = '✅ Localização da loja configurada';
     el.className = 'cfg-loc-status success';
   } else {
-    el.textContent = 'Localização da loja ainda não configurada.';
-    el.className = 'cfg-loc-status';
+    el.textContent = '⚠️ Localização ainda não configurada';
+    el.className = 'cfg-loc-status warning';
   }
 }
 
@@ -1288,7 +1294,7 @@ function useStoreLocation() {
 
       gs.storeConfig = data;
       toast('Localização da loja salva com sucesso.');
-      renderStoreLocationStatus('Localização atualizada com sucesso.', 'success');
+      renderStoreLocationStatus('✅ Localização atualizada com sucesso', 'success');
       setBtn('<i class="fas fa-check"></i> Localização salva', false);
     },
     (err) => {

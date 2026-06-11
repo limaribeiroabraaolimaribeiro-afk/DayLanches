@@ -149,32 +149,58 @@
     <!-- SECTION: Configurações -->
     <section id="section-config" class="dash-section">
       <div class="config-wrap">
+
+        <!-- Card: Informações da loja -->
         <div class="g-card">
-          <h2 class="g-card-title">Informações da loja</h2>
+          <div class="g-card-head">
+            <h2 class="g-card-title">Informações da loja</h2>
+            <p class="g-card-desc">Dados exibidos para os clientes no site.</p>
+          </div>
           <form id="form-config" onsubmit="handleSaveConfig(event)">
             <div class="form-row">
-              <div class="form-group"><label class="form-label">WhatsApp (com DDI)</label><input id="cfg-wa"      class="form-input" placeholder="554747123456"></div>
-              <div class="form-group"><label class="form-label">Chave PIX</label>           <input id="cfg-pix"     class="form-input" placeholder="47991234567"></div>
+              <div class="form-group"><label class="form-label">WhatsApp da loja</label>      <input id="cfg-wa"     class="form-input" placeholder="(47) 99155-9926" inputmode="numeric"></div>
+              <div class="form-group"><label class="form-label">Instagram</label>             <input id="cfg-insta"  class="form-input" placeholder="@day_lanchesl.a"></div>
             </div>
             <div class="form-row">
-              <div class="form-group"><label class="form-label">Instagram</label>           <input id="cfg-insta"   class="form-input" placeholder="@day_lanchesl.a"></div>
-              <div class="form-group"><label class="form-label">Horário</label>             <input id="cfg-hours"   class="form-input" placeholder="Qua–Dom 17:30–23:00"></div>
+              <div class="form-group"><label class="form-label">Horário de atendimento</label><input id="cfg-hours" class="form-input" placeholder="Qua–Dom 17:30–23:00"></div>
+              <div class="form-group"><label class="form-label">Frete R$/km</label>           <input id="cfg-km"     class="form-input" type="number" step="0.1" inputmode="decimal" placeholder="2.50"></div>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">Frete R$/km</label>        <input id="cfg-km"      class="form-input" type="number" step="0.1" placeholder="2.50"></div>
+            <div class="g-card-actions">
+              <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Salvar informações</button>
             </div>
-            <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Salvar</button>
           </form>
         </div>
 
-        <div class="g-card" style="margin-top:20px">
-          <h2 class="g-card-title">Localização da loja</h2>
-          <p class="cfg-loc-hint">Use este botão estando na loja para definir o ponto de retirada/entrega.</p>
-          <button type="button" id="btn-store-location" class="btn-primary" onclick="useStoreLocation()">
-            <i class="fas fa-location-dot"></i> Usar minha localização atual
-          </button>
-          <div id="store-location-status" class="cfg-loc-status"></div>
+        <!-- Card: Pagamento -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title">Pagamento</h2>
+            <p class="g-card-desc">Os pagamentos online são processados pela InfinitePay.</p>
+          </div>
+          <form id="form-payment" onsubmit="handleSaveConfig(event)">
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Chave Pix</label><input id="cfg-pix" class="form-input" placeholder="47991559926"></div>
+            </div>
+            <div class="g-card-actions">
+              <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Salvar pagamento</button>
+            </div>
+          </form>
         </div>
+
+        <!-- Card: Localização da loja -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title">Localização da loja</h2>
+            <p class="g-card-desc">Use este botão estando na loja para definir o ponto de retirada e cálculo de frete.</p>
+          </div>
+          <div id="store-location-status" class="cfg-loc-status"></div>
+          <div class="g-card-actions">
+            <button type="button" id="btn-store-location" class="btn-primary" onclick="useStoreLocation()">
+              <i class="fas fa-location-dot"></i> Usar minha localização atual
+            </button>
+          </div>
+        </div>
+
       </div>
     </section>
 
