@@ -1316,22 +1316,124 @@ function renderUserInfo() {
   const user = gs.currentUser;
   if (!user) return;
   const meta = user.user_metadata || {};
-  elid('user-info-block').innerHTML = `
-    <div class="user-info-row"><span>Nome</span><strong>${esc(meta.name||'—')}</strong></div>
-    <div class="user-info-row"><span>E-mail</span><strong>${esc(user.email)}</strong></div>
-    <div class="user-info-row"><span>ID</span><code>${user.id}</code></div>
-    <div class="user-info-row"><span>Último acesso</span><strong>${new Date(user.last_sign_in_at||0).toLocaleString('pt-BR')}</strong></div>
-    <div style="margin-top:16px">
-      <button class="btn-secondary" onclick="sendPwdReset()"><i class="fas fa-key"></i> Redefinir senha</button>
-    </div>`;
+  const lastAccess = user.last_sign_in_at
+    ? new Date(user.last_sign_in_at).toLocaleString('pt-BR')
+    : 'Nenhum acesso registrado ainda.';
+
+  const rows = [];
+  if (meta.name) {
+    rows.push(`
+    <div class="acc-info-row">
+      <div class="acc-info-icon"><i class="fas fa-user"></i></div>
+      <div class="acc-info-content"><span class="acc-info-label">Nome</span><span class="acc-info-value">${esc(meta.name)}</span></div>
+    </div>`);
+  }
+  rows.push(`
+    <div class="acc-info-row">
+      <div class="acc-info-icon"><i class="fas fa-envelope"></i></div>
+      <div class="acc-info-content"><span class="acc-info-label">E-mail de acesso</span><span class="acc-info-value">${esc(user.email)}</span></div>
+    </div>
+    <div class="acc-info-row">
+      <div class="acc-info-icon"><i class="fas fa-user-shield"></i></div>
+      <div class="acc-info-content"><span class="acc-info-label">Perfil</span><span class="acc-info-value">Administrador da loja</span></div>
+    </div>
+    <div class="acc-info-row">
+      <div class="acc-info-icon"><i class="fas fa-clock"></i></div>
+      <div class="acc-info-content"><span class="acc-info-label">Último acesso</span><span class="acc-info-value">${esc(lastAccess)}</span></div>
+    </div>
+    <div class="acc-info-row">
+      <div class="acc-info-icon"><i class="fas fa-circle-check"></i></div>
+      <div class="acc-info-content">
+        <span class="acc-info-label">Status</span>
+        <span class="acc-status-badge"><i class="fas fa-circle"></i> Ativo</span>
+      </div>
+    </div>`);
+
+  elid('user-info-block').innerHTML = rows.join('');
 }
 
-async function sendPwdReset() {
+/* ── Alterar senha ── */
+function openChangePasswordModal() {
+  setv('pwd-new', '');
+  setv('pwd-confirm', '');
+  hidePwdError();
+  elid('pwd-modal-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => elid('pwd-new')?.focus(), 60);
+}
+
+function closeChangePasswordModal() {
+  elid('pwd-modal-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function _pwdModalBgClick(e) {
+  if (e.target === elid('pwd-modal-overlay')) closeChangePasswordModal();
+}
+
+function showPwdError(msg) {
+  const el = elid('pwd-error');
+  el.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${esc(msg)}`;
+  el.style.display = 'flex';
+}
+
+function hidePwdError() {
+  elid('pwd-error').style.display = 'none';
+}
+
+async function submitChangePassword() {
+  const newPwd     = getv('pwd-new');
+  const confirmPwd = getv('pwd-confirm');
+  hidePwdError();
+
+  if (newPwd.length < 8) {
+    showPwdError('A senha deve ter no mínimo 8 caracteres.');
+    return;
+  }
+  if (newPwd !== confirmPwd) {
+    showPwdError('As senhas não coincidem.');
+    return;
+  }
+
+  const btn = elid('pwd-save-btn');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+
+  const { error } = await getSb().auth.updateUser({ password: newPwd });
+
+  btn.disabled = false;
+  btn.innerHTML = original;
+
+  if (error) { showPwdError('Erro ao atualizar senha: ' + error.message); return; }
+
+  closeChangePasswordModal();
+  toast('Senha atualizada com sucesso.');
+}
+
+/* ── Copiar dados de acesso ── */
+function copyAccessInfo() {
   const user = gs.currentUser;
   if (!user) return;
-  const { error } = await getSb().auth.resetPasswordForEmail(user.email);
-  if (error) { toast('Erro ao enviar e-mail.', true); return; }
-  toast('E-mail de redefinição enviado!');
+  const text = [
+    'Acesso à Gestão Day Lanches',
+    '',
+    'URL:',
+    'https://www.daylanches.com.br/gestao.html',
+    '',
+    'E-mail:',
+    user.email,
+    '',
+    'Senha:',
+    'A senha foi definida no momento da entrega.',
+    '',
+    'Observação:',
+    'Guarde esses dados em segurança.',
+  ].join('\n');
+
+  navigator.clipboard.writeText(text)
+    .then(() => toast('Dados de acesso copiados!'))
+    .catch(() => toast('Erro ao copiar.', true));
 }
 
 /* ══════════════════════════════════════
@@ -1572,7 +1674,11 @@ window.updateOrderStatus       = updateOrderStatus;
 window.handleSaveConfig               = handleSaveConfig;
 window.useStoreLocation                = useStoreLocation;
 window.togglePwd                      = togglePwd;
-window.sendPwdReset                   = sendPwdReset;
+window.openChangePasswordModal        = openChangePasswordModal;
+window.closeChangePasswordModal       = closeChangePasswordModal;
+window._pwdModalBgClick               = _pwdModalBgClick;
+window.submitChangePassword           = submitChangePassword;
+window.copyAccessInfo                 = copyAccessInfo;
 window.importLocalProductsToSupabase  = importLocalProductsToSupabase;
 window.syncLocalProductMetadata       = syncLocalProductMetadata;
 window.setGroupField                  = setGroupField;
