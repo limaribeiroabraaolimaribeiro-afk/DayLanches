@@ -71,14 +71,24 @@ async function handleCreateAccount(e) {
   const email = v('create-email');
   const pwd   = v('create-pwd');
   const pwd2  = v('create-pwd2');
+  const code  = v('create-code').trim();
 
   hide('create-error');
+  if (!code)          return show('create-error', 'Digite o código de segurança da loja.');
   if (pwd !== pwd2)   return show('create-error', 'As senhas não coincidem.');
   if (pwd.length < 6) return show('create-error', 'Senha precisa ter ao menos 6 caracteres.');
 
   setLoading('create-btn', true, 'Criando...');
 
   try {
+    const { data: codeOk, error: codeError } = await getSb().rpc('validate_admin_activation_code', {
+      input_code: code
+    });
+    if (codeError || !codeOk) {
+      show('create-error', 'Código de segurança inválido.');
+      return;
+    }
+
     const { data, error } = await getSb().auth.signUp({
       email, password: pwd,
       options: { data: { name, role: 'owner' } },
@@ -89,6 +99,11 @@ async function handleCreateAccount(e) {
         await getSb().from('profiles').insert({ id: data.user.id, name, email, role: 'owner' });
       } catch(_) { /* perfil é opcional */ }
     }
+
+    try {
+      await getSb().rpc('consume_admin_activation_code', { input_code: code, input_email: email });
+    } catch(_) { /* não bloqueia a criação se a marcação falhar */ }
+
     toast('Acesso criado! Verifique seu e-mail se necessário.');
     setTimeout(() => showView('login'), 1500);
   } catch (err) {
