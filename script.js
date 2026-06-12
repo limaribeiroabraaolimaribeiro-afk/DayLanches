@@ -1410,6 +1410,76 @@ function goToCheckout() {
   navigateTo('delivery');
 }
 
+/* ──────────────────────────────────────────
+   Validação de telefone/WhatsApp (BR)
+────────────────────────────────────────── */
+function cleanPhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizeBrazilPhone(value) {
+  let digits = cleanPhone(value);
+
+  if (digits.startsWith("55") && digits.length === 13) {
+    return digits;
+  }
+
+  if (digits.length === 11) {
+    return `55${digits}`;
+  }
+
+  return digits;
+}
+
+function isValidBrazilMobilePhone(value) {
+  let digits = cleanPhone(value);
+
+  if (digits.startsWith("55") && digits.length === 13) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.length !== 11) return false;
+
+  const validDDDs = new Set([
+    "11","12","13","14","15","16","17","18","19",
+    "21","22","24","27","28",
+    "31","32","33","34","35","37","38",
+    "41","42","43","44","45","46","47","48","49",
+    "51","53","54","55",
+    "61","62","63","64","65","66","67","68","69",
+    "71","73","74","75","77","79",
+    "81","82","83","84","85","86","87","88","89",
+    "91","92","93","94","95","96","97","98","99"
+  ]);
+
+  const ddd = digits.slice(0, 2);
+  const mobile = digits.slice(2);
+
+  if (!validDDDs.has(ddd)) return false;
+
+  // celular brasileiro precisa começar com 9
+  if (!mobile.startsWith("9")) return false;
+
+  // bloqueia todos iguais
+  if (/^(\d)\1+$/.test(digits)) return false;
+  if (/^(\d)\1+$/.test(mobile)) return false;
+
+  // bloqueia padrões fake comuns
+  const fakeNumbers = [
+    "999999999",
+    "111111111",
+    "000000000",
+    "123456789",
+    "987654321",
+    "912345678",
+    "998765432"
+  ];
+
+  if (fakeNumbers.includes(mobile)) return false;
+
+  return true;
+}
+
 function formatPhone(input) {
   let v = input.value.replace(/\D/g, '').substring(0, 11);
   if (v.length > 6) {
@@ -1425,11 +1495,11 @@ function formatPhone(input) {
 }
 
 function goToPayment() {
-  const name     = document.getElementById('f-name').value.trim();
-  const phone    = document.getElementById('f-phone')?.value.trim() || '';
-  const rawPhone = phone.replace(/\D/g, '');
-  const errBox   = document.getElementById('delivery-error');
-  const phoneErr = document.getElementById('phone-error');
+  const name      = document.getElementById('f-name').value.trim();
+  const phoneInput = document.getElementById('f-phone');
+  const phone     = phoneInput?.value.trim() || '';
+  const errBox    = document.getElementById('delivery-error');
+  const phoneErr  = document.getElementById('phone-error');
 
   errBox.style.display = 'none';
   if (phoneErr) phoneErr.style.display = 'none';
@@ -1440,13 +1510,13 @@ function goToPayment() {
     return;
   }
 
-  if (rawPhone.length < 10 || rawPhone.length > 11) {
+  if (!isValidBrazilMobilePhone(phone)) {
     if (phoneErr) {
       phoneErr.style.display = 'flex';
       phoneErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else {
-      showToast('Informe um WhatsApp válido com DDD.');
     }
+    showToast('Informe um WhatsApp válido com DDD.');
+    phoneInput?.focus();
     return;
   }
 
@@ -1456,10 +1526,9 @@ function goToPayment() {
     return;
   }
 
-  /* Salva com prefixo 55 para E.164 — garante não duplicar */
-  const e164Phone = rawPhone.startsWith('55') ? rawPhone : '55' + rawPhone;
+  const customerPhone = normalizeBrazilPhone(phone);
   state.form.name    = name;
-  state.form.phone   = e164Phone;
+  state.form.phone   = customerPhone;
   state.form.notes   = el('f-notes')?.value.trim() || '';
   navigateTo('payment');
 }
