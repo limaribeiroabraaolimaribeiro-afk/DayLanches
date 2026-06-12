@@ -1515,12 +1515,13 @@ function renderUserInfo() {
 
 /* ── Alterar senha ── */
 function openChangePasswordModal() {
+  setv('pwd-current', '');
   setv('pwd-new', '');
   setv('pwd-confirm', '');
   hidePwdError();
   elid('pwd-modal-overlay').style.display = 'flex';
   document.body.style.overflow = 'hidden';
-  setTimeout(() => elid('pwd-new')?.focus(), 60);
+  setTimeout(() => elid('pwd-current')?.focus(), 60);
 }
 
 function closeChangePasswordModal() {
@@ -1543,10 +1544,15 @@ function hidePwdError() {
 }
 
 async function submitChangePassword() {
+  const currentPwd = getv('pwd-current');
   const newPwd     = getv('pwd-new');
   const confirmPwd = getv('pwd-confirm');
   hidePwdError();
 
+  if (!currentPwd) {
+    showPwdError('Digite sua senha atual.');
+    return;
+  }
   if (newPwd.length < 8) {
     showPwdError('A senha deve ter no mínimo 8 caracteres.');
     return;
@@ -1561,6 +1567,18 @@ async function submitChangePassword() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
 
+  const { error: authError } = await getSb().auth.signInWithPassword({
+    email: gs.currentUser?.email,
+    password: currentPwd
+  });
+
+  if (authError) {
+    btn.disabled = false;
+    btn.innerHTML = original;
+    showPwdError('Senha atual incorreta.');
+    return;
+  }
+
   const { error } = await getSb().auth.updateUser({ password: newPwd });
 
   btn.disabled = false;
@@ -1568,6 +1586,9 @@ async function submitChangePassword() {
 
   if (error) { showPwdError('Erro ao atualizar senha: ' + error.message); return; }
 
+  setv('pwd-current', '');
+  setv('pwd-new', '');
+  setv('pwd-confirm', '');
   closeChangePasswordModal();
   toast('Senha atualizada com sucesso.');
 }

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=5">
+  <link rel="stylesheet" href="gestao.css?v=6">
 </head>
 <body>
 
@@ -438,6 +438,10 @@
     <div class="gestao-modal-body pwd-modal-body">
       <h2 class="gestao-modal-title" id="pwd-modal-title">Alterar senha</h2>
       <div class="form-group">
+        <label class="form-label">Senha atual</label>
+        <input type="password" id="pwd-current" class="form-input" placeholder="Digite sua senha atual" autocomplete="current-password">
+      </div>
+      <div class="form-group" style="margin-top:14px">
         <label class="form-label">Nova senha</label>
         <input type="password" id="pwd-new" class="form-input" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
       </div>
@@ -461,6 +465,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=5"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=15"></script>
+<script src="gestao.js?v=16"></script>
 </body>
 </html>
