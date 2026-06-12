@@ -873,6 +873,29 @@ async function loadOrders() {
   renderOrders();
 }
 
+function setOrdersLoading(isLoading) {
+  const btn   = elid('refresh-orders-btn');
+  const label = elid('refresh-orders-label');
+  if (!btn) return;
+  btn.disabled = isLoading;
+  if (label) label.textContent = isLoading ? 'Atualizando...' : 'Atualizar';
+  btn.classList.toggle('is-loading', isLoading);
+}
+
+async function refreshOrders() {
+  console.log('[Gestão] Atualizando pedidos...');
+  try {
+    setOrdersLoading(true);
+    await loadOrders();
+    toast('Pedidos atualizados com sucesso.');
+  } catch (error) {
+    console.error('[Gestão] Erro ao atualizar pedidos:', error);
+    toast('Não foi possível atualizar os pedidos.', true);
+  } finally {
+    setOrdersLoading(false);
+  }
+}
+
 function renderOrders() {
   const wrap = elid('orders-list');
   let list = gs.orderFilter === 'all'
@@ -1757,6 +1780,13 @@ document.addEventListener('DOMContentLoaded', () => {
   getSb().auth.getSession().then(({ data: { session } }) => {
     if (!session) showView('login');
   });
+
+  const refreshOrdersBtn = elid('refresh-orders-btn');
+  if (refreshOrdersBtn) {
+    refreshOrdersBtn.addEventListener('click', async () => {
+      await refreshOrders();
+    });
+  }
 });
 
 /* ══════════════════════════════════════
@@ -1888,6 +1918,7 @@ window.copyOrderText                  = copyOrderText;
 window.toggleOrderDetails             = toggleOrderDetails;
 window.confirmCancelOrder             = confirmCancelOrder;
 window.renderOrders                   = renderOrders;
+window.refreshOrders                  = refreshOrders;
 window.showToast                      = showToast;
 window.showConfirmModal               = showConfirmModal;
 window._confirmModalConfirm           = _confirmModalConfirm;

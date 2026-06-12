@@ -357,6 +357,8 @@ a { text-decoration: none; color: inherit; }
   transition: background .15s, color .15s;
 }
 .btn-refresh-orders:hover { background: var(--primary); color: #fff; }
+.btn-refresh-orders:disabled,
+.btn-refresh-orders.is-loading { opacity: .65; cursor: not-allowed; }
 
 .filter-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .filter-count { font-size: .7rem; font-weight: 700; opacity: .7; margin-left: 2px; }

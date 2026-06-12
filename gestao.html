@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=7">
+  <link rel="stylesheet" href="gestao.css?v=8">
 </head>
 <body>
 
@@ -130,8 +130,8 @@
               placeholder="Buscar por pedido, nome ou telefone…"
               oninput="renderOrders()">
           </div>
-          <button class="btn-refresh-orders" onclick="loadOrders()" title="Atualizar pedidos">
-            <i class="fas fa-rotate-right"></i> Atualizar
+          <button class="btn-refresh-orders" id="refresh-orders-btn" title="Atualizar pedidos">
+            <i class="fas fa-rotate-right"></i> <span id="refresh-orders-label">Atualizar</span>
           </button>
         </div>
         <div class="filter-row">
@@ -476,7 +476,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=18"></script>
+<script src="gestao.js?v=19"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
