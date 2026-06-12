@@ -1193,12 +1193,8 @@ function renderSales() {
 /* ══════════════════════════════════════
    CONFIG
 ══════════════════════════════════════ */
-const SCHEDULE_FALLBACK = {
-  displayDays: 'Quinta a domingo',
-  displayTime: '17:30 – 23:00',
-};
-
 const WEEKDAY_NAMES = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const MONDAY_FIRST_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const DAY_TOKEN_MAP = {
   dom: 0, domingo: 0,
@@ -1210,47 +1206,152 @@ const DAY_TOKEN_MAP = {
   sab: 6, sabado: 6,
 };
 
+const FALLBACK_SCHEDULE_TEXT = 'Quinta a domingo 17:30 às 23:00';
+
 function stripAccents(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-/* Normaliza horários como "qui-dom 17:30-23:00", "quinta-domingo 17:30-23:00"
-   ou "Quinta a domingo 17:30 às 23:00" para um formato pronto para exibição. */
-function normalizeSchedule(raw) {
-  try {
-    const str = String(raw || '').trim();
-    if (!str) return { ...SCHEDULE_FALLBACK };
-
-    const times = str.match(/\d{1,2}:\d{2}/g) || [];
-    let displayTime = SCHEDULE_FALLBACK.displayTime;
-    if (times.length >= 2) displayTime = `${times[0]} – ${times[1]}`;
-
-    let daysPart = stripAccents(str.replace(/\d{1,2}:\d{2}/g, '')).toLowerCase();
-    daysPart = daysPart.replace(/-feira/g, '');
-    daysPart = daysPart.replace(/\b(as|ate|das|de|h|horas)\b/g, ' ');
-    const tokens = daysPart.split(/[-\s]+|\ba\b/).map(t => t.trim()).filter(Boolean);
-
-    const dayIndexes = tokens
-      .map(tok => DAY_TOKEN_MAP[tok])
-      .filter(v => v !== undefined);
-
-    if (!dayIndexes.length) return { ...SCHEDULE_FALLBACK, displayTime };
-
-    const startDay = dayIndexes[0];
-    const endDay   = dayIndexes[dayIndexes.length - 1];
-    const displayDays = startDay === endDay
-      ? WEEKDAY_NAMES[startDay]
-      : `${WEEKDAY_NAMES[startDay]} a ${WEEKDAY_NAMES[endDay].toLowerCase()}`;
-
-    return { displayDays, displayTime };
-  } catch (e) {
-    return { ...SCHEDULE_FALLBACK };
-  }
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
 }
 
+function formatMinutes(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/* Converte um trecho como "terça", "segunda a sexta", "sábado e domingo" ou
+   "todos os dias" em uma lista de índices de dia (0=domingo ... 6=sábado). */
+function parseDayTokens(daysPart) {
+  const part = daysPart.trim();
+  if (!part) return null;
+  if (/\btodos?\b/.test(part)) return [0, 1, 2, 3, 4, 5, 6];
+
+  const firstWord = s => s.trim().split(/\s+/)[0];
+
+  if (/\ba\b/.test(part)) {
+    const pieces = part.split(/\ba\b/).map(s => s.trim()).filter(Boolean);
+    if (pieces.length === 2) {
+      const start = DAY_TOKEN_MAP[firstWord(pieces[0])];
+      const end   = DAY_TOKEN_MAP[firstWord(pieces[1])];
+      if (start != null && end != null) {
+        const days = [];
+        let d = start;
+        for (let i = 0; i < 7; i++) {
+          days.push(d);
+          if (d === end) break;
+          d = (d + 1) % 7;
+        }
+        return days;
+      }
+    }
+  }
+
+  if (/\be\b/.test(part)) {
+    const pieces = part.split(/\be\b/).map(s => s.trim()).filter(Boolean);
+    const days = pieces.map(p => DAY_TOKEN_MAP[firstWord(p)]).filter(d => d != null);
+    if (days.length) return days;
+  }
+
+  /* Compatibilidade com formatos abreviados como "qui-dom" ou "qua-dom" */
+  if (/-/.test(part)) {
+    const pieces = part.split('-').map(s => s.trim()).filter(Boolean);
+    if (pieces.length === 2) {
+      const start = DAY_TOKEN_MAP[firstWord(pieces[0])];
+      const end   = DAY_TOKEN_MAP[firstWord(pieces[1])];
+      if (start != null && end != null) {
+        const days = [];
+        let d = start;
+        for (let i = 0; i < 7; i++) {
+          days.push(d);
+          if (d === end) break;
+          d = (d + 1) % 7;
+        }
+        return days;
+      }
+    }
+  }
+
+  const single = DAY_TOKEN_MAP[firstWord(part)];
+  return single != null ? [single] : null;
+}
+
+/* Interpreta o texto de horário (mesmo formato aceito pelo site público) e
+   monta um mapa de 7 posições (0=domingo ... 6=sábado) com { open, from, to }. */
+function buildWeekMap(raw) {
+  const str = stripAccents(String(raw || '')).toLowerCase().trim();
+  if (!str) return null;
+
+  const weekMap = Array.from({ length: 7 }, () => ({ open: false, from: null, to: null }));
+  const segments = str.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+  let applied = false;
+
+  for (const seg of segments) {
+    const isClosed = /\bfechad[ao]\b/.test(seg);
+    const times = seg.match(/\d{1,2}:\d{2}/g) || [];
+
+    let daysPart = seg.replace(/\d{1,2}:\d{2}/g, '');
+    daysPart = daysPart.replace(/-feira/g, '');
+    daysPart = daysPart.replace(/\b(as|ate|das|de|h|horas|fechad[ao]|aberto)\b/g, ' ');
+    const days = parseDayTokens(daysPart);
+    if (!days) continue;
+
+    applied = true;
+    for (const d of days) {
+      if (isClosed || times.length < 2) {
+        weekMap[d] = { open: false, from: null, to: null };
+      } else {
+        weekMap[d] = { open: true, from: toMinutes(times[0]), to: toMinutes(times[1]) };
+      }
+    }
+  }
+
+  return applied ? weekMap : null;
+}
+
+function formatDayGroup(days) {
+  if (days.length === 1) return WEEKDAY_NAMES[days[0]];
+  if (days.length === 2) return `${WEEKDAY_NAMES[days[0]]} e ${WEEKDAY_NAMES[days[1]].toLowerCase()}`;
+  return `${WEEKDAY_NAMES[days[0]]} a ${WEEKDAY_NAMES[days[days.length - 1]].toLowerCase()}`;
+}
+
+/* Agrupa dias consecutivos (começando na segunda-feira) que tenham o mesmo
+   status/horário, na mesma lógica usada pelo site público. */
+function groupScheduleRows(weekMap) {
+  const rows = [];
+  let i = 0;
+  while (i < 7) {
+    const dayIdx = MONDAY_FIRST_ORDER[i];
+    const cur    = weekMap[dayIdx];
+    const days   = [dayIdx];
+    let j = i + 1;
+    while (j < 7) {
+      const nextIdx = MONDAY_FIRST_ORDER[j];
+      const next    = weekMap[nextIdx];
+      if (next.open !== cur.open || next.from !== cur.from || next.to !== cur.to) break;
+      days.push(nextIdx);
+      j++;
+    }
+    rows.push({
+      label:     formatDayGroup(days),
+      open:      cur.open,
+      timeLabel: cur.open ? `${formatMinutes(cur.from)} – ${formatMinutes(cur.to)}` : 'Fechado',
+    });
+    i = j;
+  }
+  return rows;
+}
+
+/* Normaliza o texto de horário para o formato canônico salvo/exibido,
+   usando o mesmo parser do site público (garante consistência). */
 function normalizeScheduleText(raw) {
-  const sch = normalizeSchedule(raw);
-  return `${sch.displayDays} ${sch.displayTime.replace(' – ', ' às ')}`;
+  const weekMap = buildWeekMap(raw) || buildWeekMap(FALLBACK_SCHEDULE_TEXT);
+  const openRows = groupScheduleRows(weekMap).filter(r => r.open);
+  if (!openRows.length) return FALLBACK_SCHEDULE_TEXT;
+  return openRows.map(r => `${r.label} ${r.timeLabel.replace(' – ', ' às ')}`).join('; ');
 }
 
 async function loadConfig() {

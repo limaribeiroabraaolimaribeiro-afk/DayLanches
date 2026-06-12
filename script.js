@@ -2664,16 +2664,8 @@ function esc(s) {
 /* ──────────────────────────────────────────
    HORÁRIO DE ATENDIMENTO
 ────────────────────────────────────────── */
-const SCHEDULE_FALLBACK = {
-  displayDays:  'Quinta a domingo',
-  displayTime:  '17:30 – 23:00',
-  startDay:     4,
-  endDay:       0,
-  startMinutes: 17 * 60 + 30,
-  endMinutes:   23 * 60,
-};
-
 const WEEKDAY_NAMES = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const MONDAY_FIRST_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const DAY_TOKEN_MAP = {
   dom: 0, domingo: 0,
@@ -2685,90 +2677,138 @@ const DAY_TOKEN_MAP = {
   sab: 6, sabado: 6,
 };
 
-let storeSchedule = null;
-let storeConfig   = null;
+/* Usado apenas se store_settings não tiver nenhum horário salvo/interpretável */
+const FALLBACK_SCHEDULE_TEXT = 'Quinta a domingo 17:30 às 23:00';
+
+let storeConfig = null;
 
 function stripAccents(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-function isDayInRange(day, start, end) {
-  return start <= end ? (day >= start && day <= end) : (day >= start || day <= end);
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
 }
 
-function getClosedDays(startDay, endDay) {
-  const closed = [];
-  for (let d = 0; d < 7; d++) {
-    if (!isDayInRange(d, startDay, endDay)) closed.push(d);
-  }
-  return closed;
+function formatMinutes(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function formatDayRange(days) {
-  if (!days.length) return '';
-  if (days.length === 1) return WEEKDAY_NAMES[days[0]];
-  if (days.length === 2) return `${WEEKDAY_NAMES[days[0]]} e ${WEEKDAY_NAMES[days[1]].toLowerCase()}`;
-  return `${WEEKDAY_NAMES[days[0]]} a ${WEEKDAY_NAMES[days[days.length - 1]].toLowerCase()}`;
-}
+/* Converte um trecho como "terça", "segunda a sexta", "sábado e domingo" ou
+   "todos os dias" em uma lista de índices de dia (0=domingo ... 6=sábado). */
+function parseDayTokens(daysPart) {
+  const part = daysPart.trim();
+  if (!part) return null;
+  if (/\btodos?\b/.test(part)) return [0, 1, 2, 3, 4, 5, 6];
 
-/* Normaliza horários como "qui-dom 17:30-23:00", "quinta-domingo 17:30-23:00"
-   ou "Quinta a domingo 17:30 às 23:00" para um formato pronto para exibição. */
-function normalizeSchedule(raw) {
-  try {
-    const str = String(raw || '').trim();
-    if (!str) return { ...SCHEDULE_FALLBACK };
+  const firstWord = s => s.trim().split(/\s+/)[0];
 
-    const times = str.match(/\d{1,2}:\d{2}/g) || [];
-    let startMinutes = SCHEDULE_FALLBACK.startMinutes;
-    let endMinutes    = SCHEDULE_FALLBACK.endMinutes;
-    let displayTime   = SCHEDULE_FALLBACK.displayTime;
-    if (times.length >= 2) {
-      const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-      startMinutes = toMin(times[0]);
-      endMinutes   = toMin(times[1]);
-      displayTime  = `${times[0]} – ${times[1]}`;
+  if (/\ba\b/.test(part)) {
+    const pieces = part.split(/\ba\b/).map(s => s.trim()).filter(Boolean);
+    if (pieces.length === 2) {
+      const start = DAY_TOKEN_MAP[firstWord(pieces[0])];
+      const end   = DAY_TOKEN_MAP[firstWord(pieces[1])];
+      if (start != null && end != null) {
+        const days = [];
+        let d = start;
+        for (let i = 0; i < 7; i++) {
+          days.push(d);
+          if (d === end) break;
+          d = (d + 1) % 7;
+        }
+        return days;
+      }
     }
+  }
 
-    let daysPart = stripAccents(str.replace(/\d{1,2}:\d{2}/g, '')).toLowerCase();
+  if (/\be\b/.test(part)) {
+    const pieces = part.split(/\be\b/).map(s => s.trim()).filter(Boolean);
+    const days = pieces.map(p => DAY_TOKEN_MAP[firstWord(p)]).filter(d => d != null);
+    if (days.length) return days;
+  }
+
+  /* Compatibilidade com formatos abreviados como "qui-dom" ou "qua-dom" */
+  if (/-/.test(part)) {
+    const pieces = part.split('-').map(s => s.trim()).filter(Boolean);
+    if (pieces.length === 2) {
+      const start = DAY_TOKEN_MAP[firstWord(pieces[0])];
+      const end   = DAY_TOKEN_MAP[firstWord(pieces[1])];
+      if (start != null && end != null) {
+        const days = [];
+        let d = start;
+        for (let i = 0; i < 7; i++) {
+          days.push(d);
+          if (d === end) break;
+          d = (d + 1) % 7;
+        }
+        return days;
+      }
+    }
+  }
+
+  const single = DAY_TOKEN_MAP[firstWord(part)];
+  return single != null ? [single] : null;
+}
+
+/* Interpreta o texto de horário salvo em store_settings.schedule e monta um
+   mapa de 7 posições (0=domingo ... 6=sábado) com { open, from, to } (minutos).
+   Aceita textos como:
+     "Quarta a domingo 17:30 às 23:00"
+     "Terça 18:30 às 23:00"
+     "Segunda a sexta 08:00 às 18:00"
+     "Sábado e domingo 18:00 às 23:30"
+     "Segunda e terça fechado"
+     "Todos os dias 17:30 às 23:00"
+   Linhas/segmentos podem ser separados por ";" ou quebra de linha para
+   combinar dias com horários diferentes. Retorna null se nada for reconhecido. */
+function buildWeekMap(raw) {
+  const str = stripAccents(String(raw || '')).toLowerCase().trim();
+  if (!str) return null;
+
+  const weekMap = Array.from({ length: 7 }, () => ({ open: false, from: null, to: null }));
+  const segments = str.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+  let applied = false;
+
+  for (const seg of segments) {
+    const isClosed = /\bfechad[ao]\b/.test(seg);
+    const times = seg.match(/\d{1,2}:\d{2}/g) || [];
+
+    let daysPart = seg.replace(/\d{1,2}:\d{2}/g, '');
     daysPart = daysPart.replace(/-feira/g, '');
-    daysPart = daysPart.replace(/\b(as|ate|das|de|h|horas)\b/g, ' ');
-    const tokens = daysPart.split(/[-\s]+|\ba\b/).map(t => t.trim()).filter(Boolean);
+    daysPart = daysPart.replace(/\b(as|ate|das|de|h|horas|fechad[ao]|aberto)\b/g, ' ');
+    const days = parseDayTokens(daysPart);
+    if (!days) continue;
 
-    const dayIndexes = tokens
-      .map(tok => DAY_TOKEN_MAP[tok])
-      .filter(v => v !== undefined);
-
-    if (!dayIndexes.length) return { ...SCHEDULE_FALLBACK };
-
-    const startDay = dayIndexes[0];
-    const endDay   = dayIndexes[dayIndexes.length - 1];
-    const displayDays = startDay === endDay
-      ? WEEKDAY_NAMES[startDay]
-      : `${WEEKDAY_NAMES[startDay]} a ${WEEKDAY_NAMES[endDay].toLowerCase()}`;
-
-    return { displayDays, displayTime, startDay, endDay, startMinutes, endMinutes };
-  } catch (e) {
-    return { ...SCHEDULE_FALLBACK };
+    applied = true;
+    for (const d of days) {
+      if (isClosed || times.length < 2) {
+        weekMap[d] = { open: false, from: null, to: null };
+      } else {
+        weekMap[d] = { open: true, from: toMinutes(times[0]), to: toMinutes(times[1]) };
+      }
+    }
   }
+
+  return applied ? weekMap : null;
 }
 
-async function loadStoreConfig() {
-  try {
-    const sb = getSb();
-    if (!sb) { storeConfig = {}; storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
-    const { data, error } = await sb.from('store_settings').select('*').eq('id', 'store').single();
-    if (error || !data) { storeConfig = {}; storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
-    storeConfig = data;
-    const raw = typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text || '');
-    storeSchedule = normalizeSchedule(raw);
-  } catch (e) {
-    storeConfig = {};
-    storeSchedule = { ...SCHEDULE_FALLBACK };
-  }
+function getScheduleRawText() {
+  const sch = storeConfig?.schedule;
+  return typeof sch === 'string' ? sch : (sch?.text || '');
 }
 
-function getStoreStatus() {
-  const sch = storeSchedule || SCHEDULE_FALLBACK;
+function getWeekMap() {
+  return buildWeekMap(getScheduleRawText()) || buildWeekMap(FALLBACK_SCHEDULE_TEXT);
+}
+
+/* Retorna o status de funcionamento agora (horário de Brasília), com base no
+   schedule informado ou, se omitido, no horário salvo em store_settings. */
+function isStoreOpenNow(scheduleText) {
+  const weekMap = (scheduleText !== undefined ? buildWeekMap(scheduleText) : null) || getWeekMap();
+
   const now   = new Date();
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
@@ -2779,27 +2819,88 @@ function getStoreStatus() {
   }).formatToParts(now);
 
   const DAY_MAP = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
-  const wdText  = parts.find(p => p.type === 'weekday')?.value ?? '';
-  const weekday = DAY_MAP[wdText] ?? -1;
+  const weekday = DAY_MAP[parts.find(p => p.type === 'weekday')?.value] ?? 0;
   const hour    = Number(parts.find(p => p.type === 'hour')?.value   ?? 0);
   const minute  = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
+  const cur     = hour * 60 + minute;
 
-  const cur        = hour * 60 + minute;
-  const isOpenDay  = isDayInRange(weekday, sch.startDay, sch.endDay);
-  const isOpenTime = cur >= sch.startMinutes && cur < sch.endMinutes;
+  const today  = weekMap[weekday];
+  const isOpen = !!(today.open && today.from != null && today.to != null && cur >= today.from && cur < today.to);
 
-  return { isOpen: isOpenDay && isOpenTime, schedule: sch };
+  return {
+    isOpen,
+    todayLabel: WEEKDAY_NAMES[weekday],
+    openTime:   today.from != null ? formatMinutes(today.from) : null,
+    closeTime:  today.to   != null ? formatMinutes(today.to)   : null,
+    message:    isOpen ? 'Aberto agora' : 'Fechado agora',
+    weekMap,
+    weekday,
+  };
+}
+
+function formatDayGroup(days) {
+  if (days.length === 1) return WEEKDAY_NAMES[days[0]];
+  if (days.length === 2) return `${WEEKDAY_NAMES[days[0]]} e ${WEEKDAY_NAMES[days[1]].toLowerCase()}`;
+  return `${WEEKDAY_NAMES[days[0]]} a ${WEEKDAY_NAMES[days[days.length - 1]].toLowerCase()}`;
+}
+
+/* Agrupa dias consecutivos (começando na segunda-feira) que tenham o mesmo
+   status/horário, para exibição no menu lateral. */
+function groupScheduleRows(weekMap) {
+  const rows = [];
+  let i = 0;
+  while (i < 7) {
+    const dayIdx = MONDAY_FIRST_ORDER[i];
+    const cur    = weekMap[dayIdx];
+    const days   = [dayIdx];
+    let j = i + 1;
+    while (j < 7) {
+      const nextIdx = MONDAY_FIRST_ORDER[j];
+      const next    = weekMap[nextIdx];
+      if (next.open !== cur.open || next.from !== cur.from || next.to !== cur.to) break;
+      days.push(nextIdx);
+      j++;
+    }
+    rows.push({
+      label:     formatDayGroup(days),
+      open:      cur.open,
+      timeLabel: cur.open ? `${formatMinutes(cur.from)} – ${formatMinutes(cur.to)}` : 'Fechado',
+    });
+    i = j;
+  }
+  return rows;
+}
+
+async function loadStoreConfig() {
+  try {
+    const sb = getSb();
+    if (!sb) { storeConfig = {}; return; }
+    const { data, error } = await sb.from('store_settings').select('*').eq('id', 'store').single();
+    storeConfig = (!error && data) ? data : {};
+  } catch (e) {
+    storeConfig = {};
+  }
+}
+
+function getStoreStatus() {
+  return isStoreOpenNow();
 }
 
 function updateStoreStatus() {
-  const { isOpen, schedule: sch } = getStoreStatus();
-  const banner = el('store-status-banner');
-  const badge  = el('menu-status-badge');
-  const txt    = el('menu-status-text');
+  const status = isStoreOpenNow();
+  const { isOpen, weekMap, closeTime } = status;
 
-  const closedLabel = formatDayRange(getClosedDays(sch.startDay, sch.endDay));
-  const timeWithAs  = sch.displayTime.replace(' – ', ' às ');
-  const closeTime   = (sch.displayTime.split(' – ')[1] || sch.displayTime).trim();
+  const banner  = el('store-status-banner');
+  const badge   = el('menu-status-badge');
+  const txt     = el('menu-status-text');
+  const rowsEl  = el('menu-hours-rows');
+  const modalHoursEl = el('closed-modal-hours');
+
+  const rows      = groupScheduleRows(weekMap);
+  const openRows  = rows.filter(r => r.open);
+  const openSummary = openRows
+    .map(r => `${r.label} das ${r.timeLabel.replace(' – ', ' às ')}`)
+    .join('; ');
 
   if (banner) {
     banner.style.display = 'flex';
@@ -2813,35 +2914,28 @@ function updateStoreStatus() {
       : `<i class="fas fa-clock store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Estamos fechados no momento</strong>
-           <span>Nosso atendimento é de ${sch.displayDays.toLowerCase()}, das ${timeWithAs}.</span>
+           <span>Nosso atendimento: ${openSummary || 'consulte os horários na loja'}.</span>
          </div>`;
   }
 
   if (badge && txt) {
-    badge.className   = 'menu-status-badge ' + (isOpen ? 'open' : 'closed');
-    txt.textContent   = isOpen ? 'Aberto agora' : 'Fechado agora';
+    badge.className = 'menu-status-badge ' + (isOpen ? 'open' : 'closed');
+    txt.textContent = status.message;
   }
 
-  const openDayEl   = el('menu-hours-open-day');
-  const timeEl      = el('menu-hours-time');
-  const closedRowEl = el('menu-hours-closed-row');
-  const closedDayEl = el('menu-hours-closed-day');
-  const modalHoursEl = el('closed-modal-hours');
-
-  if (openDayEl) openDayEl.textContent = sch.displayDays;
-  if (timeEl)    timeEl.textContent    = sch.displayTime;
-
-  if (closedRowEl && closedDayEl) {
-    if (closedLabel) {
-      closedDayEl.textContent   = closedLabel;
-      closedRowEl.style.display = '';
-    } else {
-      closedRowEl.style.display = 'none';
-    }
+  if (rowsEl) {
+    rowsEl.innerHTML = rows.map(r => `
+      <div class="menu-hours-row">
+        <span class="menu-hours-day">${esc(r.label)}</span>
+        <span class="${r.open ? 'menu-hours-time-badge' : 'menu-hours-closed-badge'}">${esc(r.timeLabel)}</span>
+      </div>`).join('');
   }
 
   if (modalHoursEl) {
-    modalHoursEl.innerHTML = `<i class="fas fa-clock"></i> ${sch.displayDays}, ${timeWithAs}`;
+    const next = openRows[0];
+    modalHoursEl.innerHTML = next
+      ? `<i class="fas fa-clock"></i> ${esc(next.label)}, ${esc(next.timeLabel.replace(' – ', ' às '))}`
+      : `<i class="fas fa-clock"></i> Consulte os horários de atendimento`;
   }
 }
 
