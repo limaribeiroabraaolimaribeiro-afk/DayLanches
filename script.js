@@ -570,11 +570,9 @@ const state = {
 
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
 
-/* Localização da loja: R. Faustino Martini, Rio do Peixe, Luiz Alves - SC */
-const STORE_LAT = -26.74403627881803;
-const STORE_LON = -48.83443849068592;
-const DELIVERY_PRICE_PER_KM  = 2.50;
-const DELIVERY_ROUTE_FACTOR  = 1.4; /* Haversine é linha reta; fator estima rota real */
+/* Valores usados apenas se store_settings não tiver delivery_price_per_km/route_factor salvos */
+const DELIVERY_PRICE_PER_KM_FALLBACK = 2.50;
+const DELIVERY_ROUTE_FACTOR_FALLBACK = 1.4; /* Haversine é linha reta; fator estima rota real */
 
 /* ──────────────────────────────────────────
    SUPABASE — integração
@@ -656,14 +654,43 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function isStoreLocationConfigured() {
+  const cfg = storeConfig || {};
+  return cfg.store_lat != null && cfg.store_lon != null;
+}
+
 function calculateDeliveryFeeByKm() {
   if (state.deliveryType === 'pickup') return 0;
   if (!state.geo.lat || !state.geo.lon) return 0;
-  const straight  = calculateDistanceKm(STORE_LAT, STORE_LON, Number(state.geo.lat), Number(state.geo.lon));
-  const estimated = straight * DELIVERY_ROUTE_FACTOR;
-  state.geo.straightDistanceKm = straight;
-  state.geo.distanceKm         = estimated;
-  return Math.ceil(estimated * DELIVERY_PRICE_PER_KM);
+  if (!isStoreLocationConfigured()) return 0;
+
+  const cfg         = storeConfig || {};
+  const storeLat    = Number(cfg.store_lat);
+  const storeLon    = Number(cfg.store_lon);
+  const customerLat = Number(state.geo.lat);
+  const customerLon = Number(state.geo.lon);
+  const routeFactor = Number(cfg.route_factor) || DELIVERY_ROUTE_FACTOR_FALLBACK;
+  const pricePerKm  = Number(cfg.delivery_price_per_km) || DELIVERY_PRICE_PER_KM_FALLBACK;
+
+  const rawDistanceKm = calculateDistanceKm(storeLat, storeLon, customerLat, customerLon);
+  let estimatedDistanceKm = rawDistanceKm * routeFactor;
+  let freight = Math.ceil(estimatedDistanceKm * pricePerKm);
+
+  if (rawDistanceKm < 0.2) {
+    estimatedDistanceKm = 0;
+    freight = 0;
+  }
+
+  state.geo.straightDistanceKm = rawDistanceKm;
+  state.geo.distanceKm         = estimatedDistanceKm;
+
+  console.log('[FRETE DEBUG]', {
+    storeLat, storeLon, customerLat, customerLon,
+    rawDistanceKm, routeFactor, estimatedDistanceKm,
+    deliveryPricePerKm: pricePerKm, freight,
+  });
+
+  return freight;
 }
 
 /* ── CONFIGURAÇÕES DA LOJA ── */
@@ -684,7 +711,7 @@ function navigateTo(page) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   if (page === 'delivery') {
-    state.geo = { lat: null, lon: null, link: '', routeLink: '', distanceKm: null };
+    state.geo = { lat: null, lon: null, link: '', routeLink: '', distanceKm: null, straightDistanceKm: null };
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
     const stat = el('geo-status');
@@ -714,6 +741,11 @@ function requestGeoLocation() {
   const btn  = el('btn-geo');
   const stat = el('geo-status');
 
+  if (!isStoreLocationConfigured()) {
+    showToast('Localização da loja não configurada. Entre em contato com a loja.');
+    return;
+  }
+
   if (!navigator.geolocation) {
     showToast('Geolocalização não disponível neste navegador.');
     return;
@@ -723,14 +755,15 @@ function requestGeoLocation() {
 
   navigator.geolocation.getCurrentPosition(
     pos => {
-      const lat         = pos.coords.latitude.toFixed(6);
-      const lon         = pos.coords.longitude.toFixed(6);
-      const link        = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-      const routeLink   = `https://www.google.com/maps/dir/?api=1&origin=${STORE_LAT},${STORE_LON}&destination=${lat},${lon}`;
-      const straight    = calculateDistanceKm(STORE_LAT, STORE_LON, Number(lat), Number(lon));
-      const estimated   = straight * DELIVERY_ROUTE_FACTOR;
-      const fee         = Math.ceil(estimated * DELIVERY_PRICE_PER_KM);
-      state.geo = { lat, lon, accuracy: pos.coords.accuracy || null, link, routeLink, straightDistanceKm: straight, distanceKm: estimated };
+      const lat  = pos.coords.latitude.toFixed(6);
+      const lon  = pos.coords.longitude.toFixed(6);
+      const link = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      const cfg  = storeConfig || {};
+      const routeLink = `https://www.google.com/maps/dir/?api=1&origin=${cfg.store_lat},${cfg.store_lon}&destination=${lat},${lon}`;
+
+      state.geo = { lat, lon, accuracy: pos.coords.accuracy || null, link, routeLink, straightDistanceKm: null, distanceKm: null };
+      const fee       = calculateDeliveryFeeByKm();
+      const estimated = state.geo.distanceKm || 0;
 
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Localização obtida'; btn.classList.add('btn-geo-done'); }
       if (stat) {
@@ -762,6 +795,10 @@ function requestGeoLocation() {
 
 /* Fluxo InfinitePay: salva pedido → cria checkout → redireciona */
 async function handleOnlinePayment(method) {
+  if (state.deliveryType === 'delivery' && !isStoreLocationConfigured()) {
+    showToast('Localização da loja não configurada. Entre em contato com a loja.');
+    return;
+  }
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para entrega, use o botão de localização antes de continuar.');
     navigateTo('delivery');
@@ -2649,6 +2686,7 @@ const DAY_TOKEN_MAP = {
 };
 
 let storeSchedule = null;
+let storeConfig   = null;
 
 function stripAccents(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -2714,15 +2752,17 @@ function normalizeSchedule(raw) {
   }
 }
 
-async function loadStoreSchedule() {
+async function loadStoreConfig() {
   try {
     const sb = getSb();
-    if (!sb) { storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
-    const { data, error } = await sb.from('store_settings').select('schedule').eq('id', 'store').single();
-    if (error || !data) { storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
+    if (!sb) { storeConfig = {}; storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
+    const { data, error } = await sb.from('store_settings').select('*').eq('id', 'store').single();
+    if (error || !data) { storeConfig = {}; storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
+    storeConfig = data;
     const raw = typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text || '');
     storeSchedule = normalizeSchedule(raw);
   } catch (e) {
+    storeConfig = {};
     storeSchedule = { ...SCHEDULE_FALLBACK };
   }
 }
@@ -2865,7 +2905,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateCartBar();
   renderProducts();
   initCarousel();
-  await loadStoreSchedule();
+  await loadStoreConfig();
   updateStoreStatus();
   setInterval(updateStoreStatus, 60000);
 
