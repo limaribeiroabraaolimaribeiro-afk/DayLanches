@@ -107,12 +107,18 @@ function generateIcon(size) {
   return encodePNG(size, size, buf);
 }
 
-const outDir = path.join(__dirname, '..', 'images', 'icons');
+const outDir = path.join(__dirname, '..', 'assets', 'icons');
 fs.mkdirSync(outDir, { recursive: true });
 
-for (const size of [192, 512, 180]) {
-  const png = generateIcon(size);
-  const name = size === 180 ? 'gestao-apple-touch-icon.png' : `gestao-icon-${size}.png`;
+const files = {
+  192: 'day-lanches-gestao-192.png',
+  512: 'day-lanches-gestao-512.png',
+  180: 'day-lanches-gestao-apple-touch.png',
+  48:  'favicon.png',
+};
+
+for (const [size, name] of Object.entries(files)) {
+  const png = generateIcon(Number(size));
   fs.writeFileSync(path.join(outDir, name), png);
   console.log('Gerado:', name, png.length, 'bytes');
 }
