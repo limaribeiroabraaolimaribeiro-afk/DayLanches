@@ -4,6 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Day Lanches — Gestão da loja</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="gestao-manifest.json?v=1">
+  <meta name="theme-color" content="#ff5a00">
+  <link rel="icon" href="images/icons/gestao-icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="images/icons/gestao-apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gestão">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -462,5 +472,12 @@
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
 <script src="gestao.js?v=17"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('gestao-sw.js?v=1').catch(() => {});
+    });
+  }
+</script>
 </body>
 </html>

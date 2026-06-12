@@ -1,0 +1,24 @@
+{
+  "name": "Day Lanches Gestão",
+  "short_name": "Gestão",
+  "start_url": "/gestao.html",
+  "scope": "/gestao.html",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#ff5a00",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "images/icons/gestao-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "images/icons/gestao-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
