@@ -642,8 +642,8 @@ function renderProductList() {
           <td><span class="status-pill ${p._active?'status-active':'status-inactive'}">${p._active?'Ativo':'Inativo'}</span></td>
           <td>
             ${!gs.usingLocalProducts
-              ? `<button class="btn-icon-sm btn-edit" onclick="openProductForm('${p.id}')"><i class="fas fa-pen"></i></button>
-                 <button class="btn-icon-sm btn-del"  onclick="confirmDeleteProduct('${p.id}','${esc(p._name)}')"><i class="fas fa-trash"></i></button>`
+              ? `<button class="btn-icon-sm btn-edit" onclick="openProductForm('${p.id}')"><i class="fas fa-pen"></i><span class="btn-label"> Editar</span></button>
+                 <button class="btn-icon-sm btn-del"  onclick="confirmDeleteProduct('${p.id}','${esc(p._name)}')"><i class="fas fa-trash"></i><span class="btn-label"> Excluir</span></button>`
               : `<span style="font-size:.75rem;color:var(--text-muted)">Importe para editar</span>`
             }
           </td>
