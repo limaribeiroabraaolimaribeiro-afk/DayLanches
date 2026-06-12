@@ -2627,7 +2627,108 @@ function esc(s) {
 /* ──────────────────────────────────────────
    HORÁRIO DE ATENDIMENTO
 ────────────────────────────────────────── */
+const SCHEDULE_FALLBACK = {
+  displayDays:  'Quinta a domingo',
+  displayTime:  '17:30 – 23:00',
+  startDay:     4,
+  endDay:       0,
+  startMinutes: 17 * 60 + 30,
+  endMinutes:   23 * 60,
+};
+
+const WEEKDAY_NAMES = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+
+const DAY_TOKEN_MAP = {
+  dom: 0, domingo: 0,
+  seg: 1, segunda: 1,
+  ter: 2, terca: 2,
+  qua: 3, quarta: 3,
+  qui: 4, quinta: 4,
+  sex: 5, sexta: 5,
+  sab: 6, sabado: 6,
+};
+
+let storeSchedule = null;
+
+function stripAccents(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function isDayInRange(day, start, end) {
+  return start <= end ? (day >= start && day <= end) : (day >= start || day <= end);
+}
+
+function getClosedDays(startDay, endDay) {
+  const closed = [];
+  for (let d = 0; d < 7; d++) {
+    if (!isDayInRange(d, startDay, endDay)) closed.push(d);
+  }
+  return closed;
+}
+
+function formatDayRange(days) {
+  if (!days.length) return '';
+  if (days.length === 1) return WEEKDAY_NAMES[days[0]];
+  if (days.length === 2) return `${WEEKDAY_NAMES[days[0]]} e ${WEEKDAY_NAMES[days[1]].toLowerCase()}`;
+  return `${WEEKDAY_NAMES[days[0]]} a ${WEEKDAY_NAMES[days[days.length - 1]].toLowerCase()}`;
+}
+
+/* Normaliza horários como "qui-dom 17:30-23:00", "quinta-domingo 17:30-23:00"
+   ou "Quinta a domingo 17:30 às 23:00" para um formato pronto para exibição. */
+function normalizeSchedule(raw) {
+  try {
+    const str = String(raw || '').trim();
+    if (!str) return { ...SCHEDULE_FALLBACK };
+
+    const times = str.match(/\d{1,2}:\d{2}/g) || [];
+    let startMinutes = SCHEDULE_FALLBACK.startMinutes;
+    let endMinutes    = SCHEDULE_FALLBACK.endMinutes;
+    let displayTime   = SCHEDULE_FALLBACK.displayTime;
+    if (times.length >= 2) {
+      const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+      startMinutes = toMin(times[0]);
+      endMinutes   = toMin(times[1]);
+      displayTime  = `${times[0]} – ${times[1]}`;
+    }
+
+    let daysPart = stripAccents(str.replace(/\d{1,2}:\d{2}/g, '')).toLowerCase();
+    daysPart = daysPart.replace(/-feira/g, '');
+    daysPart = daysPart.replace(/\b(as|ate|das|de|h|horas)\b/g, ' ');
+    const tokens = daysPart.split(/[-\s]+|\ba\b/).map(t => t.trim()).filter(Boolean);
+
+    const dayIndexes = tokens
+      .map(tok => DAY_TOKEN_MAP[tok])
+      .filter(v => v !== undefined);
+
+    if (!dayIndexes.length) return { ...SCHEDULE_FALLBACK };
+
+    const startDay = dayIndexes[0];
+    const endDay   = dayIndexes[dayIndexes.length - 1];
+    const displayDays = startDay === endDay
+      ? WEEKDAY_NAMES[startDay]
+      : `${WEEKDAY_NAMES[startDay]} a ${WEEKDAY_NAMES[endDay].toLowerCase()}`;
+
+    return { displayDays, displayTime, startDay, endDay, startMinutes, endMinutes };
+  } catch (e) {
+    return { ...SCHEDULE_FALLBACK };
+  }
+}
+
+async function loadStoreSchedule() {
+  try {
+    const sb = getSb();
+    if (!sb) { storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
+    const { data, error } = await sb.from('store_settings').select('schedule').eq('id', 'store').single();
+    if (error || !data) { storeSchedule = { ...SCHEDULE_FALLBACK }; return; }
+    const raw = typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text || '');
+    storeSchedule = normalizeSchedule(raw);
+  } catch (e) {
+    storeSchedule = { ...SCHEDULE_FALLBACK };
+  }
+}
+
 function getStoreStatus() {
+  const sch = storeSchedule || SCHEDULE_FALLBACK;
   const now   = new Date();
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
@@ -2644,18 +2745,21 @@ function getStoreStatus() {
   const minute  = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
 
   const cur        = hour * 60 + minute;
-  const OPEN_DAYS  = [0, 3, 4, 5, 6]; // Dom, Qua, Qui, Sex, Sáb
-  const isOpenDay  = OPEN_DAYS.includes(weekday);
-  const isOpenTime = cur >= 17 * 60 + 30 && cur < 23 * 60;
+  const isOpenDay  = isDayInRange(weekday, sch.startDay, sch.endDay);
+  const isOpenTime = cur >= sch.startMinutes && cur < sch.endMinutes;
 
-  return { isOpen: isOpenDay && isOpenTime };
+  return { isOpen: isOpenDay && isOpenTime, schedule: sch };
 }
 
 function updateStoreStatus() {
-  const { isOpen } = getStoreStatus();
+  const { isOpen, schedule: sch } = getStoreStatus();
   const banner = el('store-status-banner');
   const badge  = el('menu-status-badge');
   const txt    = el('menu-status-text');
+
+  const closedLabel = formatDayRange(getClosedDays(sch.startDay, sch.endDay));
+  const timeWithAs  = sch.displayTime.replace(' – ', ' às ');
+  const closeTime   = (sch.displayTime.split(' – ')[1] || sch.displayTime).trim();
 
   if (banner) {
     banner.style.display = 'flex';
@@ -2664,18 +2768,40 @@ function updateStoreStatus() {
       ? `<i class="fas fa-circle-check store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Estamos abertos agora</strong>
-           <span>Atendimento até às 23:00.</span>
+           <span>Atendimento até às ${closeTime}.</span>
          </div>`
       : `<i class="fas fa-clock store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Estamos fechados no momento</strong>
-           <span>Nosso atendimento é de quarta a domingo, das 17:30 às 23:00.</span>
+           <span>Nosso atendimento é de ${sch.displayDays.toLowerCase()}, das ${timeWithAs}.</span>
          </div>`;
   }
 
   if (badge && txt) {
     badge.className   = 'menu-status-badge ' + (isOpen ? 'open' : 'closed');
     txt.textContent   = isOpen ? 'Aberto agora' : 'Fechado agora';
+  }
+
+  const openDayEl   = el('menu-hours-open-day');
+  const timeEl      = el('menu-hours-time');
+  const closedRowEl = el('menu-hours-closed-row');
+  const closedDayEl = el('menu-hours-closed-day');
+  const modalHoursEl = el('closed-modal-hours');
+
+  if (openDayEl) openDayEl.textContent = sch.displayDays;
+  if (timeEl)    timeEl.textContent    = sch.displayTime;
+
+  if (closedRowEl && closedDayEl) {
+    if (closedLabel) {
+      closedDayEl.textContent   = closedLabel;
+      closedRowEl.style.display = '';
+    } else {
+      closedRowEl.style.display = 'none';
+    }
+  }
+
+  if (modalHoursEl) {
+    modalHoursEl.innerHTML = `<i class="fas fa-clock"></i> ${sch.displayDays}, ${timeWithAs}`;
   }
 }
 
@@ -2739,6 +2865,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateCartBar();
   renderProducts();
   initCarousel();
+  await loadStoreSchedule();
   updateStoreStatus();
   setInterval(updateStoreStatus, 60000);
 

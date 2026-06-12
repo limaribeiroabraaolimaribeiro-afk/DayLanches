@@ -1193,14 +1193,73 @@ function renderSales() {
 /* ══════════════════════════════════════
    CONFIG
 ══════════════════════════════════════ */
+const SCHEDULE_FALLBACK = {
+  displayDays: 'Quinta a domingo',
+  displayTime: '17:30 – 23:00',
+};
+
+const WEEKDAY_NAMES = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+
+const DAY_TOKEN_MAP = {
+  dom: 0, domingo: 0,
+  seg: 1, segunda: 1,
+  ter: 2, terca: 2,
+  qua: 3, quarta: 3,
+  qui: 4, quinta: 4,
+  sex: 5, sexta: 5,
+  sab: 6, sabado: 6,
+};
+
+function stripAccents(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+/* Normaliza horários como "qui-dom 17:30-23:00", "quinta-domingo 17:30-23:00"
+   ou "Quinta a domingo 17:30 às 23:00" para um formato pronto para exibição. */
+function normalizeSchedule(raw) {
+  try {
+    const str = String(raw || '').trim();
+    if (!str) return { ...SCHEDULE_FALLBACK };
+
+    const times = str.match(/\d{1,2}:\d{2}/g) || [];
+    let displayTime = SCHEDULE_FALLBACK.displayTime;
+    if (times.length >= 2) displayTime = `${times[0]} – ${times[1]}`;
+
+    let daysPart = stripAccents(str.replace(/\d{1,2}:\d{2}/g, '')).toLowerCase();
+    daysPart = daysPart.replace(/-feira/g, '');
+    daysPart = daysPart.replace(/\b(as|ate|das|de|h|horas)\b/g, ' ');
+    const tokens = daysPart.split(/[-\s]+|\ba\b/).map(t => t.trim()).filter(Boolean);
+
+    const dayIndexes = tokens
+      .map(tok => DAY_TOKEN_MAP[tok])
+      .filter(v => v !== undefined);
+
+    if (!dayIndexes.length) return { ...SCHEDULE_FALLBACK, displayTime };
+
+    const startDay = dayIndexes[0];
+    const endDay   = dayIndexes[dayIndexes.length - 1];
+    const displayDays = startDay === endDay
+      ? WEEKDAY_NAMES[startDay]
+      : `${WEEKDAY_NAMES[startDay]} a ${WEEKDAY_NAMES[endDay].toLowerCase()}`;
+
+    return { displayDays, displayTime };
+  } catch (e) {
+    return { ...SCHEDULE_FALLBACK };
+  }
+}
+
+function normalizeScheduleText(raw) {
+  const sch = normalizeSchedule(raw);
+  return `${sch.displayDays} ${sch.displayTime.replace(' – ', ' às ')}`;
+}
+
 async function loadConfig() {
   try {
     const { data, error } = await getSb().from('store_settings').select('*').eq('id','store').single();
     if (error || !data) { renderStoreLocationStatus(); return; }
     setv('cfg-wa',     data.whatsapp||'');
-    setv('cfg-pix',    data.pix_key||'');
     setv('cfg-insta',  data.instagram||'');
-    setv('cfg-hours',  typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text||''));
+    setv('cfg-hours',  normalizeScheduleText(typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text||'')));
     setv('cfg-km',     data.delivery_price_per_km||'');
     gs.storeConfig = data;
     renderStoreLocationStatus();
@@ -1219,9 +1278,9 @@ async function handleSaveConfig(e) {
   const data = {
     id:                    'store',
     whatsapp:              normalizeWhatsApp(getv('cfg-wa')),
-    pix_key:               getv('cfg-pix'),
+    pix_key:               cfg.pix_key,
     instagram:             getv('cfg-insta'),
-    schedule:              { text: getv('cfg-hours') },
+    schedule:              { text: normalizeScheduleText(getv('cfg-hours')) },
     delivery_price_per_km: parseFloat(getv('cfg-km'))     || 2.5,
     route_factor:          cfg.route_factor || 1.4,
     store_lat:             cfg.store_lat,
@@ -1231,6 +1290,7 @@ async function handleSaveConfig(e) {
   const { error } = await getSb().from('store_settings').upsert(data);
   if (error) { toast('Erro ao salvar: ' + error.message, true); return; }
   toast('Configurações salvas!');
+  await loadConfig();
 }
 
 /* ── Localização da loja ── */

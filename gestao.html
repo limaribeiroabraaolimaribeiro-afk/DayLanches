@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=3">
+  <link rel="stylesheet" href="gestao.css?v=4">
 </head>
 <body>
 
@@ -175,16 +175,9 @@
         <div class="g-card">
           <div class="g-card-head">
             <h2 class="g-card-title">Pagamento</h2>
-            <p class="g-card-desc">Os pagamentos online são processados pela InfinitePay.</p>
+            <p class="g-card-desc">Os pagamentos online são processados automaticamente pela InfinitePay.</p>
           </div>
-          <form id="form-payment" onsubmit="handleSaveConfig(event)">
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">Chave Pix</label><input id="cfg-pix" class="form-input" placeholder="47991559926"></div>
-            </div>
-            <div class="g-card-actions">
-              <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Salvar pagamento</button>
-            </div>
-          </form>
+          <span class="acc-status-badge"><i class="fas fa-circle"></i> Pagamento online configurado</span>
         </div>
 
         <!-- Card: Localização da loja -->
@@ -468,6 +461,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=5"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=12"></script>
+<script src="gestao.js?v=13"></script>
 </body>
 </html>

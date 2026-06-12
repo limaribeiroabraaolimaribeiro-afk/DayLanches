@@ -603,11 +603,11 @@
       <div class="menu-hours-card">
         <div class="menu-hours-title"><i class="fas fa-clock"></i> Horário de atendimento</div>
         <div class="menu-hours-row">
-          <span class="menu-hours-day">Quarta a domingo</span>
-          <span class="menu-hours-time-badge">17:30 – 23:00</span>
+          <span class="menu-hours-day" id="menu-hours-open-day">Quinta a domingo</span>
+          <span class="menu-hours-time-badge" id="menu-hours-time">17:30 – 23:00</span>
         </div>
-        <div class="menu-hours-row">
-          <span class="menu-hours-day">Segunda e terça</span>
+        <div class="menu-hours-row" id="menu-hours-closed-row">
+          <span class="menu-hours-day" id="menu-hours-closed-day">Segunda a quarta</span>
           <span class="menu-hours-closed-badge">Fechado</span>
         </div>
       </div>
@@ -640,7 +640,7 @@
       <div class="closed-modal-icon"><i class="fas fa-store-slash"></i></div>
       <h3 class="closed-modal-title">Loja fechada no momento</h3>
       <p class="closed-modal-text">Seu pedido pode ser montado e enviado, mas o atendimento será feito no próximo horário de funcionamento.</p>
-      <p class="closed-modal-hours"><i class="fas fa-clock"></i> Quarta a domingo, 17:30 às 23:00</p>
+      <p class="closed-modal-hours" id="closed-modal-hours"><i class="fas fa-clock"></i> Quinta a domingo, 17:30 às 23:00</p>
       <div class="closed-modal-btns">
         <button class="btn-secondary" onclick="cancelClosedCheckout()">Cancelar</button>
         <button class="btn-primary"   onclick="confirmClosedCheckout()">Enviar mesmo assim</button>
@@ -654,6 +654,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=6"></script>
-<script src="script.js?v=19"></script>
+<script src="script.js?v=20"></script>
 </body>
 </html>
