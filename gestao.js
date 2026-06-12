@@ -82,9 +82,14 @@ async function handleCreateAccount(e) {
 
   try {
     const { data: codeOk, error: codeError } = await getSb().rpc('validate_admin_activation_code', {
-      input_code: code
+      input_code: code.trim()
     });
-    if (codeError || !codeOk) {
+    if (codeError) {
+      console.error('[Gestão] Erro ao validar código:', codeError);
+      show('create-error', 'Não foi possível validar o código.');
+      return;
+    }
+    if (codeOk !== true) {
       show('create-error', 'Código de segurança inválido.');
       return;
     }
