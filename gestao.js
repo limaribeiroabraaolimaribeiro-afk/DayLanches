@@ -71,12 +71,10 @@ async function handleCreateAccount(e) {
   const email = v('create-email');
   const pwd   = v('create-pwd');
   const pwd2  = v('create-pwd2');
-  const code  = v('create-code').toUpperCase().trim();
 
   hide('create-error');
-  if (pwd !== pwd2)             return show('create-error', 'As senhas não coincidem.');
-  if (pwd.length < 6)           return show('create-error', 'Senha precisa ter ao menos 6 caracteres.');
-  if (code !== ACTIVATION_CODE) return show('create-error', 'Código de ativação inválido.');
+  if (pwd !== pwd2)   return show('create-error', 'As senhas não coincidem.');
+  if (pwd.length < 6) return show('create-error', 'Senha precisa ter ao menos 6 caracteres.');
 
   setLoading('create-btn', true, 'Criando...');
 

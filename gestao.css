@@ -65,6 +65,10 @@ a { text-decoration: none; color: inherit; }
   margin-bottom: 24px;
 }
 
+.auth-card form .form-group:not(:first-of-type) { margin-top: 16px; }
+.auth-card form .form-error { margin-top: 12px; }
+.auth-card form .btn-primary.btn-full { margin-top: 24px; }
+
 .btn-link-block {
   display: block;
   width: 100%;

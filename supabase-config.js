@@ -1,8 +1,6 @@
 const SUPABASE_URL      = "https://gbrdjnbrstnqgarefcdm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_SE5dXWKNqt0ABlnzantPrA_Jtns5Cvn";
 
-const ACTIVATION_CODE = "DAY-LANCHES-2026";
-
 /* URL do Cloudflare Worker (backend serverless) */
 const WORKER_URL = "https://day-lanches-worker.limaribeiroabraaolimaribeiro.workers.dev";
 
