@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=11">
+  <link rel="stylesheet" href="gestao.css?v=12">
 </head>
 <body>
 
@@ -250,6 +250,19 @@
             <p class="g-card-desc">Os pagamentos online são processados automaticamente pela InfinitePay.</p>
           </div>
           <span class="acc-status-badge"><i class="fas fa-circle"></i> Pagamento online configurado</span>
+        </div>
+
+        <!-- Card: Impressão de comandas -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title">Impressão de comandas</h2>
+            <p class="g-card-desc">Controla a impressão automática da comanda quando chega um pedido novo.</p>
+          </div>
+          <label class="cfg-checkbox-row">
+            <input type="checkbox" id="chk-auto-print-receipt" onchange="toggleAutoPrintReceipt(this.checked)">
+            Abrir impressão da comanda automaticamente ao chegar pedido novo
+          </label>
+          <p class="g-card-desc">Funciona apenas com o som de pedidos ativado. O navegador pode bloquear a abertura automática; se isso ocorrer, clique em "Imprimir comanda" no pedido.</p>
         </div>
 
         <!-- Card: Localização da loja -->
@@ -537,7 +550,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=23"></script>
+<script src="gestao.js?v=24"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

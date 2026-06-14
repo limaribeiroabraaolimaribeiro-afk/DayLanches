@@ -37,6 +37,8 @@ const gs = {
   seenOrdersInitialized: false,
   pollingStarted: false,
   selectedOrderIds: new Set(),
+  printedOrderIds: new Set(),
+  autoPrintEnabled: false,
   salesFilter: { type: 'today', month: '', year: '', start: '', end: '' },
 };
 
@@ -879,6 +881,7 @@ async function loadOrders() {
       .limit(500);
     if (error) throw error;
     gs.orders = data || [];
+    gs.orders.forEach(o => { if (o.printed_at) gs.printedOrderIds.add(o.id); });
   } catch (e) {
     gs.orders = [];
     console.warn('Erro ao carregar pedidos:', e);
@@ -1037,6 +1040,7 @@ function orderCard(o) {
             <span class="oc-num">#${esc(num)}</span>
           </div>
           <span class="oc-date">${date}</span>
+          ${(o.printed_at || gs.printedOrderIds.has(o.id)) ? '<span class="oc-printed-badge"><i class="fas fa-check"></i> Comanda impressa</span>' : ''}
         </div>
         <span class="oc-badge ${stClass[o.status]||''}">${statusLabels[o.status]||o.status}</span>
       </div>
@@ -1143,7 +1147,12 @@ function orderCard(o) {
         <button class="btn-oc-toggle" id="ocdet-btn-${o.id}" onclick="toggleOrderDetails('${o.id}')">
           <i class="fas fa-chevron-down"></i> Ver detalhes
         </button>
-        <div class="oc-status-btns">${statusBtns(o)}</div>
+        <div class="oc-footer-actions">
+          ${o.status!=='cancelado'?`<button class="btn-oc-print" onclick="printOrderReceipt('${o.id}')">
+            <i class="fas fa-receipt"></i> ${(o.printed_at || gs.printedOrderIds.has(o.id))?'Reimprimir comanda':'Imprimir comanda'}
+          </button>`:''}
+          <div class="oc-status-btns">${statusBtns(o)}</div>
+        </div>
       </div>
 
     </div>`;
@@ -1222,6 +1231,7 @@ function filterOrders(filter, btn) {
 ══════════════════════════════════════ */
 const SEEN_ORDERS_KEY   = 'dl_seen_order_ids';
 const SOUND_ENABLED_KEY = 'dl_order_sound_enabled';
+const AUTO_PRINT_KEY    = 'dl_auto_print_receipt';
 
 function loadSeenOrderIds() {
   try {
@@ -1269,6 +1279,14 @@ function disableOrderSound() {
 function toggleOrderSound() {
   if (gs.soundEnabled) disableOrderSound();
   else enableOrderSound();
+}
+
+function toggleAutoPrintReceipt(checked) {
+  gs.autoPrintEnabled = checked;
+  try { localStorage.setItem(AUTO_PRINT_KEY, checked ? '1' : '0'); } catch {}
+  if (checked && !gs.soundEnabled) {
+    toast('Ative o som de pedidos para a impressão automática funcionar.', true);
+  }
 }
 
 /* Apito de sistema de lanchonete via Web Audio API (sem arquivo externo), 3 toques */
@@ -1339,7 +1357,17 @@ async function checkForNewOrders() {
 
       if (gs.soundEnabled) {
         playNewOrderSound();
-        toast(newOnes.length > 1 ? `${newOnes.length} novos pedidos recebidos!` : 'Novo pedido recebido!');
+        toast(newOnes.length > 1
+          ? `${newOnes.length} novos pedidos recebidos! Imprima a comanda.`
+          : 'Novo pedido recebido! Imprima a comanda.');
+
+        if (gs.autoPrintEnabled) {
+          newOnes.forEach(o => {
+            if (o.status === 'cancelado') return;
+            const ok = printOrderReceipt(o.id);
+            if (!ok) toast('Clique em "Imprimir comanda" para imprimir este pedido.', true);
+          });
+        }
       } else {
         toast('Novo pedido recebido! Clique em "Ativar som de pedidos" para receber alertas.');
       }
@@ -1399,70 +1427,141 @@ function printSelectedOrders() {
     return;
   }
 
-  const blocks = orders.map(buildDeliveryPrintBlock).join('');
-  const totalGeral = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+  if (!openReceiptWindow(orders)) return;
+  orders.forEach(markOrderPrinted);
+}
 
-  const html = `<!DOCTYPE html>
+/* ══════════════════════════════════════
+   COMANDA INDIVIDUAL DO PEDIDO
+══════════════════════════════════════ */
+function printOrderReceipt(orderId) {
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return false;
+  if (!openReceiptWindow([o])) return false;
+  markOrderPrinted(o);
+  return true;
+}
+
+function openReceiptWindow(orders) {
+  const html = buildReceiptHtml(orders);
+  const win = window.open('', '_blank');
+  if (!win) {
+    toast('Não foi possível abrir a comanda. Clique em "Imprimir comanda" para imprimir este pedido.', true);
+    return false;
+  }
+  win.document.write(html);
+  win.document.close();
+  return true;
+}
+
+async function markOrderPrinted(o) {
+  const already = gs.printedOrderIds.has(o.id);
+  gs.printedOrderIds.add(o.id);
+  if (!already && gs.section === 'pedidos') renderOrders();
+  try {
+    const nowIso = new Date().toISOString();
+    o.printed_at = nowIso;
+    await getSb().from('orders').update({ printed_at: nowIso }).eq('id', o.id);
+  } catch (e) {
+    console.warn('Erro ao marcar comanda como impressa:', e);
+  }
+}
+
+function buildReceiptHtml(orders) {
+  const blocks = orders.map(buildReceiptBlock).join('');
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Day Lanches — Pedidos para entrega</title>
+<title>Day Lanches — Comanda do pedido</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; background: #fff; padding: 24px; max-width: 700px; margin: 0 auto; }
-  h1 { font-size: 1.4rem; margin-bottom: 16px; }
-  .print-order { border: 1px solid #ccc; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; page-break-inside: avoid; }
-  .print-order h2 { font-size: 1.05rem; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
-  .print-order p { margin: 3px 0; font-size: .9rem; }
-  .print-items { margin-top: 8px; font-size: .9rem; }
-  .print-items div { margin: 2px 0 2px 12px; }
-  .print-summary { margin-top: 20px; padding-top: 12px; border-top: 2px solid #1a1a1a; font-weight: 700; }
-  .print-summary p { margin: 4px 0; }
-  .print-btn { margin-top: 20px; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; }
-  @media print { .no-print { display: none; } }
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; margin: 0; padding: 6mm; }
+  .receipt { width: 80mm; max-width: 100%; margin: 0 auto 16px; padding: 8mm; font-size: 16px; }
+  .receipt h1, .receipt h2 { text-align: center; margin: 0 0 8px; }
+  .receipt h1 { font-size: 1.3rem; letter-spacing: .04em; }
+  .receipt h2 { font-size: 1rem; }
+  .receipt-section { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; }
+  .receipt-section p { margin: 3px 0; }
+  .receipt-items { font-size: 15px; line-height: 1.4; }
+  .receipt-item-row { margin: 2px 0; }
+  .receipt-opt { margin-left: 12px; font-size: .85em; color: #333; }
+  .receipt-total { font-size: 18px; font-weight: 900; text-align: center; }
+  .receipt-tag { text-align: center; font-size: 1.05rem; font-weight: 900; border: 2px solid #000; border-radius: 4px; padding: 4px; margin: 0; }
+  .receipt-footer { text-align: center; font-size: .85rem; font-style: italic; }
+  .print-btn { display: block; margin: 16px auto; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; }
+  .receipt-page { page-break-after: always; }
+  .receipt-page:last-child { page-break-after: auto; }
+  @media print {
+    body { background: #fff; }
+    .no-print { display: none !important; }
+  }
 </style>
 </head>
 <body>
-  <h1>Day Lanches — Pedidos para entrega</h1>
   ${blocks}
-  <div class="print-summary">
-    <p>Total de pedidos impressos: ${orders.length}</p>
-    <p>Total geral: R$ ${fmt(totalGeral)}</p>
-  </div>
   <button class="print-btn no-print" onclick="window.print()"><i></i>Imprimir</button>
 </body>
 </html>`;
-
-  const win = window.open('', '_blank');
-  if (!win) { toast('Não foi possível abrir a tela de impressão. Verifique o bloqueador de pop-ups.', true); return; }
-  win.document.write(html);
-  win.document.close();
 }
 
-function buildDeliveryPrintBlock(o) {
+function buildReceiptBlock(o) {
   const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items || '[]') : []);
   const loc   = o.location && typeof o.location === 'object' ? o.location : null;
   const psInfo = getPaymentStatusLabel(o);
-  const time  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const dateTime = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const isPaid = isPaidOrder(o);
+  const deliveryTag = o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA';
+
   const itemsHtml = items.length
-    ? items.map(i => `<div>${i.qty}x ${esc(i.name)}</div>`).join('')
+    ? items.map(i => {
+        const opts = (i.options||[]).map(og => `<div class="receipt-opt">${esc(og.groupTitle)}: ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</div>`).join('');
+        const itemNote = i.notes ? `<div class="receipt-opt">Obs: ${esc(i.notes)}</div>` : '';
+        return `<div class="receipt-item-row">${i.qty}x ${esc(i.name)}</div>${opts}${itemNote}`;
+      }).join('')
     : '<div>—</div>';
-  const locText = loc?.mapsLink || loc?.routeLink || '—';
+
+  let locHtml;
+  if (loc?.mapsLink) locHtml = esc(loc.mapsLink);
+  else if (loc?.routeLink) locHtml = esc(loc.routeLink);
+  else if (o.address) locHtml = esc(o.address);
+  else locHtml = 'Localização enviada pelo cliente';
 
   return `
-  <div class="print-order">
-    <h2>Pedido #${esc(num)}</h2>
-    <p><strong>Horário:</strong> ${time}</p>
-    <p><strong>Cliente:</strong> ${esc(o.customer_name || '—')}</p>
-    <p><strong>Telefone:</strong> ${esc(o.customer_phone || '—')}</p>
-    <p><strong>Entrega:</strong> ${o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega'}</p>
-    <p><strong>Pagamento:</strong> ${esc(getPaymentLabel(o))}</p>
-    <p><strong>Status pagamento:</strong> ${psInfo ? esc(psInfo.text) : '—'}</p>
-    <p><strong>Total:</strong> R$ ${fmt(o.total || 0)}</p>
-    <div class="print-items"><strong>Itens:</strong>${itemsHtml}</div>
-    ${o.notes ? `<p><strong>Observação:</strong> ${esc(o.notes)}</p>` : ''}
-    <p><strong>Localização:</strong> ${esc(locText)}</p>
+  <div class="receipt receipt-page">
+    <h1>DAY LANCHES</h1>
+    <h2>COMANDA DO PEDIDO</h2>
+    <div class="receipt-section">
+      <p><strong>Pedido:</strong> #${esc(num)}</p>
+      <p><strong>Data/Hora:</strong> ${dateTime}</p>
+    </div>
+    <div class="receipt-section">
+      <p><strong>Cliente:</strong><br>${esc(o.customer_name || '—')}</p>
+      <p><strong>Telefone/WhatsApp:</strong><br>${esc(o.customer_phone || '—')}</p>
+    </div>
+    <div class="receipt-section">
+      <p class="receipt-tag">${deliveryTag}</p>
+    </div>
+    <div class="receipt-section">
+      <p><strong>Pagamento:</strong> ${esc(getPaymentLabel(o))}</p>
+      <p><strong>Status do pagamento:</strong> ${psInfo ? esc(psInfo.text) : '—'}</p>
+      <p class="receipt-tag">${isPaid ? 'PAGO' : 'PAGAMENTO PENDENTE'}</p>
+    </div>
+    <div class="receipt-section receipt-total">
+      <p>Total: R$ ${fmt(o.total || 0)}</p>
+    </div>
+    <div class="receipt-section receipt-items">
+      <p><strong>Itens:</strong></p>
+      ${itemsHtml}
+    </div>
+    ${o.notes ? `<div class="receipt-section"><p><strong>Observação do cliente:</strong><br>${esc(o.notes)}</p></div>` : ''}
+    <div class="receipt-section">
+      <p><strong>Localização/Entrega:</strong><br>${locHtml}</p>
+    </div>
+    <div class="receipt-section receipt-footer">
+      <p>Grampear esta comanda junto ao pedido.</p>
+    </div>
   </div>`;
 }
 
@@ -2298,6 +2397,11 @@ document.addEventListener('DOMContentLoaded', () => {
     try { gs.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
   }
   updateSoundBtn();
+
+  /* Impressão automática de comanda em novo pedido */
+  gs.autoPrintEnabled = localStorage.getItem(AUTO_PRINT_KEY) === '1';
+  const autoPrintChk = elid('chk-auto-print-receipt');
+  if (autoPrintChk) autoPrintChk.checked = gs.autoPrintEnabled;
 
   const refreshOrdersBtn = elid('refresh-orders-btn');
   if (refreshOrdersBtn) {
