@@ -1697,13 +1697,39 @@ function getFilteredSalesOrders() {
 
 function setSalesFilter(type, value) {
   gs.salesFilter.type = type;
-  if (type === 'pickMonth') gs.salesFilter.month = value ?? elid('sales-pick-month')?.value ?? '';
+  if (type === 'pickMonth') {
+    const m = elid('sales-pick-month-select')?.value || '';
+    const y = elid('sales-pick-year-select')?.value || '';
+    gs.salesFilter.month = (m && y) ? `${y}-${m}` : '';
+  }
   if (type === 'pickYear')  gs.salesFilter.year  = value ?? elid('sales-pick-year')?.value  ?? '';
   if (type === 'range') {
     gs.salesFilter.start = elid('sales-range-start')?.value || '';
     gs.salesFilter.end   = elid('sales-range-end')?.value   || '';
   }
   renderSales();
+}
+
+/* Preenche os selects de mês e ano do filtro "Escolher mês" */
+function populateSalesMonthYearSelects() {
+  const monthSel = elid('sales-pick-month-select');
+  const yearSel  = elid('sales-pick-year-select');
+  if (!monthSel || !yearSel) return;
+
+  MONTH_NAMES.forEach((name, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i + 1).padStart(2, '0');
+    opt.textContent = name;
+    monthSel.appendChild(opt);
+  });
+
+  const currentYear = new Date().getFullYear();
+  for (let y = currentYear; y >= currentYear - 5; y--) {
+    const opt = document.createElement('option');
+    opt.value = String(y);
+    opt.textContent = String(y);
+    yearSel.appendChild(opt);
+  }
 }
 
 function renderSalesFilterUI() {
@@ -1763,7 +1789,7 @@ function csvEscape(val) {
 
 function exportSalesCSV() {
   const orders = getFilteredSalesOrders();
-  if (!orders.length) { toast('Nenhuma venda no período selecionado.', true); return; }
+  if (!orders.length) { toast('Nenhuma venda para exportar.', true); return; }
 
   const header = ['data','pedido','cliente','telefone','pagamento','status_pagamento','total','status_pedido'];
   const rows = orders.map(o => {
@@ -1782,7 +1808,7 @@ function exportSalesCSV() {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  a.download = `vendas_day_lanches_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `vendas-day-lanches-${new Date().toISOString().slice(0,10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -2373,6 +2399,8 @@ function togglePwd(inputId, btn) {
 ══════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[Gestão] supabase-config.js carregado:', !!window.supabaseClient);
+
+  populateSalesMonthYearSelects();
 
   /* Verifica se Supabase está inicializado */
   if (!window.supabaseClient) {

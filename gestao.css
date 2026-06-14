@@ -859,6 +859,13 @@ a { text-decoration: none; color: inherit; }
 @media (min-width: 640px) { .sales-filter-custom { grid-template-columns: repeat(4, 1fr); } }
 .sales-filter-custom .form-input { height: 40px; }
 
+.sales-month-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.sales-month-picker .form-input { height: 40px; }
+
 .sales-export-actions {
   display: flex;
   flex-wrap: wrap;
