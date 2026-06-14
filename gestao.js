@@ -1427,46 +1427,61 @@ function buildReceiptHtml(orders) {
 
   .receipt {
     width: 80mm; max-width: 100%; margin: 0 auto 16px;
-    padding: 6mm; font-size: 15px;
-    border: 1px solid #ddd; border-radius: 8px;
+    font-size: 15px;
+    border: 1px solid #ddd; border-radius: 10px;
+    overflow: hidden;
   }
+  .receipt-body { padding: 0 6mm 6mm; }
 
-  .receipt-header { text-align: center; padding-bottom: 8px; border-bottom: 3px solid #FF6B00; margin-bottom: 10px; }
-  .receipt-logo { width: 56px; height: 56px; object-fit: contain; margin-bottom: 4px; }
-  .receipt-brand { font-size: 1.3rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; margin: 0; }
-  .receipt-subtitle { font-size: .78rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #FF6B00; margin: 2px 0 0; }
+  .receipt-header {
+    text-align: center; padding: 10px 6mm 12px;
+    background: #1a1a1a; color: #fff;
+    border-bottom: 4px solid #FF6B00;
+  }
+  .receipt-logo { width: 60px; height: 60px; object-fit: contain; margin-bottom: 6px; border-radius: 10px; background: #fff; padding: 4px; }
+  .receipt-brand { font-size: 1.5rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; margin: 0; color: #fff; }
+  .receipt-subtitle { font-size: .72rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #FF6B00; margin: 3px 0 0; }
 
-  .receipt-section { border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 8px; }
-  .receipt-section:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+  .receipt-section { border-top: 1px dashed #ddd; padding-top: 10px; margin-top: 10px; }
+  .receipt-section:first-of-type { border-top: none; padding-top: 12px; margin-top: 0; }
   .receipt-section p { margin: 3px 0; }
 
-  .receipt-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #888; }
+  .receipt-row { display: flex; justify-content: space-between; gap: 8px; }
+  .receipt-row > div { flex: 1; }
+
+  .receipt-label { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #999; }
   .receipt-value { font-size: .95rem; font-weight: 700; color: #1a1a1a; }
 
   .receipt-tag {
-    text-align: center; font-size: .95rem; font-weight: 900;
-    letter-spacing: .1em; text-transform: uppercase;
-    border: 2px solid #FF6B00; color: #FF6B00;
-    border-radius: 6px; padding: 6px; margin: 0;
+    text-align: center; font-size: 1.05rem; font-weight: 900;
+    letter-spacing: .15em; text-transform: uppercase;
+    background: #FF6B00; color: #fff;
+    border-radius: 6px; padding: 8px; margin: 0;
   }
 
   .receipt-seal {
-    text-align: center; font-size: .85rem; font-weight: 900;
-    letter-spacing: .08em; text-transform: uppercase;
-    border-radius: 6px; padding: 5px; margin: 6px 0 0;
+    text-align: center; font-size: .9rem; font-weight: 900;
+    letter-spacing: .1em; text-transform: uppercase;
+    border-radius: 6px; padding: 6px; margin: 8px 0 0;
   }
-  .receipt-seal.is-paid    { border: 2px solid #16a34a; color: #16a34a; }
-  .receipt-seal.is-pending { border: 2px solid #DC2626; color: #DC2626; }
+  .receipt-seal.is-paid    { background: #16a34a; color: #fff; }
+  .receipt-seal.is-pending { background: #DC2626; color: #fff; }
 
-  .receipt-total-box { text-align: center; border: 2px solid #1a1a1a; border-radius: 6px; padding: 8px; margin-top: 8px; }
-  .receipt-total-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: #888; }
-  .receipt-total-value { font-size: 1.5rem; font-weight: 900; color: #1a1a1a; }
+  .receipt-total-box {
+    text-align: center; background: #1a1a1a; color: #fff;
+    border-radius: 8px; padding: 10px; margin-top: 4px;
+  }
+  .receipt-total-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; color: #FF6B00; }
+  .receipt-total-value { font-size: 1.7rem; font-weight: 900; color: #fff; margin-top: 2px; }
 
   .receipt-items { font-size: .92rem; line-height: 1.45; }
-  .receipt-item-row { font-weight: 700; margin-top: 4px; }
+  .receipt-item-row { font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f0f0f0; }
+  .receipt-item-row:first-child { margin-top: 0; padding-top: 0; border-top: none; }
   .receipt-opt { margin-left: 12px; font-size: .85em; color: #555; }
 
-  .receipt-footer { text-align: center; font-size: .78rem; color: #888; font-style: italic; }
+  .receipt-footer { text-align: center; }
+  .receipt-footer p { font-size: .75rem; color: #888; font-style: italic; margin: 2px 0; }
+  .receipt-footer .receipt-tagline { font-size: .72rem; font-weight: 800; color: #FF6B00; letter-spacing: .04em; font-style: normal; text-transform: uppercase; margin-top: 4px; }
 
   .print-btn { display: block; margin: 16px auto; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; }
 
@@ -1476,6 +1491,11 @@ function buildReceiptHtml(orders) {
   @media print {
     body { background: #fff; padding: 0; }
     .receipt { border: 1px solid #ccc; }
+    .receipt-header { background: #1a1a1a !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .receipt-tag { background: #FF6B00 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .receipt-seal.is-paid { background: #16a34a !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .receipt-seal.is-pending { background: #DC2626 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .receipt-total-box { background: #1a1a1a !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .no-print { display: none !important; }
   }
 </style>
@@ -1517,9 +1537,12 @@ function buildReceiptBlock(o, logoUrl) {
       <p class="receipt-brand">Day Lanches</p>
       <p class="receipt-subtitle">Comanda do pedido</p>
     </div>
+    <div class="receipt-body">
     <div class="receipt-section">
-      <p><span class="receipt-label">Pedido</span><br><span class="receipt-value">#${esc(num)}</span></p>
-      <p><span class="receipt-label">Data/Hora</span><br><span class="receipt-value">${dateTime}</span></p>
+      <div class="receipt-row">
+        <div><span class="receipt-label">Pedido</span><br><span class="receipt-value">#${esc(num)}</span></div>
+        <div><span class="receipt-label">Data/Hora</span><br><span class="receipt-value">${dateTime}</span></div>
+      </div>
     </div>
     <div class="receipt-section">
       <p><span class="receipt-label">Cliente</span><br><span class="receipt-value">${esc(o.customer_name || '—')}</span></p>
@@ -1529,8 +1552,10 @@ function buildReceiptBlock(o, logoUrl) {
       <p class="receipt-tag">${deliveryTag}</p>
     </div>
     <div class="receipt-section">
-      <p><span class="receipt-label">Pagamento</span><br><span class="receipt-value">${esc(getPaymentLabel(o))}</span></p>
-      <p><span class="receipt-label">Status do pagamento</span><br><span class="receipt-value">${psInfo ? esc(psInfo.text) : '—'}</span></p>
+      <div class="receipt-row">
+        <div><span class="receipt-label">Pagamento</span><br><span class="receipt-value">${esc(getPaymentLabel(o))}</span></div>
+        <div><span class="receipt-label">Status</span><br><span class="receipt-value">${psInfo ? esc(psInfo.text) : '—'}</span></div>
+      </div>
       <p class="receipt-seal ${isPaid ? 'is-paid' : 'is-pending'}">${isPaid ? 'Pago' : 'Pagamento pendente'}</p>
     </div>
     <div class="receipt-section">
@@ -1550,6 +1575,8 @@ function buildReceiptBlock(o, logoUrl) {
     </div>
     <div class="receipt-section receipt-footer">
       <p>Grampear esta comanda junto ao pedido.</p>
+      <p class="receipt-tagline">Day Lanches — sabor que marca</p>
+    </div>
     </div>
   </div>`;
 }
