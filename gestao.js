@@ -1108,6 +1108,7 @@ function orderCard(o) {
 
             ${loc?`<div class="order-detail-box">
               <div class="order-detail-box-title"><i class="fas fa-map-location-dot"></i> Localização</div>
+              ${loc.address?`<p class="order-address-text">${esc(loc.address)}</p>`:''}
               <div class="order-actions-grid">
                 ${loc.mapsLink  ?`<a class="btn-oc-map"   href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>`:''}
                 ${loc.routeLink ?`<a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>`:''}
@@ -1474,6 +1475,8 @@ function buildReceiptHtml(orders) {
   .receipt-total-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; color: #FF6B00; }
   .receipt-total-value { font-size: 1.7rem; font-weight: 900; color: #fff; margin-top: 2px; }
 
+  .receipt-location-note { font-size: .75rem; color: #999; font-style: italic; margin-top: 2px; }
+
   .receipt-items { font-size: .92rem; line-height: 1.45; }
   .receipt-item-row { font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f0f0f0; }
   .receipt-item-row:first-child { margin-top: 0; padding-top: 0; border-top: none; }
@@ -1524,11 +1527,10 @@ function buildReceiptBlock(o, logoUrl) {
       }).join('')
     : '<div>—</div>';
 
-  let locHtml;
-  if (loc?.mapsLink) locHtml = esc(loc.mapsLink);
-  else if (loc?.routeLink) locHtml = esc(loc.routeLink);
-  else if (o.address) locHtml = esc(o.address);
-  else locHtml = 'Localização enviada pelo cliente';
+  const hasWrittenAddress = loc?.address && loc.address !== 'Localização enviada pelo cliente';
+  const locHtml = hasWrittenAddress
+    ? `<p class="receipt-value">${esc(loc.address)}</p><p class="receipt-location-note">Referência aproximada pela localização enviada.</p>`
+    : `<p class="receipt-value">Localização enviada pelo cliente.</p><p class="receipt-location-note">Consultar no mapa pela Gestão.</p>`;
 
   return `
   <div class="receipt receipt-page">
@@ -1569,10 +1571,10 @@ function buildReceiptBlock(o, logoUrl) {
       ${itemsHtml}
     </div>
     ${o.notes ? `<div class="receipt-section"><p class="receipt-label">Observação do cliente</p><p class="receipt-value">${esc(o.notes)}</p></div>` : ''}
-    <div class="receipt-section">
+    ${o.delivery_type !== 'pickup' ? `<div class="receipt-section">
       <p class="receipt-label">Localização/Entrega</p>
-      <p class="receipt-value">${locHtml}</p>
-    </div>
+      ${locHtml}
+    </div>` : ''}
     <div class="receipt-section receipt-footer">
       <p>Grampear esta comanda junto ao pedido.</p>
       <p class="receipt-tagline">Day Lanches — sabor que marca</p>

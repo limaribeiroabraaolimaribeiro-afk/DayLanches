@@ -1262,6 +1262,13 @@ a { text-decoration: none; color: inherit; }
 .geo-fee-info strong { color: var(--primary-dark); }
 .geo-fee-info i { margin-right: 4px; color: var(--primary); }
 
+.geo-address-info {
+  margin: 10px 0 0;
+  font-size: .83rem;
+  color: var(--text-med);
+}
+.geo-address-info i { margin-right: 4px; color: var(--primary); }
+
 /* ═══════════════════════════════════════════
    BOTÕES DE FORMA DE PAGAMENTO
 ═══════════════════════════════════════════ */

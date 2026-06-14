@@ -560,7 +560,7 @@ const state = {
   form: {
     name: '', phone: '', notes: '', troco: '',
   },
-  geo: { lat: null, lon: null, accuracy: null, link: '', routeLink: '', distanceKm: null, straightDistanceKm: null },
+  geo: { lat: null, lon: null, accuracy: null, link: '', routeLink: '', address: '', distanceKm: null, straightDistanceKm: null },
   payMethod:   '',
   payStatus:   'idle',     /* idle | waiting | confirmed | production */
   couponApplied: false,
@@ -711,7 +711,7 @@ function navigateTo(page) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   if (page === 'delivery') {
-    state.geo = { lat: null, lon: null, link: '', routeLink: '', distanceKm: null, straightDistanceKm: null };
+    state.geo = { lat: null, lon: null, link: '', routeLink: '', address: '', distanceKm: null, straightDistanceKm: null };
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
     const stat = el('geo-status');
@@ -754,14 +754,14 @@ function requestGeoLocation() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obtendo localização...'; }
 
   navigator.geolocation.getCurrentPosition(
-    pos => {
+    async pos => {
       const lat  = pos.coords.latitude.toFixed(6);
       const lon  = pos.coords.longitude.toFixed(6);
       const link = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
       const cfg  = storeConfig || {};
       const routeLink = `https://www.google.com/maps/dir/?api=1&origin=${cfg.store_lat},${cfg.store_lon}&destination=${lat},${lon}`;
 
-      state.geo = { lat, lon, accuracy: pos.coords.accuracy || null, link, routeLink, straightDistanceKm: null, distanceKm: null };
+      state.geo = { lat, lon, accuracy: pos.coords.accuracy || null, link, routeLink, address: '', straightDistanceKm: null, distanceKm: null };
       const fee       = calculateDeliveryFeeByKm();
       const estimated = state.geo.distanceKm || 0;
 
@@ -771,18 +771,36 @@ function requestGeoLocation() {
         stat.innerHTML = `
           <div class="geo-success">
             <i class="fas fa-check-circle"></i>
-            <span>Localização adicionada com sucesso!</span>
+            <span>Localização obtida</span>
           </div>
           <div class="geo-fee-info">
             <span><i class="fas fa-route"></i> Distância aproximada: <strong>${estimated.toFixed(1).replace('.', ',')} km</strong></span>
             <span><i class="fas fa-motorcycle"></i> Frete: <strong>R$ ${fmt(fee)}</strong></span>
           </div>
+          <p id="geo-address-info" class="geo-address-info"><i class="fas fa-spinner fa-spin"></i> Buscando endereço aproximado…</p>
           <a href="${link}" target="_blank" rel="noopener" class="geo-map-link">
             <i class="fas fa-map-location-dot"></i> Abrir no mapa
           </a>`;
       }
       updateCartBar();
       showToast('Localização adicionada com sucesso!');
+
+      /* Reverse geocoding: converte coordenadas em endereço escrito */
+      try {
+        const res  = await fetch(`${WORKER_URL}/reverse-geocode?lat=${lat}&lon=${lon}`);
+        const data = await res.json();
+        state.geo.address = data?.address || '';
+      } catch (err) {
+        console.error('[DayLanches] Erro no reverse geocode:', err);
+        state.geo.address = '';
+      }
+
+      const addrInfo = el('geo-address-info');
+      if (addrInfo) {
+        addrInfo.innerHTML = state.geo.address
+          ? `<i class="fas fa-location-dot"></i> Endereço aproximado: ${state.geo.address}`
+          : `<i class="fas fa-circle-info"></i> Localização obtida. Endereço aproximado indisponível.`;
+      }
     },
     err => {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; }
@@ -839,6 +857,7 @@ async function handleOnlinePayment(method) {
       accuracy:  state.geo.accuracy || null,
       mapsLink:  state.geo.link,
       routeLink: state.geo.routeLink,
+      address:   state.geo.address || 'Localização enviada pelo cliente',
     } : null,
     status:           'aguardando_pagamento',
     whatsapp_opt_in:  false,
@@ -1559,7 +1578,8 @@ function updatePaymentPage() {
   if (state.deliveryType === 'pickup') {
     if (addrTxt) addrTxt.textContent = 'Retirada no local — R. Faustino Martini, 160, Luiz Alves - SC';
   } else if (state.geo.lat) {
-    if (addrTxt) addrTxt.innerHTML = `<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Localização enviada — Abrir no mapa</a>`;
+    const addrLine = state.geo.address ? `${esc(state.geo.address)}<br>` : '';
+    if (addrTxt) addrTxt.innerHTML = `${addrLine}<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Abrir no mapa</a>`;
   } else {
     if (addrTxt) addrTxt.textContent = 'Localização não informada';
   }
@@ -1673,6 +1693,7 @@ async function sendWhatsApp() {
       accuracy:    state.geo.accuracy || null,
       mapsLink:    state.geo.link,
       routeLink:   state.geo.routeLink,
+      address:     state.geo.address || 'Localização enviada pelo cliente',
     } : null,
     status:          'novo',
     whatsapp_opt_in: false,

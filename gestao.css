@@ -693,6 +693,13 @@ a { text-decoration: none; color: inherit; }
   gap: 5px;
 }
 
+.order-address-text {
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
 /* Produtos */
 .order-products-list {
   display: flex;

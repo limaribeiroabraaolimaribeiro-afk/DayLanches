@@ -5,6 +5,7 @@
      POST /create-payment            → cria checkout InfinitePay
      POST /infinitepay/webhook       → confirma pagamento
      GET  /order-tracking?token=     → dados públicos do pedido (página acompanhar)
+     GET  /reverse-geocode?lat=&lon= → converte coordenadas em endereço
      GET  /health                    → health check
    ───────────────────────────────────────────────────────── */
 
@@ -72,6 +73,10 @@ export default {
 
     if (pathname === '/order-tracking' && request.method === 'GET') {
       return handleOrderTracking(url, env);
+    }
+
+    if (pathname === '/reverse-geocode' && request.method === 'GET') {
+      return handleReverseGeocode(url, env);
     }
 
     return json({ error: 'Not found' }, 404);
@@ -237,4 +242,58 @@ async function handleOrderTracking(url, env) {
     created_at:     o.created_at,
     items_summary:  items.map(i => ({ name: i.name, qty: i.qty, total: i.total })),
   });
+}
+
+/* ══════════════════════════════════════════════════════════
+   GET /reverse-geocode?lat=&lon=  → endereço escrito a partir de coordenadas
+══════════════════════════════════════════════════════════ */
+const BR_STATE_ABBR = {
+  'acre':'AC','alagoas':'AL','amapá':'AP','amapa':'AP','amazonas':'AM','bahia':'BA','ceará':'CE','ceara':'CE',
+  'distrito federal':'DF','espírito santo':'ES','espirito santo':'ES','goiás':'GO','goias':'GO','maranhão':'MA','maranhao':'MA',
+  'mato grosso':'MT','mato grosso do sul':'MS','minas gerais':'MG','pará':'PA','para':'PA','paraíba':'PB','paraiba':'PB',
+  'paraná':'PR','parana':'PR','pernambuco':'PE','piauí':'PI','piaui':'PI','rio de janeiro':'RJ','rio grande do norte':'RN',
+  'rio grande do sul':'RS','rondônia':'RO','rondonia':'RO','roraima':'RR','santa catarina':'SC','são paulo':'SP','sao paulo':'SP',
+  'sergipe':'SE','tocantins':'TO',
+};
+
+function formatAddressFromNominatim(addr) {
+  if (!addr) return null;
+
+  const street = addr.road || addr.pedestrian || addr.street || '';
+  const neighbourhood = addr.suburb || addr.neighbourhood || addr.quarter || '';
+  const city = addr.city || addr.town || addr.village || addr.municipality || '';
+  const stateName = String(addr.state || '').toLowerCase();
+  const stateAbbr = BR_STATE_ABBR[stateName] || addr.state || '';
+
+  const parts = [];
+  if (street) parts.push(street);
+  if (neighbourhood) parts.push(neighbourhood);
+  if (city) parts.push(stateAbbr ? `${city} - ${stateAbbr}` : city);
+  else if (stateAbbr) parts.push(stateAbbr);
+
+  return parts.length ? parts.join(', ') : null;
+}
+
+async function handleReverseGeocode(url, env) {
+  const lat = url.searchParams.get('lat');
+  const lon = url.searchParams.get('lon');
+
+  if (!lat || !lon) return json({ error: 'lat e lon são obrigatórios' }, 400);
+
+  try {
+    const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1&accept-language=pt-BR`;
+    const res = await fetch(geoUrl, {
+      headers: { 'User-Agent': 'DayLanchesApp/1.0 (contato@daylanches.com.br)' },
+    });
+
+    if (!res.ok) return json({ address: null });
+
+    const data = await res.json();
+    const address = formatAddressFromNominatim(data.address);
+
+    return json({ address: address || null, raw: data.address || {} });
+  } catch (err) {
+    console.error('[DayLanches] Erro no reverse geocode:', err);
+    return json({ address: null });
+  }
 }
