@@ -36,7 +36,6 @@ const gs = {
   newOrderIds: new Set(),
   seenOrdersInitialized: false,
   pollingStarted: false,
-  selectedOrderIds: new Set(),
   printedOrderIds: new Set(),
   autoPrintEnabled: false,
   salesFilter: { type: 'today', month: '', year: '', start: '', end: '' },
@@ -1030,15 +1029,7 @@ function orderCard(o) {
       <!-- CABEÇALHO -->
       <div class="oc-head">
         <div class="oc-head-left">
-          <div class="oc-head-top">
-            <label class="oc-select" title="Selecionar para impressão">
-              <input type="checkbox" class="oc-select-checkbox" data-order-id="${o.id}"
-                ${gs.selectedOrderIds.has(o.id)?'checked':''}
-                ${o.status==='cancelado'?'disabled':''}
-                onchange="toggleOrderSelection('${o.id}', this.checked)">
-            </label>
-            <span class="oc-num">#${esc(num)}</span>
-          </div>
+          <span class="oc-num">#${esc(num)}</span>
           <span class="oc-date">${date}</span>
           ${(o.printed_at || gs.printedOrderIds.has(o.id)) ? '<span class="oc-printed-badge"><i class="fas fa-check"></i> Comanda impressa</span>' : ''}
         </div>
@@ -1387,51 +1378,6 @@ async function checkForNewOrders() {
 }
 
 /* ══════════════════════════════════════
-   SELEÇÃO E IMPRESSÃO DE PEDIDOS
-══════════════════════════════════════ */
-function toggleOrderSelection(id, checked) {
-  if (checked) gs.selectedOrderIds.add(id);
-  else gs.selectedOrderIds.delete(id);
-  updatePrintSelectedBtn();
-}
-
-function updatePrintSelectedBtn() {
-  const btn = elid('btn-print-selected');
-  if (!btn) return;
-  const count = gs.selectedOrderIds.size;
-  const label = elid('print-selected-label');
-  if (label) label.textContent = count > 0 ? `Imprimir selecionados (${count})` : 'Imprimir selecionados';
-}
-
-function selectTodayDeliveries() {
-  const todayStr = new Date().toDateString();
-  let count = 0;
-  gs.orders.forEach(o => {
-    if (o.delivery_type === 'pickup') return;
-    if (o.status === 'cancelado') return;
-    if (!o.created_at) return;
-    if (new Date(o.created_at).toDateString() !== todayStr) return;
-    gs.selectedOrderIds.add(o.id);
-    count++;
-  });
-  updatePrintSelectedBtn();
-  if (gs.section === 'pedidos') renderOrders();
-  toast(count > 0 ? `${count} pedido(s) de entrega de hoje selecionado(s).` : 'Nenhum pedido de entrega de hoje encontrado.', count === 0);
-}
-
-function printSelectedOrders() {
-  const orders = gs.orders.filter(o => gs.selectedOrderIds.has(o.id) && o.status !== 'cancelado');
-
-  if (!orders.length) {
-    toast('Selecione pelo menos um pedido para imprimir.', true);
-    return;
-  }
-
-  if (!openReceiptWindow(orders)) return;
-  orders.forEach(markOrderPrinted);
-}
-
-/* ══════════════════════════════════════
    COMANDA INDIVIDUAL DO PEDIDO
 ══════════════════════════════════════ */
 function printOrderReceipt(orderId) {
@@ -1468,7 +1414,8 @@ async function markOrderPrinted(o) {
 }
 
 function buildReceiptHtml(orders) {
-  const blocks = orders.map(buildReceiptBlock).join('');
+  const logoUrl = new URL('assets/icons/day-lanches-gestao-192.png', window.location.href).href;
+  const blocks = orders.map(o => buildReceiptBlock(o, logoUrl)).join('');
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1476,24 +1423,59 @@ function buildReceiptHtml(orders) {
 <title>Day Lanches — Comanda do pedido</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; margin: 0; padding: 6mm; }
-  .receipt { width: 80mm; max-width: 100%; margin: 0 auto 16px; padding: 8mm; font-size: 16px; }
-  .receipt h1, .receipt h2 { text-align: center; margin: 0 0 8px; }
-  .receipt h1 { font-size: 1.3rem; letter-spacing: .04em; }
-  .receipt h2 { font-size: 1rem; }
-  .receipt-section { border-top: 1px dashed #000; padding-top: 8px; margin-top: 8px; }
+  body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; background: #fff; margin: 0; padding: 6mm; }
+
+  .receipt {
+    width: 80mm; max-width: 100%; margin: 0 auto 16px;
+    padding: 6mm; font-size: 15px;
+    border: 1px solid #ddd; border-radius: 8px;
+  }
+
+  .receipt-header { text-align: center; padding-bottom: 8px; border-bottom: 3px solid #FF6B00; margin-bottom: 10px; }
+  .receipt-logo { width: 56px; height: 56px; object-fit: contain; margin-bottom: 4px; }
+  .receipt-brand { font-size: 1.3rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; margin: 0; }
+  .receipt-subtitle { font-size: .78rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: #FF6B00; margin: 2px 0 0; }
+
+  .receipt-section { border-top: 1px dashed #ccc; padding-top: 8px; margin-top: 8px; }
+  .receipt-section:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
   .receipt-section p { margin: 3px 0; }
-  .receipt-items { font-size: 15px; line-height: 1.4; }
-  .receipt-item-row { margin: 2px 0; }
-  .receipt-opt { margin-left: 12px; font-size: .85em; color: #333; }
-  .receipt-total { font-size: 18px; font-weight: 900; text-align: center; }
-  .receipt-tag { text-align: center; font-size: 1.05rem; font-weight: 900; border: 2px solid #000; border-radius: 4px; padding: 4px; margin: 0; }
-  .receipt-footer { text-align: center; font-size: .85rem; font-style: italic; }
-  .print-btn { display: block; margin: 16px auto; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; }
+
+  .receipt-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #888; }
+  .receipt-value { font-size: .95rem; font-weight: 700; color: #1a1a1a; }
+
+  .receipt-tag {
+    text-align: center; font-size: .95rem; font-weight: 900;
+    letter-spacing: .1em; text-transform: uppercase;
+    border: 2px solid #FF6B00; color: #FF6B00;
+    border-radius: 6px; padding: 6px; margin: 0;
+  }
+
+  .receipt-seal {
+    text-align: center; font-size: .85rem; font-weight: 900;
+    letter-spacing: .08em; text-transform: uppercase;
+    border-radius: 6px; padding: 5px; margin: 6px 0 0;
+  }
+  .receipt-seal.is-paid    { border: 2px solid #16a34a; color: #16a34a; }
+  .receipt-seal.is-pending { border: 2px solid #DC2626; color: #DC2626; }
+
+  .receipt-total-box { text-align: center; border: 2px solid #1a1a1a; border-radius: 6px; padding: 8px; margin-top: 8px; }
+  .receipt-total-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: #888; }
+  .receipt-total-value { font-size: 1.5rem; font-weight: 900; color: #1a1a1a; }
+
+  .receipt-items { font-size: .92rem; line-height: 1.45; }
+  .receipt-item-row { font-weight: 700; margin-top: 4px; }
+  .receipt-opt { margin-left: 12px; font-size: .85em; color: #555; }
+
+  .receipt-footer { text-align: center; font-size: .78rem; color: #888; font-style: italic; }
+
+  .print-btn { display: block; margin: 16px auto; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; }
+
   .receipt-page { page-break-after: always; }
   .receipt-page:last-child { page-break-after: auto; }
+
   @media print {
-    body { background: #fff; }
+    body { background: #fff; padding: 0; }
+    .receipt { border: 1px solid #ccc; }
     .no-print { display: none !important; }
   }
 </style>
@@ -1505,7 +1487,7 @@ function buildReceiptHtml(orders) {
 </html>`;
 }
 
-function buildReceiptBlock(o) {
+function buildReceiptBlock(o, logoUrl) {
   const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items || '[]') : []);
   const loc   = o.location && typeof o.location === 'object' ? o.location : null;
@@ -1530,34 +1512,41 @@ function buildReceiptBlock(o) {
 
   return `
   <div class="receipt receipt-page">
-    <h1>DAY LANCHES</h1>
-    <h2>COMANDA DO PEDIDO</h2>
-    <div class="receipt-section">
-      <p><strong>Pedido:</strong> #${esc(num)}</p>
-      <p><strong>Data/Hora:</strong> ${dateTime}</p>
+    <div class="receipt-header">
+      <img class="receipt-logo" src="${esc(logoUrl)}" alt="Day Lanches">
+      <p class="receipt-brand">Day Lanches</p>
+      <p class="receipt-subtitle">Comanda do pedido</p>
     </div>
     <div class="receipt-section">
-      <p><strong>Cliente:</strong><br>${esc(o.customer_name || '—')}</p>
-      <p><strong>Telefone/WhatsApp:</strong><br>${esc(o.customer_phone || '—')}</p>
+      <p><span class="receipt-label">Pedido</span><br><span class="receipt-value">#${esc(num)}</span></p>
+      <p><span class="receipt-label">Data/Hora</span><br><span class="receipt-value">${dateTime}</span></p>
+    </div>
+    <div class="receipt-section">
+      <p><span class="receipt-label">Cliente</span><br><span class="receipt-value">${esc(o.customer_name || '—')}</span></p>
+      <p><span class="receipt-label">Telefone/WhatsApp</span><br><span class="receipt-value">${esc(o.customer_phone || '—')}</span></p>
     </div>
     <div class="receipt-section">
       <p class="receipt-tag">${deliveryTag}</p>
     </div>
     <div class="receipt-section">
-      <p><strong>Pagamento:</strong> ${esc(getPaymentLabel(o))}</p>
-      <p><strong>Status do pagamento:</strong> ${psInfo ? esc(psInfo.text) : '—'}</p>
-      <p class="receipt-tag">${isPaid ? 'PAGO' : 'PAGAMENTO PENDENTE'}</p>
+      <p><span class="receipt-label">Pagamento</span><br><span class="receipt-value">${esc(getPaymentLabel(o))}</span></p>
+      <p><span class="receipt-label">Status do pagamento</span><br><span class="receipt-value">${psInfo ? esc(psInfo.text) : '—'}</span></p>
+      <p class="receipt-seal ${isPaid ? 'is-paid' : 'is-pending'}">${isPaid ? 'Pago' : 'Pagamento pendente'}</p>
     </div>
-    <div class="receipt-section receipt-total">
-      <p>Total: R$ ${fmt(o.total || 0)}</p>
+    <div class="receipt-section">
+      <div class="receipt-total-box">
+        <p class="receipt-total-label">Total do pedido</p>
+        <p class="receipt-total-value">R$ ${fmt(o.total || 0)}</p>
+      </div>
     </div>
     <div class="receipt-section receipt-items">
-      <p><strong>Itens:</strong></p>
+      <p class="receipt-label">Itens</p>
       ${itemsHtml}
     </div>
-    ${o.notes ? `<div class="receipt-section"><p><strong>Observação do cliente:</strong><br>${esc(o.notes)}</p></div>` : ''}
+    ${o.notes ? `<div class="receipt-section"><p class="receipt-label">Observação do cliente</p><p class="receipt-value">${esc(o.notes)}</p></div>` : ''}
     <div class="receipt-section">
-      <p><strong>Localização/Entrega:</strong><br>${locHtml}</p>
+      <p class="receipt-label">Localização/Entrega</p>
+      <p class="receipt-value">${locHtml}</p>
     </div>
     <div class="receipt-section receipt-footer">
       <p>Grampear esta comanda junto ao pedido.</p>
