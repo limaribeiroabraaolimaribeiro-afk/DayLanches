@@ -737,6 +737,35 @@ function setDeliveryType(type) {
   updateCartBar();
 }
 
+const BR_STATE_ABBR = {
+  'acre':'AC','alagoas':'AL','amapá':'AP','amapa':'AP','amazonas':'AM','bahia':'BA','ceará':'CE','ceara':'CE',
+  'distrito federal':'DF','espírito santo':'ES','espirito santo':'ES','goiás':'GO','goias':'GO','maranhão':'MA','maranhao':'MA',
+  'mato grosso':'MT','mato grosso do sul':'MS','minas gerais':'MG','pará':'PA','para':'PA','paraíba':'PB','paraiba':'PB',
+  'paraná':'PR','parana':'PR','pernambuco':'PE','piauí':'PI','piaui':'PI','rio de janeiro':'RJ','rio grande do norte':'RN',
+  'rio grande do sul':'RS','rondônia':'RO','rondonia':'RO','roraima':'RR','santa catarina':'SC','são paulo':'SP','sao paulo':'SP',
+  'sergipe':'SE','tocantins':'TO',
+};
+
+/* Monta um endereço curto (rua, bairro, cidade - estado) a partir do
+   retorno de reverse geocoding. Sem CEP, país ou número da casa. */
+function formatCustomerAddressFromGeocode(data) {
+  const address = data?.address || {};
+
+  const road   = address.road || address.street || address.pedestrian || address.residential || '';
+  const suburb = address.suburb || address.neighbourhood || address.quarter || address.village || address.hamlet || '';
+  const city   = address.city || address.town || address.municipality || address.county || '';
+  const state  = BR_STATE_ABBR[String(address.state || '').toLowerCase()] || address.state || '';
+
+  const lines = [];
+  if (road)   lines.push(road);
+  if (suburb) lines.push(suburb);
+
+  const cityState = [city, state].filter(Boolean).join(' - ');
+  if (cityState) lines.push(cityState);
+
+  return lines.join('\n').trim();
+}
+
 function requestGeoLocation() {
   const btn  = el('btn-geo');
   const stat = el('geo-status');
@@ -789,7 +818,7 @@ function requestGeoLocation() {
       try {
         const res  = await fetch(`${WORKER_URL}/reverse-geocode?lat=${lat}&lon=${lon}`);
         const data = await res.json();
-        state.geo.address = data?.address || '';
+        state.geo.address = formatCustomerAddressFromGeocode({ address: data?.raw || {} });
       } catch (err) {
         console.error('[DayLanches] Erro no reverse geocode:', err);
         state.geo.address = '';
@@ -798,7 +827,7 @@ function requestGeoLocation() {
       const addrInfo = el('geo-address-info');
       if (addrInfo) {
         addrInfo.innerHTML = state.geo.address
-          ? `<i class="fas fa-location-dot"></i> Endereço aproximado: ${state.geo.address}`
+          ? `<i class="fas fa-location-dot"></i> Endereço aproximado: ${esc(state.geo.address.replace(/\n/g, ', '))}`
           : `<i class="fas fa-circle-info"></i> Localização obtida. Endereço aproximado indisponível.`;
       }
     },
@@ -857,8 +886,9 @@ async function handleOnlinePayment(method) {
       accuracy:  state.geo.accuracy || null,
       mapsLink:  state.geo.link,
       routeLink: state.geo.routeLink,
-      address:   state.geo.address || 'Localização enviada pelo cliente',
+      address:   state.geo.address || null,
     } : null,
+    customer_address_text: state.geo.address || null,
     status:           'aguardando_pagamento',
     whatsapp_opt_in:  false,
     whatsapp_sent:    false,
@@ -1578,7 +1608,7 @@ function updatePaymentPage() {
   if (state.deliveryType === 'pickup') {
     if (addrTxt) addrTxt.textContent = 'Retirada no local — R. Faustino Martini, 160, Luiz Alves - SC';
   } else if (state.geo.lat) {
-    const addrLine = state.geo.address ? `${esc(state.geo.address)}<br>` : '';
+    const addrLine = state.geo.address ? `${esc(state.geo.address.replace(/\n/g, ', '))}<br>` : '';
     if (addrTxt) addrTxt.innerHTML = `${addrLine}<a href="${state.geo.link}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700"><i class="fas fa-location-dot"></i> Abrir no mapa</a>`;
   } else {
     if (addrTxt) addrTxt.textContent = 'Localização não informada';
@@ -1693,8 +1723,9 @@ async function sendWhatsApp() {
       accuracy:    state.geo.accuracy || null,
       mapsLink:    state.geo.link,
       routeLink:   state.geo.routeLink,
-      address:     state.geo.address || 'Localização enviada pelo cliente',
+      address:     state.geo.address || null,
     } : null,
+    customer_address_text: state.geo.address || null,
     status:          'novo',
     whatsapp_opt_in: false,
     whatsapp_sent:   true,

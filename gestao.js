@@ -1106,14 +1106,16 @@ function orderCard(o) {
               </div>
             </div>
 
-            ${loc?`<div class="order-detail-box">
+            ${loc?(()=>{
+              const addrTxt = o.customer_address_text || loc.address || '';
+              return `<div class="order-detail-box">
               <div class="order-detail-box-title"><i class="fas fa-map-location-dot"></i> Localização</div>
-              ${loc.address?`<p class="order-address-text">${esc(loc.address)}</p>`:''}
+              ${addrTxt?`<p class="order-address-text">${esc(addrTxt).replace(/\n/g,'<br>')}</p>`:''}
               <div class="order-actions-grid">
                 ${loc.mapsLink  ?`<a class="btn-oc-map"   href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>`:''}
                 ${loc.routeLink ?`<a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>`:''}
               </div>
-            </div>`:''}
+            </div>`;})():''}
 
             <div class="order-detail-box${!loc?' order-detail-box--full':''}">
               <div class="order-detail-box-title"><i class="fas fa-bolt"></i> Ações</div>
@@ -1475,16 +1477,13 @@ function buildReceiptHtml(orders) {
   .receipt-total-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; color: #FF6B00; }
   .receipt-total-value { font-size: 1.7rem; font-weight: 900; color: #fff; margin-top: 2px; }
 
-  .receipt-location-note { font-size: .75rem; color: #999; font-style: italic; margin-top: 2px; }
-
   .receipt-items { font-size: .92rem; line-height: 1.45; }
   .receipt-item-row { font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f0f0f0; }
   .receipt-item-row:first-child { margin-top: 0; padding-top: 0; border-top: none; }
   .receipt-opt { margin-left: 12px; font-size: .85em; color: #555; }
 
   .receipt-footer { text-align: center; }
-  .receipt-footer p { font-size: .75rem; color: #888; font-style: italic; margin: 2px 0; }
-  .receipt-footer .receipt-tagline { font-size: .72rem; font-weight: 800; color: #FF6B00; letter-spacing: .04em; font-style: normal; text-transform: uppercase; margin-top: 4px; }
+  .receipt-tagline { font-size: .72rem; font-weight: 800; color: #FF6B00; letter-spacing: .04em; text-transform: uppercase; margin: 0; }
 
   .print-btn { display: block; margin: 16px auto; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; }
 
@@ -1527,10 +1526,10 @@ function buildReceiptBlock(o, logoUrl) {
       }).join('')
     : '<div>—</div>';
 
-  const hasWrittenAddress = loc?.address && loc.address !== 'Localização enviada pelo cliente';
-  const locHtml = hasWrittenAddress
-    ? `<p class="receipt-value">${esc(loc.address)}</p><p class="receipt-location-note">Referência aproximada pela localização enviada.</p>`
-    : `<p class="receipt-value">Localização enviada pelo cliente.</p><p class="receipt-location-note">Consultar no mapa pela Gestão.</p>`;
+  const addressText = o.customer_address_text || loc?.address || '';
+  const locHtml = addressText
+    ? `<p class="receipt-value">${esc(addressText).replace(/\n/g, '<br>')}</p>`
+    : `<p class="receipt-value">Localização aproximada enviada pelo cliente.<br>Consultar mapa na Gestão.</p>`;
 
   return `
   <div class="receipt receipt-page">
@@ -1576,7 +1575,6 @@ function buildReceiptBlock(o, logoUrl) {
       ${locHtml}
     </div>` : ''}
     <div class="receipt-section receipt-footer">
-      <p>Grampear esta comanda junto ao pedido.</p>
       <p class="receipt-tagline">Day Lanches — sabor que marca</p>
     </div>
     </div>
