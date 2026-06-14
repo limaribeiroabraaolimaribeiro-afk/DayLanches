@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=10">
+  <link rel="stylesheet" href="gestao.css?v=11">
 </head>
 <body>
 
@@ -111,6 +111,9 @@
       <button class="btn-sound" id="btn-sound" onclick="toggleOrderSound()" title="Ativar som de pedidos">
         <i class="fas fa-bell-slash"></i><span class="btn-sound-label">Ativar som de pedidos</span>
       </button>
+      <button class="btn-sound btn-test-sound" id="btn-test-sound" onclick="testOrderSound()" title="Testar som">
+        <i class="fas fa-volume-high"></i><span class="btn-sound-label">Testar som</span>
+      </button>
       <span class="dash-user"><i class="fas fa-user-circle"></i> <span id="user-display">—</span></span>
     </header>
 
@@ -136,8 +139,11 @@
           <button class="btn-refresh-orders" id="refresh-orders-btn" title="Atualizar pedidos">
             <i class="fas fa-rotate-right"></i> <span id="refresh-orders-label">Atualizar</span>
           </button>
-          <button class="btn-refresh-orders" id="btn-print-deliveries" onclick="printDeliveryOrders()" title="Imprimir pedidos de entrega">
-            <i class="fas fa-print"></i> Imprimir entregas
+          <button class="btn-refresh-orders" id="btn-print-selected" onclick="printSelectedOrders()" title="Imprimir pedidos selecionados">
+            <i class="fas fa-print"></i> <span id="print-selected-label">Imprimir selecionados</span>
+          </button>
+          <button class="btn-refresh-orders" id="btn-select-today-deliveries" onclick="selectTodayDeliveries()" title="Selecionar entregas de hoje">
+            <i class="fas fa-motorcycle"></i> Selecionar entregas de hoje
           </button>
         </div>
         <div class="filter-row">
@@ -531,7 +537,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=22"></script>
+<script src="gestao.js?v=23"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

@@ -227,6 +227,7 @@ a { text-decoration: none; color: inherit; }
   color: var(--primary-dark);
 }
 .btn-sound i { font-size: .9rem; }
+.btn-test-sound:hover { border-color: var(--primary); color: var(--primary); }
 
 .dash-user {
   display: flex; align-items: center; gap: 6px;
@@ -420,8 +421,22 @@ a { text-decoration: none; color: inherit; }
   gap: 8px;
 }
 .oc-head-left { display: flex; flex-direction: column; gap: 2px; }
+.oc-head-top { display: flex; align-items: center; gap: 8px; }
 .oc-num  { font-size: 1rem; font-weight: 800; color: var(--text); }
 .oc-date { font-size: .72rem; color: var(--text-muted); }
+
+.oc-select {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.oc-select-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+.oc-select-checkbox:disabled { cursor: not-allowed; opacity: .4; }
 
 .oc-badge {
   font-size: .7rem; font-weight: 700;

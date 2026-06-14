@@ -36,6 +36,7 @@ const gs = {
   newOrderIds: new Set(),
   seenOrdersInitialized: false,
   pollingStarted: false,
+  selectedOrderIds: new Set(),
   salesFilter: { type: 'today', month: '', year: '', start: '', end: '' },
 };
 
@@ -1026,7 +1027,15 @@ function orderCard(o) {
       <!-- CABEÇALHO -->
       <div class="oc-head">
         <div class="oc-head-left">
-          <span class="oc-num">#${esc(num)}</span>
+          <div class="oc-head-top">
+            <label class="oc-select" title="Selecionar para impressão">
+              <input type="checkbox" class="oc-select-checkbox" data-order-id="${o.id}"
+                ${gs.selectedOrderIds.has(o.id)?'checked':''}
+                ${o.status==='cancelado'?'disabled':''}
+                onchange="toggleOrderSelection('${o.id}', this.checked)">
+            </label>
+            <span class="oc-num">#${esc(num)}</span>
+          </div>
           <span class="oc-date">${date}</span>
         </div>
         <span class="oc-badge ${stClass[o.status]||''}">${statusLabels[o.status]||o.status}</span>
@@ -1262,28 +1271,42 @@ function toggleOrderSound() {
   else enableOrderSound();
 }
 
-/* Apito curto via Web Audio API (sem arquivo externo) */
-function playNewOrderSound() {
-  if (!gs.soundEnabled) return;
+/* Apito de sistema de lanchonete via Web Audio API (sem arquivo externo), 3 toques */
+function playOrderSoundBeep() {
   try {
     const ctx = gs.audioCtx || (gs.audioCtx = new (window.AudioContext || window.webkitAudioContext)());
     if (ctx.state === 'suspended') ctx.resume();
     const now = ctx.currentTime;
-    [0, 0.28].forEach(offset => {
+    [0, 0.35, 0.7].forEach(delay => {
       const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.4, now + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.25);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(880, now + delay);
+      osc.frequency.setValueAtTime(1100, now + delay + 0.08);
+      gain.gain.setValueAtTime(0.0001, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.85, now + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.22);
       osc.connect(gain).connect(ctx.destination);
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.26);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.25);
     });
   } catch (e) {
     console.warn('Erro ao tocar som de novo pedido:', e);
   }
+}
+
+function playNewOrderSound() {
+  if (!gs.soundEnabled) return;
+  playOrderSoundBeep();
+}
+
+function testOrderSound() {
+  if (!gs.soundEnabled) {
+    toast('Ative o som de pedidos antes de testar.', true);
+    return;
+  }
+  playOrderSoundBeep();
+  toast('Tocando som de teste...');
 }
 
 function startOrdersPolling() {
@@ -1336,34 +1359,58 @@ async function checkForNewOrders() {
 }
 
 /* ══════════════════════════════════════
-   IMPRESSÃO DE ENTREGAS
+   SELEÇÃO E IMPRESSÃO DE PEDIDOS
 ══════════════════════════════════════ */
-function printDeliveryOrders() {
-  const orders = gs.orders.filter(o =>
-    o.delivery_type !== 'pickup' &&
-    o.status !== 'cancelado' &&
-    (isPaidOrder(o) || ['em_preparo', 'saiu_para_entrega'].includes(o.status))
-  );
+function toggleOrderSelection(id, checked) {
+  if (checked) gs.selectedOrderIds.add(id);
+  else gs.selectedOrderIds.delete(id);
+  updatePrintSelectedBtn();
+}
+
+function updatePrintSelectedBtn() {
+  const btn = elid('btn-print-selected');
+  if (!btn) return;
+  const count = gs.selectedOrderIds.size;
+  const label = elid('print-selected-label');
+  if (label) label.textContent = count > 0 ? `Imprimir selecionados (${count})` : 'Imprimir selecionados';
+}
+
+function selectTodayDeliveries() {
+  const todayStr = new Date().toDateString();
+  let count = 0;
+  gs.orders.forEach(o => {
+    if (o.delivery_type === 'pickup') return;
+    if (o.status === 'cancelado') return;
+    if (!o.created_at) return;
+    if (new Date(o.created_at).toDateString() !== todayStr) return;
+    gs.selectedOrderIds.add(o.id);
+    count++;
+  });
+  updatePrintSelectedBtn();
+  if (gs.section === 'pedidos') renderOrders();
+  toast(count > 0 ? `${count} pedido(s) de entrega de hoje selecionado(s).` : 'Nenhum pedido de entrega de hoje encontrado.', count === 0);
+}
+
+function printSelectedOrders() {
+  const orders = gs.orders.filter(o => gs.selectedOrderIds.has(o.id) && o.status !== 'cancelado');
 
   if (!orders.length) {
-    toast('Nenhum pedido de entrega para imprimir.', true);
+    toast('Selecione pelo menos um pedido para imprimir.', true);
     return;
   }
 
-  const dateStr = new Date().toLocaleDateString('pt-BR');
   const blocks = orders.map(buildDeliveryPrintBlock).join('');
-  const totalVendido = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalGeral = orders.reduce((s, o) => s + Number(o.total || 0), 0);
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Day Lanches — Entregas do dia</title>
+<title>Day Lanches — Pedidos para entrega</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 24px; max-width: 700px; margin: 0 auto; }
-  h1 { font-size: 1.4rem; margin-bottom: 4px; }
-  .print-date { color: #555; margin-bottom: 20px; font-size: .9rem; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; background: #fff; padding: 24px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 16px; }
   .print-order { border: 1px solid #ccc; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; page-break-inside: avoid; }
   .print-order h2 { font-size: 1.05rem; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
   .print-order p { margin: 3px 0; font-size: .9rem; }
@@ -1376,12 +1423,11 @@ function printDeliveryOrders() {
 </style>
 </head>
 <body>
-  <h1>Day Lanches — Entregas do dia</h1>
-  <p class="print-date">Data: ${dateStr}</p>
+  <h1>Day Lanches — Pedidos para entrega</h1>
   ${blocks}
   <div class="print-summary">
-    <p>Total de entregas: ${orders.length}</p>
-    <p>Total vendido: R$ ${fmt(totalVendido)}</p>
+    <p>Total de pedidos impressos: ${orders.length}</p>
+    <p>Total geral: R$ ${fmt(totalGeral)}</p>
   </div>
   <button class="print-btn no-print" onclick="window.print()"><i></i>Imprimir</button>
 </body>
@@ -1407,13 +1453,13 @@ function buildDeliveryPrintBlock(o) {
   return `
   <div class="print-order">
     <h2>Pedido #${esc(num)}</h2>
+    <p><strong>Horário:</strong> ${time}</p>
     <p><strong>Cliente:</strong> ${esc(o.customer_name || '—')}</p>
     <p><strong>Telefone:</strong> ${esc(o.customer_phone || '—')}</p>
-    <p><strong>Forma de entrega:</strong> ${o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega'}</p>
+    <p><strong>Entrega:</strong> ${o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega'}</p>
     <p><strong>Pagamento:</strong> ${esc(getPaymentLabel(o))}</p>
     <p><strong>Status pagamento:</strong> ${psInfo ? esc(psInfo.text) : '—'}</p>
     <p><strong>Total:</strong> R$ ${fmt(o.total || 0)}</p>
-    <p><strong>Horário do pedido:</strong> ${time}</p>
     <div class="print-items"><strong>Itens:</strong>${itemsHtml}</div>
     ${o.notes ? `<p><strong>Observação:</strong> ${esc(o.notes)}</p>` : ''}
     <p><strong>Localização:</strong> ${esc(locText)}</p>
