@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=9">
+  <link rel="stylesheet" href="gestao.css?v=10">
 </head>
 <body>
 
@@ -108,6 +108,9 @@
     <header class="dash-header">
       <button class="btn-icon btn-menu" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
       <h1 class="dash-title" id="dash-title">Produtos</h1>
+      <button class="btn-sound" id="btn-sound" onclick="toggleOrderSound()" title="Ativar som de pedidos">
+        <i class="fas fa-bell-slash"></i><span class="btn-sound-label">Ativar som de pedidos</span>
+      </button>
       <span class="dash-user"><i class="fas fa-user-circle"></i> <span id="user-display">—</span></span>
     </header>
 
@@ -133,6 +136,9 @@
           <button class="btn-refresh-orders" id="refresh-orders-btn" title="Atualizar pedidos">
             <i class="fas fa-rotate-right"></i> <span id="refresh-orders-label">Atualizar</span>
           </button>
+          <button class="btn-refresh-orders" id="btn-print-deliveries" onclick="printDeliveryOrders()" title="Imprimir pedidos de entrega">
+            <i class="fas fa-print"></i> Imprimir entregas
+          </button>
         </div>
         <div class="filter-row">
           <button class="filter-btn active" id="fbtn-all"               onclick="filterOrders('all',this)">Todos <span class="filter-count" id="filter-count-all"></span></button>
@@ -148,13 +154,62 @@
 
     <!-- SECTION: Vendas -->
     <section id="section-vendas" class="dash-section">
-      <div class="stats-grid">
-        <div class="stat-card"><i class="fas fa-shopping-bag stat-ico"></i><div class="stat-val" id="sv-hoje">—</div><div class="stat-lbl">Pedidos hoje</div></div>
-        <div class="stat-card"><i class="fas fa-hand-holding-dollar stat-ico"></i><div class="stat-val" id="sv-receita">—</div><div class="stat-lbl">Faturamento hoje</div></div>
-        <div class="stat-card"><i class="fas fa-clock stat-ico"></i><div class="stat-val" id="sv-abertos">—</div><div class="stat-lbl">Pedidos pagos em andamento</div></div>
-        <div class="stat-card"><i class="fas fa-check-circle stat-ico"></i><div class="stat-val" id="sv-total">—</div><div class="stat-lbl">Total de vendas</div></div>
+
+      <!-- Filtros de período -->
+      <div class="sales-filters">
+        <div class="filter-row" id="sales-filter-buttons">
+          <button class="filter-btn active" data-type="today"     onclick="setSalesFilter('today')">Hoje</button>
+          <button class="filter-btn"        data-type="yesterday" onclick="setSalesFilter('yesterday')">Ontem</button>
+          <button class="filter-btn"        data-type="week"      onclick="setSalesFilter('week')">Esta semana</button>
+          <button class="filter-btn"        data-type="month"     onclick="setSalesFilter('month')">Este mês</button>
+          <button class="filter-btn"        data-type="year"      onclick="setSalesFilter('year')">Este ano</button>
+        </div>
+        <div class="sales-filter-custom">
+          <div class="form-group">
+            <label class="form-label">Escolher mês</label>
+            <input type="month" id="sales-pick-month" class="form-input" onchange="setSalesFilter('pickMonth', this.value)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Escolher ano</label>
+            <input type="number" id="sales-pick-year" class="form-input" placeholder="2026" min="2020" max="2100" onchange="setSalesFilter('pickYear', this.value)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data inicial</label>
+            <input type="date" id="sales-range-start" class="form-input" onchange="setSalesFilter('range')">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data final</label>
+            <input type="date" id="sales-range-end" class="form-input" onchange="setSalesFilter('range')">
+          </div>
+        </div>
       </div>
-      <div id="sales-list" style="margin-top:20px"></div>
+
+      <!-- Cards de resumo do período -->
+      <div class="stats-grid sales-stats-grid">
+        <div class="stat-card"><i class="fas fa-hand-holding-dollar stat-ico"></i><div class="stat-val" id="sv-revenue">—</div><div class="stat-lbl">Faturamento no período</div></div>
+        <div class="stat-card"><i class="fas fa-receipt stat-ico"></i><div class="stat-val" id="sv-count">—</div><div class="stat-lbl">Vendas pagas</div></div>
+        <div class="stat-card"><i class="fas fa-chart-line stat-ico"></i><div class="stat-val" id="sv-avg">—</div><div class="stat-lbl">Ticket médio</div></div>
+        <div class="stat-card"><i class="fas fa-money-bill-wave stat-ico"></i><div class="stat-val" id="sv-cash">—</div><div class="stat-lbl">Total em dinheiro</div></div>
+        <div class="stat-card"><i class="fas fa-credit-card stat-ico"></i><div class="stat-val" id="sv-online">—</div><div class="stat-lbl">Total online</div></div>
+      </div>
+
+      <!-- Ações de exportação -->
+      <div class="sales-export-actions">
+        <button class="btn-secondary" onclick="exportSalesCSV()"><i class="fas fa-file-csv"></i> Exportar CSV</button>
+        <button class="btn-secondary" onclick="printSalesReport()"><i class="fas fa-print"></i> Imprimir relatório</button>
+        <button class="btn-primary" onclick="printSalesReport()"><i class="fas fa-file-pdf"></i> Gerar PDF</button>
+      </div>
+
+      <!-- Tabela financeira -->
+      <div class="sales-table-wrap">
+        <table class="data-table fin-table">
+          <thead>
+            <tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Telefone</th><th>Pagamento</th><th>Status pagamento</th><th>Total</th><th>Status pedido</th></tr>
+          </thead>
+          <tbody id="sales-table-body"></tbody>
+        </table>
+        <p class="empty-msg" id="sales-empty-msg" style="display:none">Nenhuma venda confirmada no período selecionado.</p>
+      </div>
     </section>
 
     <!-- SECTION: Configurações -->
@@ -476,7 +531,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=21"></script>
+<script src="gestao.js?v=22"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

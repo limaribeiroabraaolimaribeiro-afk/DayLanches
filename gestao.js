@@ -30,6 +30,13 @@ const gs = {
   editId: null,
   uploadedUrl: '',
   storeConfig: null,
+  soundEnabled: false,
+  audioCtx: null,
+  seenOrderIds: new Set(),
+  newOrderIds: new Set(),
+  seenOrdersInitialized: false,
+  pollingStarted: false,
+  salesFilter: { type: 'today', month: '', year: '', start: '', end: '' },
 };
 
 /* ══════════════════════════════════════
@@ -628,7 +635,7 @@ function renderProductList() {
     return;
   }
   wrap.innerHTML = banner + `
-    <table class="data-table">
+    <table class="data-table products-table">
       <thead><tr>
         <th>Img</th><th>Nome</th><th>Categoria</th>
         <th>Preço</th><th>Status</th><th>Ações</th>
@@ -868,7 +875,7 @@ async function loadOrders() {
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(500);
     if (error) throw error;
     gs.orders = data || [];
   } catch (e) {
@@ -1014,7 +1021,7 @@ function orderCard(o) {
   const hasOpts = items.some(i => (i.options||[]).length > 0);
 
   return `
-    <div class="oc ${stClass[o.status]||''}">
+    <div class="oc ${stClass[o.status]||''}${gs.newOrderIds.has(o.id)?' oc-new':''}">
 
       <!-- CABEÇALHO -->
       <div class="oc-head">
@@ -1202,6 +1209,218 @@ function filterOrders(filter, btn) {
 }
 
 /* ══════════════════════════════════════
+   ALERTA SONORO DE NOVOS PEDIDOS
+══════════════════════════════════════ */
+const SEEN_ORDERS_KEY   = 'dl_seen_order_ids';
+const SOUND_ENABLED_KEY = 'dl_order_sound_enabled';
+
+function loadSeenOrderIds() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SEEN_ORDERS_KEY) || '[]');
+    gs.seenOrderIds = new Set(stored);
+  } catch { gs.seenOrderIds = new Set(); }
+}
+
+function saveSeenOrderIds() {
+  try {
+    localStorage.setItem(SEEN_ORDERS_KEY, JSON.stringify([...gs.seenOrderIds].slice(-300)));
+  } catch { /* ignora erro de storage */ }
+}
+
+function updateSoundBtn() {
+  const btn = elid('btn-sound');
+  if (!btn) return;
+  btn.classList.toggle('active', gs.soundEnabled);
+  btn.innerHTML = gs.soundEnabled
+    ? '<i class="fas fa-bell"></i><span class="btn-sound-label">Som ativado</span>'
+    : '<i class="fas fa-bell-slash"></i><span class="btn-sound-label">Ativar som de pedidos</span>';
+  btn.title = gs.soundEnabled ? 'Som de novos pedidos ativado' : 'Ativar som de pedidos';
+}
+
+function enableOrderSound() {
+  try {
+    gs.audioCtx = gs.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (gs.audioCtx.state === 'suspended') gs.audioCtx.resume();
+  } catch (e) {
+    console.warn('Áudio não suportado:', e);
+  }
+  gs.soundEnabled = true;
+  try { localStorage.setItem(SOUND_ENABLED_KEY, '1'); } catch {}
+  updateSoundBtn();
+  toast('Som de pedidos ativado!');
+}
+
+function disableOrderSound() {
+  gs.soundEnabled = false;
+  try { localStorage.setItem(SOUND_ENABLED_KEY, '0'); } catch {}
+  updateSoundBtn();
+  toast('Som de pedidos desativado.');
+}
+
+function toggleOrderSound() {
+  if (gs.soundEnabled) disableOrderSound();
+  else enableOrderSound();
+}
+
+/* Apito curto via Web Audio API (sem arquivo externo) */
+function playNewOrderSound() {
+  if (!gs.soundEnabled) return;
+  try {
+    const ctx = gs.audioCtx || (gs.audioCtx = new (window.AudioContext || window.webkitAudioContext)());
+    if (ctx.state === 'suspended') ctx.resume();
+    const now = ctx.currentTime;
+    [0, 0.28].forEach(offset => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.4, now + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + 0.26);
+    });
+  } catch (e) {
+    console.warn('Erro ao tocar som de novo pedido:', e);
+  }
+}
+
+function startOrdersPolling() {
+  if (gs.pollingStarted) return;
+  gs.pollingStarted = true;
+  setInterval(checkForNewOrders, 15000);
+}
+
+async function checkForNewOrders() {
+  try {
+    const { data, error } = await getSb()
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    const orders = data || [];
+    const newOnes = gs.seenOrdersInitialized
+      ? orders.filter(o => !gs.seenOrderIds.has(o.id))
+      : [];
+
+    if (newOnes.length) {
+      newOnes.forEach(o => {
+        const idx = gs.orders.findIndex(x => x.id === o.id);
+        if (idx === -1) gs.orders.unshift(o); else gs.orders[idx] = o;
+        gs.newOrderIds.add(o.id);
+      });
+      updateOrderFilterCounts();
+      if (gs.section === 'pedidos') renderOrders();
+
+      if (gs.soundEnabled) {
+        playNewOrderSound();
+        toast(newOnes.length > 1 ? `${newOnes.length} novos pedidos recebidos!` : 'Novo pedido recebido!');
+      } else {
+        toast('Novo pedido recebido! Clique em "Ativar som de pedidos" para receber alertas.');
+      }
+
+      setTimeout(() => {
+        newOnes.forEach(o => gs.newOrderIds.delete(o.id));
+        if (gs.section === 'pedidos') renderOrders();
+      }, 10000);
+    }
+
+    orders.forEach(o => gs.seenOrderIds.add(o.id));
+    saveSeenOrderIds();
+    gs.seenOrdersInitialized = true;
+  } catch (e) {
+    console.warn('Erro ao verificar novos pedidos:', e);
+  }
+}
+
+/* ══════════════════════════════════════
+   IMPRESSÃO DE ENTREGAS
+══════════════════════════════════════ */
+function printDeliveryOrders() {
+  const orders = gs.orders.filter(o =>
+    o.delivery_type !== 'pickup' &&
+    o.status !== 'cancelado' &&
+    (isPaidOrder(o) || ['em_preparo', 'saiu_para_entrega'].includes(o.status))
+  );
+
+  if (!orders.length) {
+    toast('Nenhum pedido de entrega para imprimir.', true);
+    return;
+  }
+
+  const dateStr = new Date().toLocaleDateString('pt-BR');
+  const blocks = orders.map(buildDeliveryPrintBlock).join('');
+  const totalVendido = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Day Lanches — Entregas do dia</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 24px; max-width: 700px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .print-date { color: #555; margin-bottom: 20px; font-size: .9rem; }
+  .print-order { border: 1px solid #ccc; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; page-break-inside: avoid; }
+  .print-order h2 { font-size: 1.05rem; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  .print-order p { margin: 3px 0; font-size: .9rem; }
+  .print-items { margin-top: 8px; font-size: .9rem; }
+  .print-items div { margin: 2px 0 2px 12px; }
+  .print-summary { margin-top: 20px; padding-top: 12px; border-top: 2px solid #1a1a1a; font-weight: 700; }
+  .print-summary p { margin: 4px 0; }
+  .print-btn { margin-top: 20px; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; }
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+  <h1>Day Lanches — Entregas do dia</h1>
+  <p class="print-date">Data: ${dateStr}</p>
+  ${blocks}
+  <div class="print-summary">
+    <p>Total de entregas: ${orders.length}</p>
+    <p>Total vendido: R$ ${fmt(totalVendido)}</p>
+  </div>
+  <button class="print-btn no-print" onclick="window.print()"><i></i>Imprimir</button>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Não foi possível abrir a tela de impressão. Verifique o bloqueador de pop-ups.', true); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+function buildDeliveryPrintBlock(o) {
+  const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items || '[]') : []);
+  const loc   = o.location && typeof o.location === 'object' ? o.location : null;
+  const psInfo = getPaymentStatusLabel(o);
+  const time  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const itemsHtml = items.length
+    ? items.map(i => `<div>${i.qty}x ${esc(i.name)}</div>`).join('')
+    : '<div>—</div>';
+  const locText = loc?.mapsLink || loc?.routeLink || '—';
+
+  return `
+  <div class="print-order">
+    <h2>Pedido #${esc(num)}</h2>
+    <p><strong>Cliente:</strong> ${esc(o.customer_name || '—')}</p>
+    <p><strong>Telefone:</strong> ${esc(o.customer_phone || '—')}</p>
+    <p><strong>Forma de entrega:</strong> ${o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega'}</p>
+    <p><strong>Pagamento:</strong> ${esc(getPaymentLabel(o))}</p>
+    <p><strong>Status pagamento:</strong> ${psInfo ? esc(psInfo.text) : '—'}</p>
+    <p><strong>Total:</strong> R$ ${fmt(o.total || 0)}</p>
+    <p><strong>Horário do pedido:</strong> ${time}</p>
+    <div class="print-items"><strong>Itens:</strong>${itemsHtml}</div>
+    ${o.notes ? `<p><strong>Observação:</strong> ${esc(o.notes)}</p>` : ''}
+    <p><strong>Localização:</strong> ${esc(locText)}</p>
+  </div>`;
+}
+
+/* ══════════════════════════════════════
    SALES
 ══════════════════════════════════════ */
 function isPaidOrder(order) {
@@ -1213,22 +1432,257 @@ function isPaidOrder(order) {
   );
 }
 
+/* Rótulo de forma de pagamento (compartilhado entre pedidos, entregas e vendas) */
+const PAY_METHOD_LABELS = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online' };
+function getPaymentLabel(o) {
+  if (o.payment_status === 'pago' && o.capture_method) {
+    const cm = String(o.capture_method).toLowerCase();
+    if (cm.includes('pix')) return 'PIX';
+    if (cm.includes('credit') || cm.includes('debit') || cm.includes('card') || cm.includes('cartao') || cm.includes('credito') || cm.includes('debito')) return 'Cartão';
+    return 'Online confirmado';
+  }
+  return PAY_METHOD_LABELS[o.payment_method] || o.payment_method || '—';
+}
+
+/* Rótulo de status de pagamento (compartilhado entre pedidos, entregas e vendas) */
+const PAY_STATUS_LABELS = {
+  aguardando_pagamento: { text:'Aguardando pag.', cls:'ps-waiting' },
+  aguardando_comprovante: { text:'Aguardando comprovante', cls:'ps-waiting' },
+  checkout_criado:      { text:'Checkout criado', cls:'ps-created' },
+  pago:                 { text:'Pago ✓', cls:'ps-paid' },
+  pagamento_na_entrega: { text:'Na entrega', cls:'ps-delivery' },
+  cancelado:            { text:'Cancelado', cls:'ps-cancelled' },
+};
+function getPaymentStatusLabel(o) {
+  return PAY_STATUS_LABELS[o.payment_status] || null;
+}
+
+/* Se o pedido é online (dinheiro entra na conta digital) ou dinheiro físico */
+function isOnlinePayment(o) {
+  if (o.payment_provider === 'infinitepay') return true;
+  if (o.capture_method) return true;
+  const m = String(o.payment_method || '').toLowerCase();
+  return m.includes('pix') || m.includes('card') || m.includes('online');
+}
+
+const ORDER_STATUS_LABELS = {
+  novo:'Novo', em_preparo:'Em preparo', saiu_para_entrega:'Saiu p/ entrega',
+  finalizado:'Finalizado', cancelado:'Cancelado',
+};
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0); }
+function endOfDay(d)   { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
+
+/* Intervalo [início, fim] de acordo com o filtro selecionado em Vendas */
+function getSalesDateRange() {
+  const f = gs.salesFilter;
+  const now = new Date();
+  switch (f.type) {
+    case 'today':     return [startOfDay(now), endOfDay(now)];
+    case 'yesterday': { const y = new Date(now); y.setDate(y.getDate() - 1); return [startOfDay(y), endOfDay(y)]; }
+    case 'week':      { const d = new Date(now); const dow = (d.getDay() + 6) % 7; const monday = new Date(d); monday.setDate(d.getDate() - dow); return [startOfDay(monday), endOfDay(now)]; }
+    case 'month':     return [new Date(now.getFullYear(), now.getMonth(), 1), endOfDay(now)];
+    case 'year':      return [new Date(now.getFullYear(), 0, 1), endOfDay(now)];
+    case 'pickMonth': {
+      if (!f.month) return [null, null];
+      const [y, m] = f.month.split('-').map(Number);
+      return [new Date(y, m - 1, 1), endOfDay(new Date(y, m, 0))];
+    }
+    case 'pickYear': {
+      if (!f.year) return [null, null];
+      const y = Number(f.year);
+      return [new Date(y, 0, 1), new Date(y, 11, 31, 23, 59, 59, 999)];
+    }
+    case 'range': {
+      if (!f.start || !f.end) return [null, null];
+      return [startOfDay(new Date(f.start + 'T00:00:00')), endOfDay(new Date(f.end + 'T00:00:00'))];
+    }
+    default: return [startOfDay(now), endOfDay(now)];
+  }
+}
+
+/* Texto descritivo do período selecionado (usado no relatório/impressão) */
+function getSalesPeriodLabel() {
+  const f = gs.salesFilter;
+  const labels = { today:'Hoje', yesterday:'Ontem', week:'Esta semana', month:'Este mês', year:'Este ano' };
+  if (labels[f.type]) return labels[f.type];
+  if (f.type === 'pickMonth' && f.month) {
+    const [y, m] = f.month.split('-');
+    return `${MONTH_NAMES[Number(m) - 1]} de ${y}`;
+  }
+  if (f.type === 'pickYear' && f.year) return `Ano ${f.year}`;
+  if (f.type === 'range' && f.start && f.end) return `${formatDateBR(f.start)} a ${formatDateBR(f.end)}`;
+  return 'Período selecionado';
+}
+
+function formatDateBR(isoDate) {
+  const [y, m, d] = isoDate.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/* Pedidos pagos/confirmados e não cancelados, dentro do período selecionado */
+function getFilteredSalesOrders() {
+  const [start, end] = getSalesDateRange();
+  return gs.orders
+    .filter(o => isPaidOrder(o) && o.status !== 'cancelado' && o.created_at)
+    .filter(o => {
+      if (!start || !end) return true;
+      const d = new Date(o.created_at);
+      return d >= start && d <= end;
+    })
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+function setSalesFilter(type, value) {
+  gs.salesFilter.type = type;
+  if (type === 'pickMonth') gs.salesFilter.month = value ?? elid('sales-pick-month')?.value ?? '';
+  if (type === 'pickYear')  gs.salesFilter.year  = value ?? elid('sales-pick-year')?.value  ?? '';
+  if (type === 'range') {
+    gs.salesFilter.start = elid('sales-range-start')?.value || '';
+    gs.salesFilter.end   = elid('sales-range-end')?.value   || '';
+  }
+  renderSales();
+}
+
+function renderSalesFilterUI() {
+  const f = gs.salesFilter;
+  document.querySelectorAll('#sales-filter-buttons .filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.type === f.type);
+  });
+}
+
 function renderSales() {
-  const today = new Date().toISOString().split('T')[0];
-  const paidOrders     = gs.orders.filter(isPaidOrder);
-  const todayOrders    = paidOrders.filter(o => o.created_at?.startsWith(today));
-  const openPaidOrders = paidOrders.filter(o => !['finalizado','cancelado'].includes(o.status));
-  const todayRevenue   = todayOrders.reduce((s, o) => s + Number(o.total||0), 0);
+  renderSalesFilterUI();
 
-  elid('sv-hoje').textContent    = todayOrders.length;
-  elid('sv-receita').textContent = 'R$ ' + fmt(todayRevenue);
-  elid('sv-abertos').textContent = openPaidOrders.length;
-  elid('sv-total').textContent   = paidOrders.length;
+  const orders  = getFilteredSalesOrders();
+  const revenue = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const count   = orders.length;
+  const avg     = count ? revenue / count : 0;
+  const cash    = orders.filter(o => !isOnlinePayment(o)).reduce((s, o) => s + Number(o.total || 0), 0);
+  const online  = orders.filter(o => isOnlinePayment(o)).reduce((s, o) => s + Number(o.total || 0), 0);
 
-  const salesList = elid('sales-list');
-  salesList.innerHTML = paidOrders.length
-    ? '<h3 style="margin-bottom:12px;font-size:.9rem;font-weight:700">Vendas recentes</h3>' + paidOrders.slice(0,20).map(orderCard).join('')
-    : '<p class="empty-msg">Nenhuma venda confirmada ainda.<br>Quando um pagamento for confirmado, ele aparecerá aqui.</p>';
+  elid('sv-revenue').textContent = 'R$ ' + fmt(revenue);
+  elid('sv-count').textContent   = count;
+  elid('sv-avg').textContent     = 'R$ ' + fmt(avg);
+  elid('sv-cash').textContent    = 'R$ ' + fmt(cash);
+  elid('sv-online').textContent  = 'R$ ' + fmt(online);
+
+  const tbody = elid('sales-table-body');
+  const empty = elid('sales-empty-msg');
+  if (!orders.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  tbody.innerHTML = orders.map(salesRow).join('');
+}
+
+function salesRow(o) {
+  const date  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+  const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const psInfo = getPaymentStatusLabel(o);
+  return `<tr>
+    <td data-label="Data">${date}</td>
+    <td data-label="Pedido">#${esc(num)}</td>
+    <td data-label="Cliente">${esc(o.customer_name || '—')}</td>
+    <td data-label="Telefone">${esc(o.customer_phone || '—')}</td>
+    <td data-label="Pagamento">${esc(getPaymentLabel(o))}</td>
+    <td data-label="Status pagamento">${psInfo ? esc(psInfo.text) : '—'}</td>
+    <td data-label="Total">R$ ${fmt(o.total || 0)}</td>
+    <td data-label="Status pedido">${ORDER_STATUS_LABELS[o.status] || o.status}</td>
+  </tr>`;
+}
+
+function csvEscape(val) {
+  const s = String(val ?? '');
+  return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportSalesCSV() {
+  const orders = getFilteredSalesOrders();
+  if (!orders.length) { toast('Nenhuma venda no período selecionado.', true); return; }
+
+  const header = ['data','pedido','cliente','telefone','pagamento','status_pagamento','total','status_pedido'];
+  const rows = orders.map(o => {
+    const date  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '';
+    const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '';
+    const psInfo = getPaymentStatusLabel(o);
+    return [
+      date, num, o.customer_name || '', o.customer_phone || '',
+      getPaymentLabel(o), psInfo ? psInfo.text : '', fmt(o.total || 0),
+      ORDER_STATUS_LABELS[o.status] || o.status,
+    ].map(csvEscape).join(',');
+  });
+
+  const csv  = [header.join(','), ...rows].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `vendas_day_lanches_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function printSalesReport() {
+  const orders = getFilteredSalesOrders();
+  if (!orders.length) { toast('Nenhuma venda no período selecionado.', true); return; }
+
+  const revenue = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const rows = orders.map(o => {
+    const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    const num  = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+    const psInfo = getPaymentStatusLabel(o);
+    return `<tr>
+      <td>${date}</td>
+      <td>#${esc(num)}</td>
+      <td>${esc(o.customer_name || '—')}</td>
+      <td>${esc(o.customer_phone || '—')}</td>
+      <td>${esc(getPaymentLabel(o))}</td>
+      <td>${psInfo ? esc(psInfo.text) : '—'}</td>
+      <td>R$ ${fmt(o.total || 0)}</td>
+      <td>${ORDER_STATUS_LABELS[o.status] || o.status}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Day Lanches — Relatório de Vendas</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 24px; margin: 0; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .print-period { color: #555; margin-bottom: 20px; font-size: .9rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  th { background: #f5f5f5; }
+  .print-total { margin-top: 16px; font-size: 1rem; font-weight: 700; text-align: right; }
+  .print-btn { margin-top: 20px; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; }
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+  <h1>Day Lanches — Relatório de Vendas</h1>
+  <p class="print-period">Período: ${esc(getSalesPeriodLabel())}</p>
+  <table>
+    <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Telefone</th><th>Pagamento</th><th>Status pagamento</th><th>Total</th><th>Status pedido</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <p class="print-total">Total geral: R$ ${fmt(revenue)} (${orders.length} vendas)</p>
+  <button class="print-btn no-print" onclick="window.print()">Imprimir</button>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Não foi possível abrir a tela de impressão. Verifique o bloqueador de pop-ups.', true); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 /* ══════════════════════════════════════
@@ -1774,7 +2228,12 @@ document.addEventListener('DOMContentLoaded', () => {
       showView('dashboard');
       elid('user-display').textContent = session.user.user_metadata?.name || session.user.email.split('@')[0];
       loadProducts();
-      loadOrders();
+      loadOrders().then(() => {
+        gs.orders.forEach(o => gs.seenOrderIds.add(o.id));
+        saveSeenOrderIds();
+        gs.seenOrdersInitialized = true;
+        startOrdersPolling();
+      });
     } else {
       gs.currentUser = null;
       showView('login');
@@ -1785,6 +2244,14 @@ document.addEventListener('DOMContentLoaded', () => {
   getSb().auth.getSession().then(({ data: { session } }) => {
     if (!session) showView('login');
   });
+
+  /* Alerta sonoro de novos pedidos */
+  loadSeenOrderIds();
+  gs.soundEnabled = localStorage.getItem(SOUND_ENABLED_KEY) === '1';
+  if (gs.soundEnabled) {
+    try { gs.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+  }
+  updateSoundBtn();
 
   const refreshOrdersBtn = elid('refresh-orders-btn');
   if (refreshOrdersBtn) {

@@ -205,6 +205,29 @@ a { text-decoration: none; color: inherit; }
 
 .dash-title { font-size: 1.1rem; font-weight: 700; flex: 1; }
 
+.btn-sound {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 20px;
+  font-size: .8rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  color: var(--text-med);
+  background: var(--white);
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.btn-sound:hover { border-color: var(--primary); color: var(--primary); }
+.btn-sound.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+.btn-sound i { font-size: .9rem; }
+
 .dash-user {
   display: flex; align-items: center; gap: 6px;
   font-size: .82rem; color: var(--text-med);
@@ -382,6 +405,13 @@ a { text-decoration: none; color: inherit; }
 .oc.st-entrega       { border-left-color: #8B5CF6; }
 .oc.st-finalizado    { border-left-color: var(--success); }
 .oc.st-cancelado     { border-left-color: var(--danger); opacity: .8; }
+
+/* Destaque temporário para pedido novo recebido via polling */
+.oc.oc-new { animation: ocNewPulse 1.8s ease-in-out 0s 3; }
+@keyframes ocNewPulse {
+  0%, 100% { box-shadow: var(--shadow); }
+  50% { box-shadow: 0 0 0 4px rgba(255,107,0,.35), var(--shadow); }
+}
 
 /* Cabeçalho */
 .oc-head {
@@ -777,6 +807,45 @@ a { text-decoration: none; color: inherit; }
 .stat-ico { font-size: 1.5rem; color: var(--primary); }
 .stat-val { font-size: 1.5rem; font-weight: 800; color: var(--text); line-height: 1; }
 .stat-lbl { font-size: .75rem; color: var(--text-muted); font-weight: 500; }
+
+/* ═══════════════════════ VENDAS — FILTROS E RELATÓRIO ═══════════════════════ */
+.sales-stats-grid { margin-bottom: 20px; }
+@media (min-width: 900px) { .sales-stats-grid { grid-template-columns: repeat(5, 1fr); } }
+
+.sales-filters {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sales-filter-custom {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 640px) { .sales-filter-custom { grid-template-columns: repeat(4, 1fr); } }
+.sales-filter-custom .form-input { height: 40px; }
+
+.sales-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sales-table-wrap {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+  max-width: 100%;
+}
+.sales-table-wrap .fin-table { box-shadow: none; border-radius: 0; }
+.fin-table th:last-child, .fin-table td:last-child { text-align: left; }
 
 /* ═══════════════════════ CONFIG ═══════════════════════ */
 .config-wrap {
@@ -1411,12 +1480,12 @@ a { text-decoration: none; color: inherit; }
     padding: 0;
     font-size: .85rem;
   }
-  .data-table td:nth-child(1) {
+  .products-table td:nth-child(1) {
     width: 56px;
     order: 1;
   }
-  .data-table .tbl-img-wrap { width: 56px; height: 56px; }
-  .data-table td:nth-child(2) {
+  .products-table .tbl-img-wrap { width: 56px; height: 56px; }
+  .products-table td:nth-child(2) {
     flex: 1;
     order: 2;
     display: flex;
@@ -1424,27 +1493,27 @@ a { text-decoration: none; color: inherit; }
     padding-left: 12px;
     font-size: .92rem;
   }
-  .data-table td:nth-child(3) { display: none; }
-  .data-table td:nth-child(4) {
+  .products-table td:nth-child(3) { display: none; }
+  .products-table td:nth-child(4) {
     width: 100%;
     order: 4;
     margin-top: 10px;
     font-size: 1rem;
     font-weight: 700;
   }
-  .data-table td:nth-child(5) {
+  .products-table td:nth-child(5) {
     width: 100%;
     order: 5;
     margin-top: 6px;
   }
-  .data-table td:nth-child(6) {
+  .products-table td:nth-child(6) {
     width: 100%;
     order: 6;
     margin-top: 10px;
     display: flex;
     gap: 8px;
   }
-  .data-table td:nth-child(6) .btn-icon-sm {
+  .products-table td:nth-child(6) .btn-icon-sm {
     flex: 1;
     width: auto;
     height: 44px;
@@ -1453,9 +1522,40 @@ a { text-decoration: none; color: inherit; }
     margin-right: 0;
     gap: 6px;
   }
-  .data-table td:nth-child(6) .btn-label {
+  .products-table td:nth-child(6) .btn-label {
     display: inline;
   }
+
+  /* Vendas: tabela financeira -> cards com rótulos */
+  .fin-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    text-align: right;
+  }
+  .fin-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: .72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    text-align: left;
+  }
+
+  /* Topo mobile: botão de som compacto (só ícone) */
+  .btn-sound { padding: 0 10px; }
+  .btn-sound-label { display: none; }
+
+  /* Pedidos: botões da toolbar empilham e ocupam 100% */
+  .orders-search-row { flex-wrap: wrap; }
+  .btn-refresh-orders { flex: 1; justify-content: center; }
+
+  /* Vendas: filtros e ações em coluna */
+  .sales-export-actions { flex-direction: column; }
+  .sales-export-actions > * { width: 100%; justify-content: center; }
 }
 
 /* ═══════════════════════ MODAL PRODUTO — NOVO DESIGN ═══════════════════════ */
