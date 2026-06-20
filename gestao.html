@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=14">
+  <link rel="stylesheet" href="gestao.css?v=15">
 </head>
 <body>
 
@@ -223,11 +223,11 @@
     </section>
 
     <!-- SECTION: Balcão (PDV presencial) -->
-    <section id="section-balcao" class="dash-section">
+    <section id="section-balcao" class="dash-section pdv-section">
       <div class="pdv-layout">
 
-        <!-- ESQUERDA: Produtos -->
-        <div class="pdv-products">
+        <!-- ESQUERDA: Produtos (rola independente) -->
+        <div class="pdv-products-column">
           <div class="pdv-search-row">
             <div class="pdv-search-wrap">
               <i class="fas fa-search pdv-search-icon"></i>
@@ -240,69 +240,71 @@
           </div>
         </div>
 
-        <!-- DIREITA: Carrinho / Pedido atual -->
-        <div class="pdv-cart" id="pdv-cart">
-          <div class="pdv-cart-header">
-            <h2 class="pdv-cart-title"><i class="fas fa-cash-register"></i> Novo pedido no balcão</h2>
+        <!-- DIREITA: Carrinho fixo -->
+        <aside class="pdv-cart-column">
+          <div class="pdv-cart" id="pdv-cart">
+            <div class="pdv-cart-header">
+              <h2 class="pdv-cart-title"><i class="fas fa-cash-register"></i> Novo pedido no balcão</h2>
+            </div>
+
+            <div class="pdv-cart-body">
+              <div class="pdv-cart-fields">
+                <div class="form-group">
+                  <label class="form-label">Cliente <span class="pdv-field-hint">opcional</span></label>
+                  <input type="text" id="pdv-customer-name" class="form-input" placeholder="Nome do cliente">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Observação <span class="pdv-field-hint">opcional</span></label>
+                  <input type="text" id="pdv-notes" class="form-input" placeholder="Ex: Sem cebola em tudo">
+                </div>
+              </div>
+
+              <div class="pdv-cart-items" id="pdv-cart-items">
+                <p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item adicionado</p>
+              </div>
+
+              <div class="pdv-cart-summary">
+                <div class="pdv-summary-row">
+                  <span>Subtotal</span>
+                  <span id="pdv-subtotal">R$ 0,00</span>
+                </div>
+                <div class="pdv-summary-row pdv-summary-total">
+                  <span>Total</span>
+                  <span id="pdv-total">R$ 0,00</span>
+                </div>
+              </div>
+
+              <div class="pdv-section-block">
+                <label class="pdv-section-label">Pagamento</label>
+                <div class="pdv-pay-grid" id="pdv-pay-options">
+                  <button type="button" class="pdv-pay-btn" data-pay="dinheiro" onclick="pdvSelectPay('dinheiro')"><i class="fas fa-money-bill-wave"></i><span>Dinheiro</span></button>
+                  <button type="button" class="pdv-pay-btn" data-pay="pix_loja" onclick="pdvSelectPay('pix_loja')"><i class="fas fa-qrcode"></i><span>Pix</span></button>
+                  <button type="button" class="pdv-pay-btn" data-pay="cartao_maquininha" onclick="pdvSelectPay('cartao_maquininha')"><i class="fas fa-credit-card"></i><span>Cartão</span></button>
+                </div>
+              </div>
+
+              <div class="pdv-section-block">
+                <label class="pdv-section-label">Status</label>
+                <div class="pdv-status-grid" id="pdv-status-options">
+                  <button type="button" class="pdv-status-btn" data-status="pago" onclick="pdvSelectPayStatus('pago')"><i class="fas fa-check-circle"></i><span>Pago</span></button>
+                  <button type="button" class="pdv-status-btn" data-status="pendente" onclick="pdvSelectPayStatus('pendente')"><i class="fas fa-clock"></i><span>Pendente</span></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="pdv-cart-actions">
+              <button class="btn-pdv-primary" id="pdv-btn-finalize-print" onclick="pdvFinalize(true)">
+                <i class="fas fa-print"></i> Finalizar e imprimir comanda
+              </button>
+              <button class="btn-pdv-secondary" onclick="pdvFinalize(false)">
+                <i class="fas fa-check"></i> Finalizar sem imprimir
+              </button>
+              <button class="btn-pdv-clear" onclick="pdvClearCart()">
+                <i class="fas fa-trash"></i> Limpar pedido
+              </button>
+            </div>
           </div>
-
-          <div class="pdv-cart-body">
-            <div class="pdv-cart-fields">
-              <div class="form-group">
-                <label class="form-label">Cliente <span class="pdv-field-hint">opcional</span></label>
-                <input type="text" id="pdv-customer-name" class="form-input" placeholder="Nome do cliente">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Observação <span class="pdv-field-hint">opcional</span></label>
-                <input type="text" id="pdv-notes" class="form-input" placeholder="Ex: Sem cebola em tudo">
-              </div>
-            </div>
-
-            <div class="pdv-cart-items" id="pdv-cart-items">
-              <p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item adicionado</p>
-            </div>
-
-            <div class="pdv-cart-summary">
-              <div class="pdv-summary-row">
-                <span>Subtotal</span>
-                <span id="pdv-subtotal">R$ 0,00</span>
-              </div>
-              <div class="pdv-summary-row pdv-summary-total">
-                <span>Total</span>
-                <span id="pdv-total">R$ 0,00</span>
-              </div>
-            </div>
-
-            <div class="pdv-section-block">
-              <label class="pdv-section-label">Pagamento</label>
-              <div class="pdv-pay-grid" id="pdv-pay-options">
-                <button type="button" class="pdv-pay-btn" data-pay="dinheiro" onclick="pdvSelectPay('dinheiro')"><i class="fas fa-money-bill-wave"></i><span>Dinheiro</span></button>
-                <button type="button" class="pdv-pay-btn" data-pay="pix_loja" onclick="pdvSelectPay('pix_loja')"><i class="fas fa-qrcode"></i><span>Pix</span></button>
-                <button type="button" class="pdv-pay-btn" data-pay="cartao_maquininha" onclick="pdvSelectPay('cartao_maquininha')"><i class="fas fa-credit-card"></i><span>Cartão</span></button>
-              </div>
-            </div>
-
-            <div class="pdv-section-block">
-              <label class="pdv-section-label">Status</label>
-              <div class="pdv-status-grid" id="pdv-status-options">
-                <button type="button" class="pdv-status-btn" data-status="pago" onclick="pdvSelectPayStatus('pago')"><i class="fas fa-check-circle"></i><span>Pago</span></button>
-                <button type="button" class="pdv-status-btn" data-status="pendente" onclick="pdvSelectPayStatus('pendente')"><i class="fas fa-clock"></i><span>Pendente</span></button>
-              </div>
-            </div>
-          </div>
-
-          <div class="pdv-cart-actions">
-            <button class="btn-pdv-primary" id="pdv-btn-finalize-print" onclick="pdvFinalize(true)">
-              <i class="fas fa-print"></i> Finalizar e imprimir comanda
-            </button>
-            <button class="btn-pdv-secondary" onclick="pdvFinalize(false)">
-              <i class="fas fa-check"></i> Finalizar sem imprimir
-            </button>
-            <button class="btn-pdv-clear" onclick="pdvClearCart()">
-              <i class="fas fa-trash"></i> Limpar pedido
-            </button>
-          </div>
-        </div>
+        </aside>
 
       </div>
 
@@ -669,7 +671,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=25"></script>
+<script src="gestao.js?v=26"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

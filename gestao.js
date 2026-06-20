@@ -2575,9 +2575,9 @@ const pdv = {
 function pdvInit() {
   if (!pdv.initialized) {
     pdv.initialized = true;
-    const cart = elid('pdv-cart');
-    if (cart && window.innerWidth <= 820) {
-      cart.classList.add('pdv-cart-mobile-hidden');
+    const cartCol = document.querySelector('.pdv-cart-column');
+    if (cartCol && window.innerWidth <= 980) {
+      cartCol.classList.add('pdv-cart-mobile-hidden');
       pdv.mobileCartOpen = false;
     }
   }
@@ -3039,10 +3039,10 @@ async function pdvFinalize(printReceipt) {
 }
 
 function pdvToggleMobileCart() {
-  const cart = elid('pdv-cart');
-  if (!cart) return;
+  const cartCol = document.querySelector('.pdv-cart-column');
+  if (!cartCol) return;
   pdv.mobileCartOpen = !pdv.mobileCartOpen;
-  cart.classList.toggle('pdv-cart-mobile-hidden', !pdv.mobileCartOpen);
+  cartCol.classList.toggle('pdv-cart-mobile-hidden', !pdv.mobileCartOpen);
 }
 
 /* Expose for HTML onclick */
