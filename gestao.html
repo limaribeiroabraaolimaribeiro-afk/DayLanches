@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=18">
+  <link rel="stylesheet" href="gestao.css?v=19">
 </head>
 <body>
 
@@ -288,13 +288,6 @@
                 </div>
               </div>
 
-              <div class="pdv-section-block">
-                <label class="pdv-section-label">Status</label>
-                <div class="pdv-status-grid" id="pdv-status-options">
-                  <button type="button" class="pdv-status-btn" data-status="pago" onclick="pdvSelectPayStatus('pago')"><i class="fas fa-check-circle"></i><span>Pago</span></button>
-                  <button type="button" class="pdv-status-btn" data-status="pendente" onclick="pdvSelectPayStatus('pendente')"><i class="fas fa-clock"></i><span>Pendente</span></button>
-                </div>
-              </div>
             </div>
 
             <div class="pdv-cart-actions">
@@ -312,12 +305,6 @@
         </aside>
 
       </div>
-
-      <!-- Botão flutuante do carrinho no mobile -->
-      <button class="pdv-cart-fab" id="pdv-cart-fab" onclick="pdvToggleMobileCart()" style="display:none">
-        <i class="fas fa-shopping-cart"></i>
-        <span class="pdv-fab-count" id="pdv-fab-count">0</span>
-      </button>
     </section>
 
     <!-- SECTION: Configurações -->
@@ -676,7 +663,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=28"></script>
+<script src="gestao.js?v=29"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

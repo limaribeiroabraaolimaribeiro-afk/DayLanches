@@ -1149,6 +1149,7 @@ function orderCard(o) {
           ${o.status!=='cancelado'?`<button class="btn-oc-print" onclick="printOrderReceipt('${o.id}')">
             <i class="fas fa-receipt"></i> ${(o.printed_at || gs.printedOrderIds.has(o.id))?'Reimprimir comanda':'Imprimir comanda'}
           </button>`:''}
+          ${(!isPaidOrder(o) && !['cancelado'].includes(o.status))?`<button class="btn-oc-paid" onclick="confirmMarkAsPaid('${o.id}')"><i class="fas fa-hand-holding-dollar"></i> Marcar como pago</button>`:''}
           <div class="oc-status-btns">${statusBtns(o)}</div>
         </div>
       </div>
@@ -1212,6 +1213,34 @@ async function updateOrderStatus(id, status) {
   const { error } = await getSb().from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { toast('Erro ao atualizar status.', true); return; }
   toast('Status atualizado!');
+  await loadOrders();
+  if (pdv.initialized) pdvRenderMesas();
+}
+
+async function confirmMarkAsPaid(id) {
+  const confirmed = await showConfirmModal({
+    title: 'Confirmar pagamento',
+    message: 'Confirmar pagamento deste pedido?',
+    confirmText: 'Confirmar pagamento',
+    cancelText: 'Cancelar',
+    danger: false,
+  });
+  if (!confirmed) return;
+
+  const now = new Date().toISOString();
+  const { error } = await getSb().from('orders').update({
+    payment_status: 'pago',
+    paid_at: now,
+    updated_at: now,
+  }).eq('id', id);
+
+  if (error) {
+    console.error('[Gestão] Erro ao marcar como pago:', error);
+    toast('Erro ao confirmar pagamento.', true);
+    return;
+  }
+
+  toast('Pagamento confirmado.');
   await loadOrders();
   if (pdv.initialized) pdvRenderMesas();
 }
@@ -2565,7 +2594,6 @@ function applyProductTemplate(type) {
 const pdv = {
   cart: [],
   payMethod: '',
-  payStatus: '',
   tableNumber: null,
   catFilter: '',
   initialized: false,
@@ -2573,17 +2601,11 @@ const pdv = {
   optQty: 1,
   optSelections: {},
   optGroups: [],
-  mobileCartOpen: false,
 };
 
 function pdvInit() {
   if (!pdv.initialized) {
     pdv.initialized = true;
-    const cartCol = document.querySelector('.pdv-cart-column');
-    if (cartCol && window.innerWidth <= 980) {
-      cartCol.classList.add('pdv-cart-mobile-hidden');
-      pdv.mobileCartOpen = false;
-    }
   }
   pdvRenderProducts();
   pdvRenderMesas();
@@ -2887,12 +2909,6 @@ function pdvCloseOptionsOutside(e) {
 
 function pdvRenderCart() {
   const wrap = elid('pdv-cart-items');
-  const fab = elid('pdv-cart-fab');
-  const fabCount = elid('pdv-fab-count');
-
-  const totalQty = pdv.cart.reduce((s, c) => s + c.qty, 0);
-  if (fab) fab.style.display = totalQty > 0 ? 'flex' : 'none';
-  if (fabCount) fabCount.textContent = totalQty;
 
   if (!pdv.cart.length) {
     wrap.innerHTML = '<p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item adicionado</p>';
@@ -2941,11 +2957,6 @@ function pdvSelectPay(method) {
   document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === method));
 }
 
-function pdvSelectPayStatus(status) {
-  pdv.payStatus = status;
-  document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.toggle('active', b.dataset.status === status));
-}
-
 async function pdvClearCart() {
   if (pdv.cart.length) {
     const confirmed = await showConfirmModal({
@@ -2959,12 +2970,10 @@ async function pdvClearCart() {
   }
   pdv.cart = [];
   pdv.payMethod = '';
-  pdv.payStatus = '';
   pdv.tableNumber = null;
   elid('pdv-customer-name').value = '';
   elid('pdv-notes').value = '';
   document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.remove('active'));
   pdvRenderMesas();
   pdvRenderCart();
 }
@@ -2972,7 +2981,6 @@ async function pdvClearCart() {
 async function pdvFinalize(printReceipt) {
   if (!pdv.cart.length) { toast('Adicione pelo menos um produto.', true); return; }
   if (!pdv.payMethod) { toast('Escolha a forma de pagamento.', true); return; }
-  if (!pdv.payStatus) { toast('Informe se o pedido está pago ou pendente.', true); return; }
   if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }
 
   const btn = elid('pdv-btn-finalize-print');
@@ -2982,8 +2990,6 @@ async function pdvFinalize(printReceipt) {
   const notes = (elid('pdv-notes')?.value || '').trim();
   const subtotal = pdv.cart.reduce((s, c) => s + c.total, 0);
   const orderNumber = `DL-${Math.floor(Math.random() * 90000) + 10000}`;
-  const now = new Date().toISOString();
-  const isPago = pdv.payStatus === 'pago';
 
   const orderItems = pdv.cart.map(c => ({
     name: c.name,
@@ -3000,9 +3006,9 @@ async function pdvFinalize(printReceipt) {
     customer_phone: null,
     delivery_type: 'balcao',
     payment_method: pdv.payMethod,
-    payment_status: isPago ? 'pago' : 'pendente',
-    paid_at: isPago ? now : null,
-    status: 'em_preparo',
+    payment_status: 'pendente',
+    paid_at: null,
+    status: 'novo',
     total: subtotal,
     items: orderItems,
     notes: notes || null,
@@ -3045,12 +3051,10 @@ async function pdvFinalize(printReceipt) {
 
     pdv.cart = [];
     pdv.payMethod = '';
-    pdv.payStatus = '';
     pdv.tableNumber = null;
     elid('pdv-customer-name').value = '';
     elid('pdv-notes').value = '';
     document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.remove('active'));
     pdvRenderMesas();
     pdvRenderCart();
 
@@ -3118,13 +3122,6 @@ function pdvSelectMesa(num) {
   pdvRenderMesas();
 }
 
-function pdvToggleMobileCart() {
-  const cartCol = document.querySelector('.pdv-cart-column');
-  if (!cartCol) return;
-  pdv.mobileCartOpen = !pdv.mobileCartOpen;
-  cartCol.classList.toggle('pdv-cart-mobile-hidden', !pdv.mobileCartOpen);
-}
-
 /* Expose for HTML onclick */
 window.handleLogin             = handleLogin;
 window.handleCreateAccount     = handleCreateAccount;
@@ -3164,6 +3161,7 @@ window.applyProductTemplate           = applyProductTemplate;
 window.copyOrderText                  = copyOrderText;
 window.toggleOrderDetails             = toggleOrderDetails;
 window.confirmCancelOrder             = confirmCancelOrder;
+window.confirmMarkAsPaid              = confirmMarkAsPaid;
 window.renderOrders                   = renderOrders;
 window.refreshOrders                  = refreshOrders;
 window.showToast                      = showToast;
@@ -3178,10 +3176,8 @@ window.pdvAddProduct                  = pdvAddProduct;
 window.pdvChangeQty                   = pdvChangeQty;
 window.pdvRemoveItem                  = pdvRemoveItem;
 window.pdvSelectPay                   = pdvSelectPay;
-window.pdvSelectPayStatus             = pdvSelectPayStatus;
 window.pdvClearCart                    = pdvClearCart;
 window.pdvFinalize                    = pdvFinalize;
-window.pdvToggleMobileCart            = pdvToggleMobileCart;
 window.pdvSelectMesa                  = pdvSelectMesa;
 window.pdvCloseOptions                = pdvCloseOptions;
 window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;

@@ -2573,40 +2573,25 @@ a { text-decoration: none; color: inherit; }
 }
 .btn-pdv-clear:hover { color: var(--danger); }
 
-/* FAB mobile */
-.pdv-cart-fab {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  font-size: 1.4rem;
-  box-shadow: 0 4px 20px rgba(255,107,0,.4);
-  border: none;
+/* Order card: mark as paid button */
+.btn-oc-paid {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 700;
+  border: 1.5px solid var(--success);
+  background: var(--success-bg);
+  color: #16a34a;
   cursor: pointer;
-  z-index: 150;
-  align-items: center;
-  justify-content: center;
+  transition: all .15s;
+  white-space: nowrap;
 }
-.pdv-fab-count {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 22px;
-  height: 22px;
-  border-radius: 11px;
-  background: var(--danger);
+.btn-oc-paid:hover {
+  background: var(--success);
   color: #fff;
-  font-size: .72rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
 }
 
 /* Options modal (PDV) */
@@ -2765,8 +2750,6 @@ a { text-decoration: none; color: inherit; }
     border-left: none;
     border-top: 1px solid var(--border);
   }
-  .pdv-cart-column.pdv-cart-mobile-hidden { display: none; }
-
   .pdv-cart {
     height: auto;
     overflow: visible;
@@ -2774,8 +2757,6 @@ a { text-decoration: none; color: inherit; }
   }
 
   .pdv-cart-header { border-radius: 0; }
-
-  .pdv-cart-fab { display: flex; }
   .pdv-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
 
