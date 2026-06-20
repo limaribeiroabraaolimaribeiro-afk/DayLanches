@@ -163,13 +163,14 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(b => {
     if (b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.add('active');
   });
-  const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', config:'Configurações', acessos:'Acessos' };
+  const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', config:'Configurações', acessos:'Acessos' };
   elid('dash-title').textContent = titles[name] || name;
   gs.section = name;
   if (name === 'vendas')  renderSales();
   if (name === 'config')  loadConfig();
   if (name === 'acessos') renderUserInfo();
   if (name === 'pedidos') loadOrders();
+  if (name === 'balcao')  pdvInit();
   closeSidebar();
 }
 
@@ -205,6 +206,7 @@ async function loadProducts() {
     gs.usingLocalProducts = true;
   }
   renderProductList();
+  pdvLoadProductOptions();
 }
 
 async function importLocalProductsToSupabase() {
@@ -993,7 +995,7 @@ function orderCard(o) {
     saiu_para_entrega:'st-entrega',
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
-  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online' };
+  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha' };
 
   /* Após webhook: resolve label a partir do capture_method da InfinitePay */
   function resolvePayLabel(order) {
@@ -1022,6 +1024,7 @@ function orderCard(o) {
   const waPhone = (phone.startsWith('55') && phone.length >= 12) ? phone : '55' + phone;
   const waLink  = phone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(buildCallCustomerMessage(o))}` : '';
   const hasOpts = items.some(i => (i.options||[]).length > 0);
+  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
 
   return `
     <div class="oc ${stClass[o.status]||''}${gs.newOrderIds.has(o.id)?' oc-new':''}">
@@ -1030,6 +1033,7 @@ function orderCard(o) {
       <div class="oc-head">
         <div class="oc-head-left">
           <span class="oc-num">#${esc(num)}</span>
+          ${isBalcao ? '<span class="oc-source-badge"><i class="fas fa-cash-register"></i> Balcão</span>' : ''}
           <span class="oc-date">${date}</span>
           ${(o.printed_at || gs.printedOrderIds.has(o.id)) ? '<span class="oc-printed-badge"><i class="fas fa-check"></i> Comanda impressa</span>' : ''}
         </div>
@@ -1048,7 +1052,7 @@ function orderCard(o) {
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Entrega</span>
-          <span class="oc-field-value"><i class="fas fa-${o.delivery_type==='pickup'?'store':'motorcycle'}" style="color:var(--primary)"></i> ${o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
+          <span class="oc-field-value"><i class="fas fa-${isBalcao?'cash-register':o.delivery_type==='pickup'?'store':'motorcycle'}" style="color:var(--primary)"></i> ${isBalcao?'Balcão / Presencial':o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Pagamento</span>
@@ -1106,7 +1110,7 @@ function orderCard(o) {
               </div>
             </div>
 
-            ${loc?(()=>{
+            ${(loc && !isBalcao)?(()=>{
               const addrTxt = o.customer_address_text || loc.address || '';
               return `<div class="order-detail-box">
               <div class="order-detail-box-title"><i class="fas fa-map-location-dot"></i> Localização</div>
@@ -1117,10 +1121,10 @@ function orderCard(o) {
               </div>
             </div>`;})():''}
 
-            <div class="order-detail-box${!loc?' order-detail-box--full':''}">
+            <div class="order-detail-box${(!loc||isBalcao)?' order-detail-box--full':''}">
               <div class="order-detail-box-title"><i class="fas fa-bolt"></i> Ações</div>
               <div class="order-actions-grid">
-                ${waLink?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
+                ${(waLink && !isBalcao)?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
                 <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
                 ${o.receipt_url?`<a class="btn-oc-receipt" href="${esc(o.receipt_url)}" target="_blank" rel="noopener"><i class="fas fa-file-invoice"></i> Ver comprovante</a>`:''}
                 ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel order-action-full" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
@@ -1156,7 +1160,7 @@ function copyOrderText(orderId) {
   const o = gs.orders.find(x => x.id === orderId);
   if (!o) return;
   const items = Array.isArray(o.items) ? o.items : [];
-  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online' };
+  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha' };
   /* Após webhook usa capture_method */
   const payDisplay = (() => {
     if (o.payment_status === 'pago' && o.capture_method) {
@@ -1516,7 +1520,8 @@ function buildReceiptBlock(o, logoUrl) {
   const psInfo = getPaymentStatusLabel(o);
   const dateTime = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
   const isPaid = isPaidOrder(o);
-  const deliveryTag = o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA';
+  const isBalcaoReceipt = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const deliveryTag = isBalcaoReceipt ? 'PEDIDO PRESENCIAL' : (o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA');
 
   const itemsHtml = items.length
     ? items.map(i => {
@@ -1547,7 +1552,7 @@ function buildReceiptBlock(o, logoUrl) {
     </div>
     <div class="receipt-section">
       <p><span class="receipt-label">Cliente</span><br><span class="receipt-value">${esc(o.customer_name || '—')}</span></p>
-      <p><span class="receipt-label">Telefone/WhatsApp</span><br><span class="receipt-value">${esc(o.customer_phone || '—')}</span></p>
+      ${!isBalcaoReceipt ? `<p><span class="receipt-label">Telefone/WhatsApp</span><br><span class="receipt-value">${esc(o.customer_phone || '—')}</span></p>` : ''}
     </div>
     <div class="receipt-section">
       <p class="receipt-tag">${deliveryTag}</p>
@@ -1570,7 +1575,7 @@ function buildReceiptBlock(o, logoUrl) {
       ${itemsHtml}
     </div>
     ${o.notes ? `<div class="receipt-section"><p class="receipt-label">Observação do cliente</p><p class="receipt-value">${esc(o.notes)}</p></div>` : ''}
-    ${o.delivery_type !== 'pickup' ? `<div class="receipt-section">
+    ${(o.delivery_type !== 'pickup' && !isBalcaoReceipt) ? `<div class="receipt-section">
       <p class="receipt-label">Localização/Entrega</p>
       ${locHtml}
     </div>` : ''}
@@ -1594,7 +1599,7 @@ function isPaidOrder(order) {
 }
 
 /* Rótulo de forma de pagamento (compartilhado entre pedidos, entregas e vendas) */
-const PAY_METHOD_LABELS = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online' };
+const PAY_METHOD_LABELS = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha' };
 function getPaymentLabel(o) {
   if (o.payment_status === 'pago' && o.capture_method) {
     const cm = String(o.capture_method).toLowerCase();
@@ -1611,6 +1616,7 @@ const PAY_STATUS_LABELS = {
   aguardando_comprovante: { text:'Aguardando comprovante', cls:'ps-waiting' },
   checkout_criado:      { text:'Checkout criado', cls:'ps-created' },
   pago:                 { text:'Pago ✓', cls:'ps-paid' },
+  pendente:             { text:'Pendente', cls:'ps-waiting' },
   pagamento_na_entrega: { text:'Na entrega', cls:'ps-delivery' },
   cancelado:            { text:'Cancelado', cls:'ps-cancelled' },
 };
@@ -1746,14 +1752,20 @@ function renderSales() {
   const revenue = orders.reduce((s, o) => s + Number(o.total || 0), 0);
   const count   = orders.length;
   const avg     = count ? revenue / count : 0;
-  const cash    = orders.filter(o => !isOnlinePayment(o)).reduce((s, o) => s + Number(o.total || 0), 0);
-  const online  = orders.filter(o => isOnlinePayment(o)).reduce((s, o) => s + Number(o.total || 0), 0);
+  const cash     = orders.filter(o => !isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+  const online   = orders.filter(o => isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+  const pixLoja  = orders.filter(o => o.payment_method === 'pix_loja').reduce((s, o) => s + Number(o.total || 0), 0);
+  const cartMaq  = orders.filter(o => o.payment_method === 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
 
   elid('sv-revenue').textContent = 'R$ ' + fmt(revenue);
   elid('sv-count').textContent   = count;
   elid('sv-avg').textContent     = 'R$ ' + fmt(avg);
   elid('sv-cash').textContent    = 'R$ ' + fmt(cash);
   elid('sv-online').textContent  = 'R$ ' + fmt(online);
+  const svPixLoja = elid('sv-pix-loja');
+  const svCartMaq = elid('sv-cartao-maq');
+  if (svPixLoja) svPixLoja.textContent = 'R$ ' + fmt(pixLoja);
+  if (svCartMaq) svCartMaq.textContent = 'R$ ' + fmt(cartMaq);
 
   const tbody = elid('sales-table-body');
   const empty = elid('sales-empty-msg');
@@ -2544,6 +2556,495 @@ function applyProductTemplate(type) {
   toast('Modelo aplicado! Você pode editar ou adicionar mais opções.');
 }
 
+/* ══════════════════════════════════════
+   PDV / BALCÃO — Pedido Presencial
+══════════════════════════════════════ */
+const pdv = {
+  cart: [],
+  payMethod: '',
+  payStatus: '',
+  catFilter: '',
+  initialized: false,
+  optProduct: null,
+  optQty: 1,
+  optSelections: {},
+  optGroups: [],
+  mobileCartOpen: false,
+};
+
+function pdvInit() {
+  if (!pdv.initialized) {
+    pdv.initialized = true;
+    const cart = elid('pdv-cart');
+    if (cart && window.innerWidth <= 820) {
+      cart.classList.add('pdv-cart-mobile-hidden');
+      pdv.mobileCartOpen = false;
+    }
+  }
+  pdvRenderProducts();
+  pdvRenderCart();
+}
+
+function pdvRenderProducts() {
+  const grid = elid('pdv-grid');
+  const catRow = elid('pdv-cat-row');
+  if (!grid) return;
+
+  const q = (elid('pdv-search')?.value || '').toLowerCase();
+  let products = gs.products.filter(p => (p.active !== false));
+
+  const cats = [...new Set(products.map(p => p.category || p.cat || '').filter(Boolean))];
+  if (catRow) {
+    catRow.innerHTML = `<button class="pdv-cat-btn${!pdv.catFilter?' active':''}" onclick="pdvFilterCat('')">Todos</button>` +
+      cats.map(c => `<button class="pdv-cat-btn${pdv.catFilter===c?' active':''}" onclick="pdvFilterCat('${esc(c)}')">${esc(c)}</button>`).join('');
+  }
+
+  if (pdv.catFilter) {
+    products = products.filter(p => (p.category || p.cat) === pdv.catFilter);
+  }
+  if (q) {
+    products = products.filter(p => (p.name||'').toLowerCase().includes(q) || (p.category||p.cat||'').toLowerCase().includes(q));
+  }
+
+  if (!products.length) {
+    grid.innerHTML = '<p class="empty-msg">Nenhum produto encontrado.</p>';
+    return;
+  }
+
+  grid.innerHTML = products.map(p => {
+    const img = p.image_url || p.img || '';
+    const price = p.price || 0;
+    const hasOptions = p._hasOptions;
+    return `<div class="pdv-product-card" onclick="pdvAddProduct('${p.id}')">
+      ${img ? `<img class="pdv-card-img" src="${esc(img)}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">` : '<div class="pdv-card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:2rem"><i class="fas fa-image"></i></div>'}
+      <div class="pdv-card-body">
+        <div class="pdv-card-name">${esc(p.name)}</div>
+        <div class="pdv-card-price">R$ ${fmt(price)}</div>
+        <button class="pdv-card-add" onclick="event.stopPropagation();pdvAddProduct('${p.id}')">
+          <i class="fas fa-${hasOptions?'sliders':'plus'}"></i> ${hasOptions?'Escolher':'Adicionar'}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function pdvLoadProductOptions() {
+  const db = getSb();
+  const productIds = gs.products.map(p => p.id).filter(Boolean);
+  if (!productIds.length) return;
+  try {
+    const { data } = await db.from('product_option_groups').select('product_id').in('product_id', productIds).eq('active', true);
+    const withOpts = new Set((data||[]).map(g => g.product_id));
+    gs.products.forEach(p => { p._hasOptions = withOpts.has(p.id); });
+  } catch(_) {}
+}
+
+function pdvFilterProducts() { pdvRenderProducts(); }
+function pdvFilterCat(cat) { pdv.catFilter = cat; pdvRenderProducts(); }
+
+async function pdvAddProduct(productId) {
+  const p = gs.products.find(x => x.id === productId || String(x.id) === productId);
+  if (!p) return;
+
+  if (p._hasOptions) {
+    await pdvOpenOptions(p);
+    return;
+  }
+
+  const existing = pdv.cart.find(c => c.productId === productId && !c.options?.length);
+  if (existing) {
+    existing.qty++;
+    existing.total = existing.qty * existing.unitPrice;
+  } else {
+    pdv.cart.push({
+      productId,
+      name: p.name,
+      unitPrice: Number(p.price || 0),
+      qty: 1,
+      total: Number(p.price || 0),
+      options: [],
+    });
+  }
+  pdvRenderCart();
+  toast(`${p.name} adicionado!`);
+}
+
+async function pdvOpenOptions(product) {
+  pdv.optProduct = product;
+  pdv.optQty = 1;
+  pdv.optSelections = {};
+  pdv.optGroups = [];
+
+  elid('pdv-opt-title').textContent = product.name;
+  elid('pdv-opt-subtitle').textContent = `R$ ${fmt(product.price || 0)}`;
+  elid('pdv-opt-qty').textContent = '1';
+
+  const db = getSb();
+  try {
+    const { data: groups } = await db.from('product_option_groups').select('*').eq('product_id', product.id).eq('active', true).order('display_order');
+    if (!groups?.length) {
+      pdvAddProduct_direct(product);
+      return;
+    }
+    const groupIds = groups.map(g => g.id);
+    const { data: items } = await db.from('product_option_items').select('*').in('group_id', groupIds).eq('active', true).order('display_order');
+    const itemsByGroup = {};
+    (items||[]).forEach(i => { (itemsByGroup[i.group_id] = itemsByGroup[i.group_id] || []).push(i); });
+
+    pdv.optGroups = groups.map(g => ({
+      ...g,
+      items: itemsByGroup[g.id] || [],
+    }));
+
+    pdv.optGroups.forEach(g => { pdv.optSelections[g.id] = []; });
+  } catch(e) {
+    console.warn('Erro ao carregar opções:', e);
+    pdvAddProduct_direct(product);
+    return;
+  }
+
+  pdvRenderOptionsModal();
+  elid('pdv-options-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function pdvAddProduct_direct(product) {
+  const existing = pdv.cart.find(c => c.productId === product.id && !c.options?.length);
+  if (existing) {
+    existing.qty++;
+    existing.total = existing.qty * existing.unitPrice;
+  } else {
+    pdv.cart.push({
+      productId: product.id,
+      name: product.name,
+      unitPrice: Number(product.price || 0),
+      qty: 1,
+      total: Number(product.price || 0),
+      options: [],
+    });
+  }
+  pdvRenderCart();
+  toast(`${product.name} adicionado!`);
+}
+
+function pdvRenderOptionsModal() {
+  const body = elid('pdv-opt-body');
+  if (!body) return;
+
+  body.innerHTML = pdv.optGroups.map(g => {
+    const sel = pdv.optSelections[g.id] || [];
+    const isRadio = g.type === 'radio';
+    const limitText = g.max_select > 0 ? `máx. ${g.max_select}` : '';
+    const freeText = g.free_limit > 0 ? `${g.free_limit} grátis` : '';
+    const infoText = [limitText, freeText].filter(Boolean).join(' · ');
+
+    return `<div class="pdv-opt-group">
+      <div class="pdv-opt-group-title">
+        ${esc(g.title)}
+        ${g.required ? '<span class="pdv-opt-req">Obrigatório</span>' : ''}
+        ${infoText ? `<span class="pdv-opt-limit">(${infoText})</span>` : ''}
+      </div>
+      <div class="pdv-opt-items">
+        ${g.items.map(item => {
+          const isSelected = sel.includes(item.id);
+          const priceLabel = item.price_delta > 0 ? `+R$ ${fmt(item.price_delta)}` : (item.price_delta === 0 ? '' : `R$ ${fmt(item.price_delta)}`);
+          return `<div class="pdv-opt-item${isSelected?' selected':''}" data-type="${isRadio?'radio':'checkbox'}" onclick="pdvToggleOption('${g.id}','${item.id}','${g.type}',${g.max_select||0})">
+            <span class="pdv-opt-item-check"><i class="fas fa-check"></i></span>
+            <span class="pdv-opt-item-name">${esc(item.name)}</span>
+            ${priceLabel ? `<span class="pdv-opt-item-price">${priceLabel}</span>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  pdvUpdateOptTotal();
+}
+
+function pdvToggleOption(groupId, itemId, type, maxSelect) {
+  const sel = pdv.optSelections[groupId] || [];
+  const idx = sel.indexOf(itemId);
+
+  if (type === 'radio') {
+    pdv.optSelections[groupId] = idx >= 0 ? [] : [itemId];
+  } else {
+    if (idx >= 0) {
+      sel.splice(idx, 1);
+    } else {
+      if (maxSelect > 0 && sel.length >= maxSelect) {
+        toast(`Máximo de ${maxSelect} opções neste grupo.`, true);
+        return;
+      }
+      sel.push(itemId);
+    }
+    pdv.optSelections[groupId] = sel;
+  }
+
+  pdvRenderOptionsModal();
+}
+
+function pdvOptQty(delta) {
+  pdv.optQty = Math.max(1, pdv.optQty + delta);
+  elid('pdv-opt-qty').textContent = pdv.optQty;
+  pdvUpdateOptTotal();
+}
+
+function pdvUpdateOptTotal() {
+  const p = pdv.optProduct;
+  if (!p) return;
+
+  let optExtra = 0;
+  pdv.optGroups.forEach(g => {
+    const sel = pdv.optSelections[g.id] || [];
+    const freeLimit = g.free_limit || 0;
+    let freeUsed = 0;
+    sel.forEach(itemId => {
+      const item = g.items.find(i => i.id === itemId);
+      if (!item) return;
+      if (freeLimit > 0 && freeUsed < freeLimit) {
+        freeUsed++;
+      } else {
+        optExtra += Number(item.price_delta || 0);
+      }
+    });
+  });
+
+  const unitTotal = Number(p.price || 0) + optExtra;
+  const total = unitTotal * pdv.optQty;
+  elid('pdv-opt-add-label').textContent = `Adicionar — R$ ${fmt(total)}`;
+}
+
+function pdvConfirmOptions() {
+  const p = pdv.optProduct;
+  if (!p) return;
+
+  const requiredGroups = pdv.optGroups.filter(g => g.required);
+  for (const g of requiredGroups) {
+    const sel = pdv.optSelections[g.id] || [];
+    if (!sel.length) {
+      toast(`Escolha pelo menos uma opção em "${g.title}".`, true);
+      return;
+    }
+  }
+
+  const options = [];
+  let optExtra = 0;
+
+  pdv.optGroups.forEach(g => {
+    const sel = pdv.optSelections[g.id] || [];
+    if (!sel.length) return;
+    const freeLimit = g.free_limit || 0;
+    let freeUsed = 0;
+    const selectedItems = sel.map(itemId => {
+      const item = g.items.find(i => i.id === itemId);
+      if (!item) return null;
+      let charged = 0;
+      if (freeLimit > 0 && freeUsed < freeLimit) {
+        freeUsed++;
+      } else {
+        charged = Number(item.price_delta || 0);
+        optExtra += charged;
+      }
+      return { name: item.name, price_delta: charged };
+    }).filter(Boolean);
+
+    options.push({ groupTitle: g.title, items: selectedItems });
+  });
+
+  const unitPrice = Number(p.price || 0) + optExtra;
+
+  pdv.cart.push({
+    productId: p.id,
+    name: p.name,
+    unitPrice,
+    finalUnitPrice: unitPrice,
+    qty: pdv.optQty,
+    total: unitPrice * pdv.optQty,
+    options,
+  });
+
+  pdvCloseOptions();
+  pdvRenderCart();
+  toast(`${p.name} adicionado com opções!`);
+}
+
+function pdvCloseOptions() {
+  elid('pdv-options-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  pdv.optProduct = null;
+  pdv.optGroups = [];
+  pdv.optSelections = {};
+}
+
+function pdvCloseOptionsOutside(e) {
+  if (e.target === elid('pdv-options-overlay')) pdvCloseOptions();
+}
+
+function pdvRenderCart() {
+  const wrap = elid('pdv-cart-items');
+  const fab = elid('pdv-cart-fab');
+  const fabCount = elid('pdv-fab-count');
+
+  const totalQty = pdv.cart.reduce((s, c) => s + c.qty, 0);
+  if (fab) fab.style.display = totalQty > 0 ? 'flex' : 'none';
+  if (fabCount) fabCount.textContent = totalQty;
+
+  if (!pdv.cart.length) {
+    wrap.innerHTML = '<p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Carrinho vazio</p>';
+    elid('pdv-subtotal').textContent = 'R$ 0,00';
+    elid('pdv-total').textContent = 'R$ 0,00';
+    return;
+  }
+
+  wrap.innerHTML = pdv.cart.map((c, i) => {
+    const optsHtml = (c.options||[]).map(og => `${og.groupTitle}: ${og.items.map(oi=>oi.name).join(', ')}`).join(' · ');
+    return `<div class="pdv-item">
+      <div class="pdv-item-info">
+        <div class="pdv-item-name">${esc(c.name)}</div>
+        ${optsHtml ? `<div class="pdv-item-opts">${esc(optsHtml)}</div>` : ''}
+        <div class="pdv-item-price">R$ ${fmt(c.total)}</div>
+      </div>
+      <div class="pdv-item-actions">
+        <button class="pdv-qty-btn" onclick="pdvChangeQty(${i},-1)"><i class="fas fa-minus"></i></button>
+        <span class="pdv-item-qty">${c.qty}</span>
+        <button class="pdv-qty-btn" onclick="pdvChangeQty(${i},1)"><i class="fas fa-plus"></i></button>
+        <button class="pdv-item-remove" onclick="pdvRemoveItem(${i})"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const subtotal = pdv.cart.reduce((s, c) => s + c.total, 0);
+  elid('pdv-subtotal').textContent = `R$ ${fmt(subtotal)}`;
+  elid('pdv-total').textContent = `R$ ${fmt(subtotal)}`;
+}
+
+function pdvChangeQty(index, delta) {
+  const item = pdv.cart[index];
+  if (!item) return;
+  item.qty = Math.max(1, item.qty + delta);
+  item.total = item.qty * item.unitPrice;
+  pdvRenderCart();
+}
+
+function pdvRemoveItem(index) {
+  pdv.cart.splice(index, 1);
+  pdvRenderCart();
+}
+
+function pdvSelectPay(method) {
+  pdv.payMethod = method;
+  document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === method));
+}
+
+function pdvSelectPayStatus(status) {
+  pdv.payStatus = status;
+  document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.toggle('active', b.dataset.status === status));
+}
+
+async function pdvClearCart() {
+  if (pdv.cart.length) {
+    const confirmed = await showConfirmModal({
+      title: 'Limpar pedido?',
+      message: 'Tem certeza que deseja limpar todos os itens do pedido presencial?',
+      confirmText: 'Limpar',
+      cancelText: 'Cancelar',
+      danger: true,
+    });
+    if (!confirmed) return;
+  }
+  pdv.cart = [];
+  pdv.payMethod = '';
+  pdv.payStatus = '';
+  elid('pdv-customer-name').value = '';
+  elid('pdv-notes').value = '';
+  document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.remove('active'));
+  pdvRenderCart();
+}
+
+async function pdvFinalize(printReceipt) {
+  if (!pdv.cart.length) { toast('Adicione pelo menos um produto.', true); return; }
+  if (!pdv.payMethod) { toast('Escolha a forma de pagamento.', true); return; }
+  if (!pdv.payStatus) { toast('Informe se o pedido está pago ou pendente.', true); return; }
+
+  const btn = elid('pdv-btn-finalize-print');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...'; }
+
+  const customerName = (elid('pdv-customer-name')?.value || '').trim() || 'Cliente balcão';
+  const notes = (elid('pdv-notes')?.value || '').trim();
+  const subtotal = pdv.cart.reduce((s, c) => s + c.total, 0);
+  const orderNumber = `DL-${Math.floor(Math.random() * 90000) + 10000}`;
+  const now = new Date().toISOString();
+  const isPago = pdv.payStatus === 'pago';
+
+  const orderItems = pdv.cart.map(c => ({
+    name: c.name,
+    qty: c.qty,
+    unitPrice: c.unitPrice,
+    finalUnitPrice: c.finalUnitPrice || c.unitPrice,
+    total: c.total,
+    options: c.options || [],
+  }));
+
+  const orderData = {
+    order_number: orderNumber,
+    customer_name: customerName,
+    customer_phone: null,
+    delivery_type: 'balcao',
+    delivery_method: 'balcao',
+    payment_method: pdv.payMethod,
+    payment_status: isPago ? 'pago' : 'pendente',
+    paid_at: isPago ? now : null,
+    status: 'em_preparo',
+    subtotal,
+    total: subtotal,
+    delivery_fee: 0,
+    items: orderItems,
+    notes: notes || null,
+    order_source: 'balcao',
+    created_at: now,
+    updated_at: now,
+  };
+
+  try {
+    const { data, error } = await getSb().from('orders').insert(orderData).select('*').single();
+    if (error) throw error;
+
+    gs.orders.unshift(data);
+    gs.seenOrderIds.add(data.id);
+    saveSeenOrderIds();
+    updateOrderFilterCounts();
+
+    if (printReceipt) {
+      openReceiptWindow([data]);
+      markOrderPrinted(data);
+    }
+
+    pdv.cart = [];
+    pdv.payMethod = '';
+    pdv.payStatus = '';
+    elid('pdv-customer-name').value = '';
+    elid('pdv-notes').value = '';
+    document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.remove('active'));
+    pdvRenderCart();
+
+    toast(`Pedido ${orderNumber} criado com sucesso!`);
+  } catch(e) {
+    console.error('Erro ao criar pedido presencial:', e);
+    toast('Erro ao criar pedido: ' + (e.message || 'tente novamente.'), true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-print"></i> Finalizar e imprimir comanda'; }
+  }
+}
+
+function pdvToggleMobileCart() {
+  const cart = elid('pdv-cart');
+  if (!cart) return;
+  pdv.mobileCartOpen = !pdv.mobileCartOpen;
+  cart.classList.toggle('pdv-cart-mobile-hidden', !pdv.mobileCartOpen);
+}
+
 /* Expose for HTML onclick */
 window.handleLogin             = handleLogin;
 window.handleCreateAccount     = handleCreateAccount;
@@ -2590,3 +3091,19 @@ window.showConfirmModal               = showConfirmModal;
 window._confirmModalConfirm           = _confirmModalConfirm;
 window._confirmModalCancel            = _confirmModalCancel;
 window._confirmModalBgClick           = _confirmModalBgClick;
+window.pdvInit                        = pdvInit;
+window.pdvFilterProducts              = pdvFilterProducts;
+window.pdvFilterCat                   = pdvFilterCat;
+window.pdvAddProduct                  = pdvAddProduct;
+window.pdvChangeQty                   = pdvChangeQty;
+window.pdvRemoveItem                  = pdvRemoveItem;
+window.pdvSelectPay                   = pdvSelectPay;
+window.pdvSelectPayStatus             = pdvSelectPayStatus;
+window.pdvClearCart                    = pdvClearCart;
+window.pdvFinalize                    = pdvFinalize;
+window.pdvToggleMobileCart            = pdvToggleMobileCart;
+window.pdvCloseOptions                = pdvCloseOptions;
+window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
+window.pdvConfirmOptions              = pdvConfirmOptions;
+window.pdvToggleOption                = pdvToggleOption;
+window.pdvOptQty                      = pdvOptQty;
