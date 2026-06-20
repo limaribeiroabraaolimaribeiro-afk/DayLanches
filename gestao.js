@@ -2890,7 +2890,7 @@ function pdvRenderCart() {
   if (fabCount) fabCount.textContent = totalQty;
 
   if (!pdv.cart.length) {
-    wrap.innerHTML = '<p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Carrinho vazio</p>';
+    wrap.innerHTML = '<p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item adicionado</p>';
     elid('pdv-subtotal').textContent = 'R$ 0,00';
     elid('pdv-total').textContent = 'R$ 0,00';
     return;

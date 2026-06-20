@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=13">
+  <link rel="stylesheet" href="gestao.css?v=14">
 </head>
 <body>
 
@@ -243,23 +243,23 @@
         <!-- DIREITA: Carrinho / Pedido atual -->
         <div class="pdv-cart" id="pdv-cart">
           <div class="pdv-cart-header">
-            <h2 class="pdv-cart-title"><i class="fas fa-cash-register"></i> Pedido presencial</h2>
+            <h2 class="pdv-cart-title"><i class="fas fa-cash-register"></i> Novo pedido no balcão</h2>
           </div>
 
           <div class="pdv-cart-body">
             <div class="pdv-cart-fields">
               <div class="form-group">
-                <label class="form-label">Nome do cliente <small>(opcional)</small></label>
-                <input type="text" id="pdv-customer-name" class="form-input" placeholder="Ex: João">
+                <label class="form-label">Cliente <span class="pdv-field-hint">opcional</span></label>
+                <input type="text" id="pdv-customer-name" class="form-input" placeholder="Nome do cliente">
               </div>
               <div class="form-group">
-                <label class="form-label">Observação geral <small>(opcional)</small></label>
+                <label class="form-label">Observação <span class="pdv-field-hint">opcional</span></label>
                 <input type="text" id="pdv-notes" class="form-input" placeholder="Ex: Sem cebola em tudo">
               </div>
             </div>
 
             <div class="pdv-cart-items" id="pdv-cart-items">
-              <p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Carrinho vazio</p>
+              <p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item adicionado</p>
             </div>
 
             <div class="pdv-cart-summary">
@@ -273,20 +273,20 @@
               </div>
             </div>
 
-            <div class="pdv-payment-section">
-              <label class="form-label">Forma de pagamento</label>
-              <div class="pdv-pay-options" id="pdv-pay-options">
-                <button type="button" class="pdv-pay-btn" data-pay="dinheiro" onclick="pdvSelectPay('dinheiro')"><i class="fas fa-money-bill-wave"></i> Dinheiro</button>
-                <button type="button" class="pdv-pay-btn" data-pay="pix_loja" onclick="pdvSelectPay('pix_loja')"><i class="fas fa-qrcode"></i> Pix na loja</button>
-                <button type="button" class="pdv-pay-btn" data-pay="cartao_maquininha" onclick="pdvSelectPay('cartao_maquininha')"><i class="fas fa-credit-card"></i> Cartão na maquininha</button>
+            <div class="pdv-section-block">
+              <label class="pdv-section-label">Pagamento</label>
+              <div class="pdv-pay-grid" id="pdv-pay-options">
+                <button type="button" class="pdv-pay-btn" data-pay="dinheiro" onclick="pdvSelectPay('dinheiro')"><i class="fas fa-money-bill-wave"></i><span>Dinheiro</span></button>
+                <button type="button" class="pdv-pay-btn" data-pay="pix_loja" onclick="pdvSelectPay('pix_loja')"><i class="fas fa-qrcode"></i><span>Pix</span></button>
+                <button type="button" class="pdv-pay-btn" data-pay="cartao_maquininha" onclick="pdvSelectPay('cartao_maquininha')"><i class="fas fa-credit-card"></i><span>Cartão</span></button>
               </div>
             </div>
 
-            <div class="pdv-status-section">
-              <label class="form-label">Status do pagamento</label>
-              <div class="pdv-status-options" id="pdv-status-options">
-                <button type="button" class="pdv-status-btn" data-status="pago" onclick="pdvSelectPayStatus('pago')"><i class="fas fa-check-circle"></i> Pago</button>
-                <button type="button" class="pdv-status-btn" data-status="pendente" onclick="pdvSelectPayStatus('pendente')"><i class="fas fa-clock"></i> Pendente</button>
+            <div class="pdv-section-block">
+              <label class="pdv-section-label">Status</label>
+              <div class="pdv-status-grid" id="pdv-status-options">
+                <button type="button" class="pdv-status-btn" data-status="pago" onclick="pdvSelectPayStatus('pago')"><i class="fas fa-check-circle"></i><span>Pago</span></button>
+                <button type="button" class="pdv-status-btn" data-status="pendente" onclick="pdvSelectPayStatus('pendente')"><i class="fas fa-clock"></i><span>Pendente</span></button>
               </div>
             </div>
           </div>
