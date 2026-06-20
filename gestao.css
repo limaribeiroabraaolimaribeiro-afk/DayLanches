@@ -2342,6 +2342,96 @@ a { text-decoration: none; color: inherit; }
   margin-top: 8px;
 }
 
+/* Mesa grid */
+.pdv-mesa-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.pdv-mesa-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 56px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--white);
+  cursor: pointer;
+  transition: all .15s;
+  padding: 4px 2px;
+}
+.pdv-mesa-btn .pdv-mesa-num {
+  font-size: .88rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.pdv-mesa-btn .pdv-mesa-status {
+  font-size: .6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  line-height: 1;
+}
+.pdv-mesa-btn .pdv-mesa-order {
+  font-size: .55rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mesa livre */
+.pdv-mesa-btn.mesa-livre {
+  border-color: #d1d5db;
+  background: #f9fafb;
+}
+.pdv-mesa-btn.mesa-livre .pdv-mesa-status { color: var(--success); }
+.pdv-mesa-btn.mesa-livre:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+/* Mesa ocupada */
+.pdv-mesa-btn.mesa-ocupada {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  cursor: not-allowed;
+  opacity: .75;
+}
+.pdv-mesa-btn.mesa-ocupada .pdv-mesa-num { color: #b91c1c; }
+.pdv-mesa-btn.mesa-ocupada .pdv-mesa-status { color: #dc2626; }
+
+/* Mesa selecionada */
+.pdv-mesa-btn.mesa-selected {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 0 3px rgba(255,107,0,.2);
+}
+.pdv-mesa-btn.mesa-selected .pdv-mesa-num { color: #fff; }
+.pdv-mesa-btn.mesa-selected .pdv-mesa-status { color: rgba(255,255,255,.85); }
+
+/* Order card: mesa badge */
+.oc-mesa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: #DBEAFE;
+  color: #1D4ED8;
+}
+
 /* Payment & Status sections */
 .pdv-section-block {
   margin-top: 18px;
@@ -2688,6 +2778,9 @@ a { text-decoration: none; color: inherit; }
 
 @media (max-width: 480px) {
   .pdv-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .pdv-mesa-grid { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .pdv-mesa-btn { height: 50px; }
+  .pdv-mesa-btn .pdv-mesa-num { font-size: .8rem; }
   .pdv-pay-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .pdv-pay-btn, .pdv-status-btn { height: 44px; font-size: .78rem; }
   .pdv-pay-btn i, .pdv-status-btn i { font-size: .9rem; }

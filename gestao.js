@@ -1033,7 +1033,7 @@ function orderCard(o) {
       <div class="oc-head">
         <div class="oc-head-left">
           <span class="oc-num">#${esc(num)}</span>
-          ${isBalcao ? '<span class="oc-source-badge"><i class="fas fa-cash-register"></i> Balcão</span>' : ''}
+          ${isBalcao ? `<span class="oc-source-badge"><i class="fas fa-cash-register"></i> Balcão</span>${o.table_number ? `<span class="oc-mesa-badge"><i class="fas fa-chair"></i> Mesa ${o.table_number}</span>` : ''}` : ''}
           <span class="oc-date">${date}</span>
           ${(o.printed_at || gs.printedOrderIds.has(o.id)) ? '<span class="oc-printed-badge"><i class="fas fa-check"></i> Comanda impressa</span>' : ''}
         </div>
@@ -1052,7 +1052,7 @@ function orderCard(o) {
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Entrega</span>
-          <span class="oc-field-value"><i class="fas fa-${isBalcao?'cash-register':o.delivery_type==='pickup'?'store':'motorcycle'}" style="color:var(--primary)"></i> ${isBalcao?'Balcão / Presencial':o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
+          <span class="oc-field-value"><i class="fas fa-${isBalcao?'cash-register':o.delivery_type==='pickup'?'store':'motorcycle'}" style="color:var(--primary)"></i> ${isBalcao?(o.table_number?`Mesa ${o.table_number}`:'Balcão / Presencial'):o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Pagamento</span>
@@ -1212,7 +1212,8 @@ async function updateOrderStatus(id, status) {
   const { error } = await getSb().from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { toast('Erro ao atualizar status.', true); return; }
   toast('Status atualizado!');
-  loadOrders();
+  await loadOrders();
+  if (pdv.initialized) pdvRenderMesas();
 }
 
 function filterOrders(filter, btn) {
@@ -1521,6 +1522,7 @@ function buildReceiptBlock(o, logoUrl) {
   const dateTime = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
   const isPaid = isPaidOrder(o);
   const isBalcaoReceipt = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const hasMesa = isBalcaoReceipt && o.table_number;
   const deliveryTag = isBalcaoReceipt ? 'PEDIDO PRESENCIAL' : (o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA');
 
   const itemsHtml = items.length
@@ -1556,6 +1558,7 @@ function buildReceiptBlock(o, logoUrl) {
     </div>
     <div class="receipt-section">
       <p class="receipt-tag">${deliveryTag}</p>
+      ${hasMesa ? `<p class="receipt-tag" style="margin-top:8px;background:#1D4ED8;font-size:1.3rem">MESA ${o.table_number}</p>` : ''}
     </div>
     <div class="receipt-section">
       <div class="receipt-row">
@@ -2563,6 +2566,7 @@ const pdv = {
   cart: [],
   payMethod: '',
   payStatus: '',
+  tableNumber: null,
   catFilter: '',
   initialized: false,
   optProduct: null,
@@ -2582,6 +2586,7 @@ function pdvInit() {
     }
   }
   pdvRenderProducts();
+  pdvRenderMesas();
   pdvRenderCart();
 }
 
@@ -2955,10 +2960,12 @@ async function pdvClearCart() {
   pdv.cart = [];
   pdv.payMethod = '';
   pdv.payStatus = '';
+  pdv.tableNumber = null;
   elid('pdv-customer-name').value = '';
   elid('pdv-notes').value = '';
   document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.remove('active'));
+  pdvRenderMesas();
   pdvRenderCart();
 }
 
@@ -2966,6 +2973,7 @@ async function pdvFinalize(printReceipt) {
   if (!pdv.cart.length) { toast('Adicione pelo menos um produto.', true); return; }
   if (!pdv.payMethod) { toast('Escolha a forma de pagamento.', true); return; }
   if (!pdv.payStatus) { toast('Informe se o pedido está pago ou pendente.', true); return; }
+  if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }
 
   const btn = elid('pdv-btn-finalize-print');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...'; }
@@ -3002,6 +3010,7 @@ async function pdvFinalize(printReceipt) {
     items: orderItems,
     notes: notes || null,
     order_source: 'balcao',
+    table_number: pdv.tableNumber,
     created_at: now,
     updated_at: now,
   };
@@ -3023,10 +3032,12 @@ async function pdvFinalize(printReceipt) {
     pdv.cart = [];
     pdv.payMethod = '';
     pdv.payStatus = '';
+    pdv.tableNumber = null;
     elid('pdv-customer-name').value = '';
     elid('pdv-notes').value = '';
     document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.pdv-status-btn').forEach(b => b.classList.remove('active'));
+    pdvRenderMesas();
     pdvRenderCart();
 
     toast(`Pedido ${orderNumber} criado com sucesso!`);
@@ -3036,6 +3047,55 @@ async function pdvFinalize(printReceipt) {
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-print"></i> Finalizar e imprimir comanda'; }
   }
+}
+
+function pdvGetOccupiedTables() {
+  const occupied = {};
+  gs.orders.forEach(o => {
+    if (!o.table_number) return;
+    if (o.order_source !== 'balcao' && o.delivery_type !== 'balcao') return;
+    const st = (o.status || '').toLowerCase();
+    if (st === 'finalizado' || st === 'cancelado') return;
+    occupied[o.table_number] = o.order_number || o.id?.slice(-8).toUpperCase() || '';
+  });
+  return occupied;
+}
+
+function pdvRenderMesas() {
+  const grid = elid('pdv-mesa-grid');
+  if (!grid) return;
+  const occupied = pdvGetOccupiedTables();
+
+  grid.innerHTML = Array.from({ length: 10 }, (_, i) => {
+    const num = i + 1;
+    const orderNum = occupied[num];
+    const isOccupied = !!orderNum;
+    const isSelected = pdv.tableNumber === num;
+
+    let cls = 'pdv-mesa-btn';
+    if (isSelected) cls += ' mesa-selected';
+    else if (isOccupied) cls += ' mesa-ocupada';
+    else cls += ' mesa-livre';
+
+    const statusText = isSelected ? 'Selecionada' : (isOccupied ? 'Ocupada' : 'Livre');
+    const orderLine = (isOccupied && !isSelected) ? `<span class="pdv-mesa-order">#${esc(orderNum)}</span>` : '';
+
+    return `<button type="button" class="${cls}" ${isOccupied && !isSelected ? 'disabled' : ''} onclick="pdvSelectMesa(${num})">
+      <span class="pdv-mesa-num">${num}</span>
+      <span class="pdv-mesa-status">${statusText}</span>
+      ${orderLine}
+    </button>`;
+  }).join('');
+}
+
+function pdvSelectMesa(num) {
+  const occupied = pdvGetOccupiedTables();
+  if (occupied[num] && pdv.tableNumber !== num) {
+    toast(`Mesa ${num} está ocupada.`, true);
+    return;
+  }
+  pdv.tableNumber = pdv.tableNumber === num ? null : num;
+  pdvRenderMesas();
 }
 
 function pdvToggleMobileCart() {
@@ -3102,6 +3162,7 @@ window.pdvSelectPayStatus             = pdvSelectPayStatus;
 window.pdvClearCart                    = pdvClearCart;
 window.pdvFinalize                    = pdvFinalize;
 window.pdvToggleMobileCart            = pdvToggleMobileCart;
+window.pdvSelectMesa                  = pdvSelectMesa;
 window.pdvCloseOptions                = pdvCloseOptions;
 window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
 window.pdvConfirmOptions              = pdvConfirmOptions;
