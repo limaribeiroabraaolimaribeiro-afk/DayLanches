@@ -1,6 +1,16 @@
--- Adiciona coluna order_source para diferenciar pedidos do site e do balcão
+-- Colunas necessárias para o módulo Balcão (pedido presencial + mesas)
+-- Execute este SQL no Supabase SQL Editor antes de usar o Balcão
+
 ALTER TABLE public.orders
 ADD COLUMN IF NOT EXISTS order_source TEXT DEFAULT 'site';
 
--- Pedidos existentes são do site
--- Pedidos presenciais usarão order_source = 'balcao'
+ALTER TABLE public.orders
+ADD COLUMN IF NOT EXISTS table_number INTEGER;
+
+ALTER TABLE public.orders
+ADD COLUMN IF NOT EXISTS printed_at TIMESTAMPTZ;
+
+ALTER TABLE public.orders
+ADD COLUMN IF NOT EXISTS customer_address_text TEXT;
+
+NOTIFY pgrst, 'reload schema';

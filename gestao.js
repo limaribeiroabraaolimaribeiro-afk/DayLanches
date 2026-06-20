@@ -885,7 +885,7 @@ async function loadOrders() {
     gs.orders.forEach(o => { if (o.printed_at) gs.printedOrderIds.add(o.id); });
   } catch (e) {
     gs.orders = [];
-    console.warn('Erro ao carregar pedidos:', e);
+    console.warn('[Gestão] Erro ao carregar pedidos:', { message: e?.message, details: e?.details, hint: e?.hint, code: e?.code, full: e });
   }
   renderOrders();
 }
@@ -2621,7 +2621,7 @@ function pdvRenderProducts() {
     const price = p.price || 0;
     const hasOptions = p._hasOptions;
     return `<div class="pdv-product-card" onclick="pdvAddProduct('${p.id}')">
-      ${img ? `<img class="pdv-card-img" src="${esc(img)}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none'">` : '<div class="pdv-card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:2rem"><i class="fas fa-image"></i></div>'}
+      ${img ? `<img class="pdv-card-img" src="${esc(img)}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='flex')"><div class="pdv-card-img pdv-card-img-ph" style="display:none;align-items:center;justify-content:center;color:var(--text-muted);font-size:2rem"><i class="fas fa-image"></i></div>` : '<div class="pdv-card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:2rem"><i class="fas fa-image"></i></div>'}
       <div class="pdv-card-body">
         <div class="pdv-card-name">${esc(p.name)}</div>
         <div class="pdv-card-price">R$ ${fmt(price)}</div>
@@ -2999,25 +2999,39 @@ async function pdvFinalize(printReceipt) {
     customer_name: customerName,
     customer_phone: null,
     delivery_type: 'balcao',
-    delivery_method: 'balcao',
     payment_method: pdv.payMethod,
     payment_status: isPago ? 'pago' : 'pendente',
     paid_at: isPago ? now : null,
     status: 'em_preparo',
-    subtotal,
     total: subtotal,
-    delivery_fee: 0,
     items: orderItems,
     notes: notes || null,
     order_source: 'balcao',
     table_number: pdv.tableNumber,
-    created_at: now,
-    updated_at: now,
   };
+
+  console.log('[PDV] Payload pedido presencial:', orderData);
 
   try {
     const { data, error } = await getSb().from('orders').insert(orderData).select('*').single();
-    if (error) throw error;
+
+    if (error) {
+      console.error('[PDV] Erro ao criar pedido presencial:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        full: error,
+      });
+
+      const msg = error.message || '';
+      if (msg.includes('order_source') || msg.includes('table_number')) {
+        toast('Erro: execute as migrations SQL no Supabase antes de usar o Balcão.', true);
+      } else {
+        toast('Erro ao criar pedido: ' + (msg || 'tente novamente.'), true);
+      }
+      return;
+    }
 
     gs.orders.unshift(data);
     gs.seenOrderIds.add(data.id);
@@ -3042,7 +3056,13 @@ async function pdvFinalize(printReceipt) {
 
     toast(`Pedido ${orderNumber} criado com sucesso!`);
   } catch(e) {
-    console.error('Erro ao criar pedido presencial:', e);
+    console.error('[PDV] Erro inesperado ao criar pedido presencial:', {
+      message: e?.message,
+      details: e?.details,
+      hint: e?.hint,
+      code: e?.code,
+      full: e,
+    });
     toast('Erro ao criar pedido: ' + (e.message || 'tente novamente.'), true);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-print"></i> Finalizar e imprimir comanda'; }
