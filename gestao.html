@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=19">
+  <link rel="stylesheet" href="gestao.css?v=20">
 </head>
 <body>
 
@@ -291,11 +291,8 @@
             </div>
 
             <div class="pdv-cart-actions">
-              <button class="btn-pdv-primary" id="pdv-btn-finalize-print" onclick="pdvFinalize(true)">
-                <i class="fas fa-print"></i> Finalizar e imprimir comanda
-              </button>
-              <button class="btn-pdv-secondary" onclick="pdvFinalize(false)">
-                <i class="fas fa-check"></i> Finalizar sem imprimir
+              <button class="btn-pdv-primary" id="pdv-btn-save" onclick="pdvSave()">
+                <i class="fas fa-check"></i> Salvar pedido
               </button>
               <button class="btn-pdv-clear" onclick="pdvClearCart()">
                 <i class="fas fa-trash"></i> Limpar pedido
@@ -663,7 +660,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=29"></script>
+<script src="gestao.js?v=30"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

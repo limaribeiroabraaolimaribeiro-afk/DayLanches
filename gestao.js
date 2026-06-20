@@ -2978,12 +2978,12 @@ async function pdvClearCart() {
   pdvRenderCart();
 }
 
-async function pdvFinalize(printReceipt) {
+async function pdvSave() {
   if (!pdv.cart.length) { toast('Adicione pelo menos um produto.', true); return; }
   if (!pdv.payMethod) { toast('Escolha a forma de pagamento.', true); return; }
   if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }
 
-  const btn = elid('pdv-btn-finalize-print');
+  const btn = elid('pdv-btn-save');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...'; }
 
   const customerName = (elid('pdv-customer-name')?.value || '').trim() || 'Cliente balcão';
@@ -3044,11 +3044,6 @@ async function pdvFinalize(printReceipt) {
     saveSeenOrderIds();
     updateOrderFilterCounts();
 
-    if (printReceipt) {
-      openReceiptWindow([data]);
-      markOrderPrinted(data);
-    }
-
     pdv.cart = [];
     pdv.payMethod = '';
     pdv.tableNumber = null;
@@ -3058,7 +3053,7 @@ async function pdvFinalize(printReceipt) {
     pdvRenderMesas();
     pdvRenderCart();
 
-    toast(`Pedido ${orderNumber} criado com sucesso!`);
+    toast('Pedido salvo com sucesso.');
   } catch(e) {
     console.error('[PDV] Erro inesperado ao criar pedido presencial:', {
       message: e?.message,
@@ -3069,7 +3064,7 @@ async function pdvFinalize(printReceipt) {
     });
     toast('Erro ao criar pedido: ' + (e.message || 'tente novamente.'), true);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-print"></i> Finalizar e imprimir comanda'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Salvar pedido'; }
   }
 }
 
@@ -3177,7 +3172,7 @@ window.pdvChangeQty                   = pdvChangeQty;
 window.pdvRemoveItem                  = pdvRemoveItem;
 window.pdvSelectPay                   = pdvSelectPay;
 window.pdvClearCart                    = pdvClearCart;
-window.pdvFinalize                    = pdvFinalize;
+window.pdvSave                        = pdvSave;
 window.pdvSelectMesa                  = pdvSelectMesa;
 window.pdvCloseOptions                = pdvCloseOptions;
 window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
