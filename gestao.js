@@ -2460,10 +2460,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (session?.user) {
       gs.currentUser = session.user;
       showView('dashboard');
-      const _userName = session.user.user_metadata?.name || session.user.email.split('@')[0];
-      elid('user-display').textContent = _userName;
-      const _pdvUsr = elid('pdv-user-display');
-      if (_pdvUsr) _pdvUsr.textContent = _userName;
+      const _uName = session.user.user_metadata?.name || session.user.email.split('@')[0];
+      elid('user-display').textContent = _uName;
+      var _pu = elid('pdv-user-display'); if (_pu) _pu.textContent = _uName;
       loadProducts();
       loadOrders().then(() => {
         gs.orders.forEach(o => gs.seenOrderIds.add(o.id));
