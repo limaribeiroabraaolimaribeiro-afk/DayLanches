@@ -1334,6 +1334,42 @@ a { text-decoration: none; color: inherit; }
   .gestao-modal-btn      { width: 100%; }
 }
 
+/* Payment method modal */
+.pay-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 20px;
+}
+.pay-modal-btn {
+  height: 64px;
+  border-radius: 12px;
+  font-size: .85rem;
+  font-weight: 700;
+  border: 2px solid var(--border);
+  color: var(--text-med);
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pay-modal-btn i { font-size: 1.2rem; }
+.pay-modal-btn:hover { border-color: var(--primary); color: var(--primary); }
+.pay-modal-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  box-shadow: 0 0 0 3px rgba(255,107,0,.15);
+}
+.gestao-modal-btn-primary.disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
