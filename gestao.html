@@ -109,6 +109,12 @@
     <header class="dash-header">
       <button class="btn-icon btn-menu" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
       <h1 class="dash-title" id="dash-title">Produtos</h1>
+      <button class="btn-sound" id="btn-sound" onclick="toggleOrderSound()" title="Ativar som de pedidos">
+        <i class="fas fa-bell-slash"></i><span class="btn-sound-label">Ativar som de pedidos</span>
+      </button>
+      <button class="btn-sound btn-test-sound" id="btn-test-sound" onclick="testOrderSound()" title="Testar som">
+        <i class="fas fa-volume-high"></i><span class="btn-sound-label">Testar som</span>
+      </button>
       <span class="dash-user"><i class="fas fa-user-circle"></i> <span id="user-display">—</span></span>
     </header>
 
@@ -222,14 +228,6 @@
 
         <!-- ESQUERDA: Produtos (rola independente) -->
         <div class="pdv-products-column">
-          <div class="pdv-toolbar">
-            <button class="btn-sound" id="btn-sound" onclick="toggleOrderSound()" title="Ativar som de pedidos">
-              <i class="fas fa-bell-slash"></i><span class="btn-sound-label">Ativar som de pedidos</span>
-            </button>
-            <button class="btn-sound btn-test-sound" id="btn-test-sound" onclick="testOrderSound()" title="Testar som">
-              <i class="fas fa-volume-high"></i><span class="btn-sound-label">Testar som</span>
-            </button>
-          </div>
           <div class="pdv-search-row">
             <div class="pdv-search-wrap">
               <i class="fas fa-search pdv-search-icon"></i>
