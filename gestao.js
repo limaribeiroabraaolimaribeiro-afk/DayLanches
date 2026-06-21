@@ -165,6 +165,7 @@ function showSection(name) {
   });
   const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', config:'Configurações', acessos:'Acessos' };
   elid('dash-title').textContent = titles[name] || name;
+  document.body.classList.toggle('is-balcao', name === 'balcao');
   gs.section = name;
   if (name === 'vendas')  renderSales();
   if (name === 'config')  loadConfig();
@@ -2459,7 +2460,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (session?.user) {
       gs.currentUser = session.user;
       showView('dashboard');
-      elid('user-display').textContent = session.user.user_metadata?.name || session.user.email.split('@')[0];
+      const _userName = session.user.user_metadata?.name || session.user.email.split('@')[0];
+      elid('user-display').textContent = _userName;
+      const _pdvUsr = elid('pdv-user-display');
+      if (_pdvUsr) _pdvUsr.textContent = _userName;
       loadProducts();
       loadOrders().then(() => {
         gs.orders.forEach(o => gs.seenOrderIds.add(o.id));
