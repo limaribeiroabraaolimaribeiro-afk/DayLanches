@@ -1842,17 +1842,53 @@ function renderSalesFilterUI() {
   });
 }
 
+function getFilteredSalesOrdersWithFilters() {
+  const base = getFilteredSalesOrders();
+  const payFilter = elid('sales-filter-payment')?.value || '';
+  const originFilter = elid('sales-filter-origin')?.value || '';
+  const empFilter = elid('sales-filter-employee')?.value || '';
+
+  return base.filter(o => {
+    if (payFilter) {
+      if (payFilter === 'online') { if (!isOnlinePayment(o) || o.payment_method === 'pix_loja' || o.payment_method === 'cartao_maquininha') return false; }
+      else if (o.payment_method !== payFilter) return false;
+    }
+    if (originFilter === 'online' && (o.order_source === 'balcao' || o.delivery_type === 'balcao')) return false;
+    if (originFilter === 'balcao' && o.order_source !== 'balcao' && o.delivery_type !== 'balcao') return false;
+    if (empFilter && o.created_by_email !== empFilter && o.paid_by_email !== empFilter && o.handled_by_email !== empFilter) return false;
+    return true;
+  });
+}
+
+function populateSalesEmployeeFilter() {
+  const sel = elid('sales-filter-employee');
+  if (!sel) return;
+  const emails = new Set();
+  gs.orders.forEach(o => {
+    if (o.created_by_email) emails.add(o.created_by_email);
+    if (o.paid_by_email) emails.add(o.paid_by_email);
+    if (o.handled_by_email) emails.add(o.handled_by_email);
+  });
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Todos</option>';
+  [...emails].sort().forEach(e => {
+    sel.innerHTML += `<option value="${esc(e)}"${e === current ? ' selected' : ''}>${esc(e.split('@')[0])}</option>`;
+  });
+}
+
 function renderSales() {
   renderSalesFilterUI();
+  populateSalesEmployeeFilter();
 
-  const orders  = getFilteredSalesOrders();
+  const orders  = getFilteredSalesOrdersWithFilters();
   const revenue = orders.reduce((s, o) => s + Number(o.total || 0), 0);
   const count   = orders.length;
   const avg     = count ? revenue / count : 0;
-  const cash     = orders.filter(o => !isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+  const cash     = orders.filter(o => o.payment_method === 'dinheiro').reduce((s, o) => s + Number(o.total || 0), 0);
   const online   = orders.filter(o => isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
   const pixLoja  = orders.filter(o => o.payment_method === 'pix_loja').reduce((s, o) => s + Number(o.total || 0), 0);
   const cartMaq  = orders.filter(o => o.payment_method === 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalFee = orders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
 
   elid('sv-revenue').textContent = 'R$ ' + fmt(revenue);
   elid('sv-count').textContent   = count;
@@ -1861,8 +1897,10 @@ function renderSales() {
   elid('sv-online').textContent  = 'R$ ' + fmt(online);
   const svPixLoja = elid('sv-pix-loja');
   const svCartMaq = elid('sv-cartao-maq');
+  const svFee     = elid('sv-fee');
   if (svPixLoja) svPixLoja.textContent = 'R$ ' + fmt(pixLoja);
   if (svCartMaq) svCartMaq.textContent = 'R$ ' + fmt(cartMaq);
+  if (svFee)     svFee.textContent     = 'R$ ' + fmt(totalFee);
 
   const tbody = elid('sales-table-body');
   const empty = elid('sales-empty-msg');
@@ -1875,20 +1913,116 @@ function renderSales() {
   tbody.innerHTML = orders.map(salesRow).join('');
 }
 
+function getSaleOriginLabel(o) {
+  if (o.order_source === 'balcao' || o.delivery_type === 'balcao') return 'Balcão';
+  if (o.delivery_type === 'pickup') return 'Retirada';
+  if (o.delivery_type === 'delivery') return 'Entrega';
+  return 'Online';
+}
+
+function getSaleItemsSummary(o) {
+  const items = Array.isArray(o.items) ? o.items : [];
+  if (!items.length) return '—';
+  if (items.length <= 2) return items.map(i => `${i.qty || 1}x ${i.name || '?'}`).join(', ');
+  return `${items[0].qty || 1}x ${items[0].name || '?'} +${items.length - 1} itens`;
+}
+
 function salesRow(o) {
   const date  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
   const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
-  const psInfo = getPaymentStatusLabel(o);
+  const fee   = Number(o.delivery_fee || 0);
+  const handler = o.created_by_email?.split('@')[0] || o.handled_by_email?.split('@')[0] || 'Sistema';
   return `<tr>
     <td data-label="Data">${date}</td>
-    <td data-label="Pedido">#${esc(num)}</td>
+    <td data-label="Pedido"><strong>#${esc(num)}</strong></td>
     <td data-label="Cliente">${esc(o.customer_name || '—')}</td>
-    <td data-label="Telefone">${esc(o.customer_phone || '—')}</td>
+    <td data-label="Origem"><span class="sales-origin-pill">${getSaleOriginLabel(o)}</span></td>
+    <td data-label="Itens" class="sales-items-cell">${esc(getSaleItemsSummary(o))}</td>
+    <td data-label="Subtotal">R$ ${fmt(o.subtotal || 0)}</td>
+    <td data-label="Entrega">${fee > 0 ? `R$ ${fmt(fee)}` : '—'}</td>
+    <td data-label="Total"><strong>R$ ${fmt(o.total || 0)}</strong></td>
     <td data-label="Pagamento">${esc(getPaymentLabel(o))}</td>
-    <td data-label="Status pagamento">${psInfo ? esc(psInfo.text) : '—'}</td>
-    <td data-label="Total">R$ ${fmt(o.total || 0)}</td>
-    <td data-label="Status pedido">${ORDER_STATUS_LABELS[o.status] || o.status}</td>
+    <td data-label="Atendido por">${esc(handler)}</td>
+    <td data-label="Ações"><button class="btn-sale-detail" onclick="openSaleDetail('${o.id}')"><i class="fas fa-eye"></i> Ver</button></td>
   </tr>`;
+}
+
+/* ── Sale Detail Modal ── */
+function openSaleDetail(orderId) {
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const items = Array.isArray(o.items) ? o.items : [];
+  const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const creator = o.created_by_email?.split('@')[0] || (isBalcao ? 'Sem registro' : 'Cliente online');
+  const payer   = o.paid_by_email?.split('@')[0] || 'Sem registro';
+
+  elid('sale-detail-subtitle').textContent = `Pedido #${num}`;
+
+  let html = '<div class="sd-grid">';
+
+  html += `<div class="sd-box">
+    <div class="sd-box-title"><i class="fas fa-info-circle"></i> Informações</div>
+    <div class="sd-row"><span class="sd-label">Pedido</span><span class="sd-value">#${esc(num)}</span></div>
+    <div class="sd-row"><span class="sd-label">Cliente</span><span class="sd-value">${esc(o.customer_name || '—')}</span></div>
+    ${o.customer_phone ? `<div class="sd-row"><span class="sd-label">Telefone</span><span class="sd-value">${esc(o.customer_phone)}</span></div>` : ''}
+    <div class="sd-row"><span class="sd-label">Data</span><span class="sd-value">${date}</span></div>
+    <div class="sd-row"><span class="sd-label">Origem</span><span class="sd-value">${getSaleOriginLabel(o)}</span></div>
+    ${isBalcao && o.table_number ? `<div class="sd-row"><span class="sd-label">Mesa</span><span class="sd-value">${o.table_number}</span></div>` : ''}
+    <div class="sd-row"><span class="sd-label">Criado por</span><span class="sd-value">${esc(creator)}</span></div>
+    <div class="sd-row"><span class="sd-label">Pago por</span><span class="sd-value">${esc(payer)}</span></div>
+  </div>`;
+
+  html += `<div class="sd-box">
+    <div class="sd-box-title"><i class="fas fa-receipt"></i> Resumo financeiro</div>
+    <div class="sd-row"><span class="sd-label">Subtotal</span><span class="sd-value">R$ ${fmt(o.subtotal || 0)}</span></div>
+    <div class="sd-row"><span class="sd-label">Taxa de entrega</span><span class="sd-value">${Number(o.delivery_fee || 0) > 0 ? `R$ ${fmt(o.delivery_fee)}` : 'Grátis'}</span></div>
+    ${o.troco ? `<div class="sd-row"><span class="sd-label">Troco para</span><span class="sd-value">R$ ${esc(String(o.troco))}</span></div>` : ''}
+    <div class="sd-row sd-row-total"><span class="sd-label">Total</span><span class="sd-value">R$ ${fmt(o.total || 0)}</span></div>
+    <div class="sd-row"><span class="sd-label">Pagamento</span><span class="sd-value">${esc(getPaymentLabel(o))}</span></div>
+    <div class="sd-row"><span class="sd-label">Status</span><span class="sd-value">${isPaidOrder(o) ? '<span class="rpt-pill rpt-pill-paid">Pago</span>' : '<span class="rpt-pill rpt-pill-pending">Pendente</span>'}</span></div>
+  </div>`;
+
+  html += '</div>';
+
+  html += `<div class="sd-box sd-box-full">
+    <div class="sd-box-title"><i class="fas fa-list-ul"></i> Itens comprados</div>
+    <table class="sd-items-table">
+      <thead><tr><th>Qtd</th><th>Produto</th><th>Opções</th><th>Unitário</th><th>Total</th></tr></thead>
+      <tbody>`;
+  items.forEach(i => {
+    const opts = (i.options || []).map(og => `${og.groupTitle}: ${(og.items || []).map(oi => oi.name).join(', ')}`).join(' · ');
+    const unit = i.finalUnitPrice || i.unitPrice || i.price || 0;
+    const total = i.total || (unit * (i.qty || 1));
+    html += `<tr>
+      <td>${i.qty || 1}</td>
+      <td><strong>${esc(i.name || '—')}</strong></td>
+      <td class="sd-opts-cell">${opts ? esc(opts) : '—'}</td>
+      <td>R$ ${fmt(unit)}</td>
+      <td>R$ ${fmt(total)}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  if (o.notes) {
+    html += `<div class="sd-box sd-box-full">
+      <div class="sd-box-title"><i class="fas fa-comment"></i> Observações</div>
+      <p class="sd-obs">${esc(o.notes)}</p>
+    </div>`;
+  }
+
+  elid('sale-detail-body').innerHTML = html;
+  elid('sale-detail-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSaleDetail() {
+  elid('sale-detail-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function closeSaleDetailOutside(e) {
+  if (e.target === elid('sale-detail-overlay')) closeSaleDetail();
 }
 
 function csvEscape(val) {
@@ -1897,18 +2031,22 @@ function csvEscape(val) {
 }
 
 function exportSalesCSV() {
-  const orders = getFilteredSalesOrders();
+  const orders = getFilteredSalesOrdersWithFilters();
   if (!orders.length) { toast('Nenhuma venda para exportar.', true); return; }
 
-  const header = ['data','pedido','cliente','telefone','pagamento','status_pagamento','total','status_pedido'];
+  const header = ['data','pedido','cliente','telefone','origem','itens','subtotal','taxa_entrega','total','pagamento','atendido_por','pago_por'];
   const rows = orders.map(o => {
-    const date  = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '';
-    const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '';
-    const psInfo = getPaymentStatusLabel(o);
+    const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '';
+    const num  = o.order_number || o.id?.slice(-8).toUpperCase() || '';
+    const items = Array.isArray(o.items) ? o.items : [];
+    const itemsText = items.map(i => `${i.qty || 1}x ${i.name || '?'}`).join('; ');
+    const handler = o.created_by_email?.split('@')[0] || o.handled_by_email?.split('@')[0] || 'Sistema';
+    const payer   = o.paid_by_email?.split('@')[0] || '';
     return [
       date, num, o.customer_name || '', o.customer_phone || '',
-      getPaymentLabel(o), psInfo ? psInfo.text : '', fmt(o.total || 0),
-      ORDER_STATUS_LABELS[o.status] || o.status,
+      getSaleOriginLabel(o), itemsText, fmt(o.subtotal || 0),
+      fmt(o.delivery_fee || 0), fmt(o.total || 0),
+      getPaymentLabel(o), handler, payer,
     ].map(csvEscape).join(',');
   });
 
@@ -1925,23 +2063,27 @@ function exportSalesCSV() {
 }
 
 function printSalesReport() {
-  const orders = getFilteredSalesOrders();
+  const orders = getFilteredSalesOrdersWithFilters();
   if (!orders.length) { toast('Nenhuma venda no período selecionado.', true); return; }
 
-  const revenue = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const revenue  = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalFee = orders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
   const rows = orders.map(o => {
     const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
     const num  = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
-    const psInfo = getPaymentStatusLabel(o);
+    const items = Array.isArray(o.items) ? o.items : [];
+    const itemsText = items.map(i => `${i.qty || 1}x ${i.name || '?'}`).join(', ');
+    const handler = o.created_by_email?.split('@')[0] || o.handled_by_email?.split('@')[0] || 'Sistema';
     return `<tr>
       <td>${date}</td>
       <td>#${esc(num)}</td>
       <td>${esc(o.customer_name || '—')}</td>
-      <td>${esc(o.customer_phone || '—')}</td>
-      <td>${esc(getPaymentLabel(o))}</td>
-      <td>${psInfo ? esc(psInfo.text) : '—'}</td>
+      <td>${esc(getSaleOriginLabel(o))}</td>
+      <td style="font-size:.78rem">${esc(itemsText)}</td>
+      <td>R$ ${fmt(o.delivery_fee || 0)}</td>
       <td>R$ ${fmt(o.total || 0)}</td>
-      <td>${ORDER_STATUS_LABELS[o.status] || o.status}</td>
+      <td>${esc(getPaymentLabel(o))}</td>
+      <td>${esc(handler)}</td>
     </tr>`;
   }).join('');
 
@@ -1955,9 +2097,9 @@ function printSalesReport() {
   body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 24px; margin: 0; }
   h1 { font-size: 1.4rem; margin-bottom: 4px; }
   .print-period { color: #555; margin-bottom: 20px; font-size: .9rem; }
-  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-  th { background: #f5f5f5; }
+  table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+  th, td { border: 1px solid #ccc; padding: 5px 7px; text-align: left; }
+  th { background: #f5f5f5; font-size: .72rem; }
   .print-total { margin-top: 16px; font-size: 1rem; font-weight: 700; text-align: right; }
   .print-btn { margin-top: 20px; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; }
   @media print { .no-print { display: none; } }
@@ -1967,10 +2109,10 @@ function printSalesReport() {
   <h1>Day Lanches — Relatório de Vendas</h1>
   <p class="print-period">Período: ${esc(getSalesPeriodLabel())}</p>
   <table>
-    <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Telefone</th><th>Pagamento</th><th>Status pagamento</th><th>Total</th><th>Status pedido</th></tr></thead>
+    <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Origem</th><th>Itens</th><th>Entrega</th><th>Total</th><th>Pagamento</th><th>Atendido por</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <p class="print-total">Total geral: R$ ${fmt(revenue)} (${orders.length} vendas)</p>
+  <p class="print-total">Total geral: R$ ${fmt(revenue)} · Taxas de entrega: R$ ${fmt(totalFee)} · ${orders.length} vendas</p>
   <button class="print-btn no-print" onclick="window.print()">Imprimir</button>
 </body>
 </html>`;
@@ -3899,6 +4041,9 @@ window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
 window.pdvConfirmOptions              = pdvConfirmOptions;
 window.pdvToggleOption                = pdvToggleOption;
 window.pdvOptQty                      = pdvOptQty;
+window.openSaleDetail                 = openSaleDetail;
+window.closeSaleDetail                = closeSaleDetail;
+window.closeSaleDetailOutside         = closeSaleDetailOutside;
 window.setReportFilter                = setReportFilter;
 window.showReportTab                  = showReportTab;
 window.renderReports                  = renderReports;
