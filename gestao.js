@@ -163,7 +163,7 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(b => {
     if (b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.add('active');
   });
-  const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', relatorios:'Relatórios', config:'Configurações', acessos:'Acessos' };
+  const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', caixa:'Caixa', despesas:'Despesas', estoque:'Estoque', relatorios:'Relatórios', config:'Configurações', acessos:'Acessos' };
   elid('dash-title').textContent = titles[name] || name;
   document.body.classList.toggle('is-balcao', name === 'balcao');
   gs.section = name;
@@ -173,6 +173,9 @@ function showSection(name) {
   if (name === 'pedidos')     loadOrders();
   if (name === 'balcao')      pdvInit();
   if (name === 'relatorios')  initReports();
+  if (name === 'caixa')       initCaixa();
+  if (name === 'despesas')    initDespesas();
+  if (name === 'estoque')     initEstoque();
   closeSidebar();
 }
 
@@ -1348,11 +1351,16 @@ async function updateOrderStatus(id, status) {
   const o = gs.orders.find(x => x.id === id);
   const oldStatus = o?.status || '';
   if (status === 'cancelado') { confirmCancelOrder(id); return; }
-  const { error } = await getSb().from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  const now = new Date().toISOString();
+  const update = { status, updated_at: now };
+  if (status === 'em_preparo' && !o?.preparing_at) update.preparing_at = now;
+  if (status === 'saiu_para_entrega' && !o?.out_for_delivery_at) update.out_for_delivery_at = now;
+  if (status === 'finalizado' && !o?.finished_at) update.finished_at = now;
+  const { error } = await getSb().from('orders').update(update).eq('id', id);
   if (error) { toast('Erro ao atualizar status.', true); return; }
   toast('Status atualizado!');
   const num = o?.order_number || id?.slice(-8).toUpperCase() || '';
-  logAuditAction('change_status', 'order', id, `#${num}`, null, { before: { status: oldStatus }, after: { status } });
+  logAuditAction('change_status', 'order', id, `#${num}`, null, { before: { status: oldStatus }, after: { status }, source: 'gestao' });
   await loadOrders();
   if (pdv.initialized) pdvRenderMesas();
 }
@@ -3718,6 +3726,297 @@ function printReport() {
 }
 
 /* ══════════════════════════════════════
+   FECHAMENTO DE CAIXA
+══════════════════════════════════════ */
+async function initCaixa() {
+  const el = elid('caixa-content');
+  if (!el) return;
+  el.innerHTML = '<p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p>';
+  try {
+    const { data: openCaixa } = await getSb().from('cash_closings').select('*').eq('status', 'aberto').order('opened_at', { ascending: false }).limit(1).maybeSingle();
+    if (openCaixa) {
+      await renderCaixaAberto(openCaixa);
+    } else {
+      renderCaixaFechado();
+    }
+  } catch (e) {
+    console.warn('[Caixa] Erro:', e);
+    el.innerHTML = '<p class="empty-msg">Erro ao carregar caixa. Verifique se a migration SQL foi executada.</p>';
+  }
+}
+
+function renderCaixaFechado() {
+  const el = elid('caixa-content');
+  el.innerHTML = `<div class="g-card">
+    <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-lock"></i> Caixa fechado</h2><p class="g-card-desc">Abra o caixa para registrar as vendas do dia.</p></div>
+    <div class="form-group"><label class="form-label">Valor inicial em dinheiro (troco)</label><input type="text" id="caixa-opening" class="form-input" placeholder="0,00" inputmode="decimal"></div>
+    <div class="form-group"><label class="form-label">Observação (opcional)</label><input type="text" id="caixa-open-notes" class="form-input" placeholder="Ex: Início do turno da noite"></div>
+    <div class="g-card-actions"><button class="btn-primary" onclick="abrirCaixa()"><i class="fas fa-lock-open"></i> Abrir caixa</button></div>
+  </div>`;
+}
+
+async function renderCaixaAberto(c) {
+  const el = elid('caixa-content');
+  const [start, end] = [new Date(c.opened_at), new Date()];
+  const orders = gs.orders.filter(o => {
+    if (o.status === 'cancelado' || !isPaidOrder(o) || !o.paid_at) return false;
+    const d = new Date(o.paid_at);
+    return d >= start && d <= end;
+  });
+  const cash = orders.filter(o => o.payment_method === 'dinheiro').reduce((s, o) => s + Number(o.total || 0), 0);
+  const pix = orders.filter(o => o.payment_method === 'pix_loja').reduce((s, o) => s + Number(o.total || 0), 0);
+  const card = orders.filter(o => o.payment_method === 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+  const online = orders.filter(o => isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+  const fee = orders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+  const expectedCash = Number(c.opening_amount || 0) + cash;
+  const openedDate = new Date(c.opened_at).toLocaleString('pt-BR');
+  const opener = c.opened_by_email?.split('@')[0] || 'Sistema';
+
+  el.innerHTML = `<div class="g-card">
+    <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-lock-open" style="color:var(--success)"></i> Caixa aberto</h2><p class="g-card-desc">Aberto por <strong>${esc(opener)}</strong> em ${openedDate}</p></div>
+    <div class="rpt-cards" style="margin-bottom:16px">
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-coins"></i></div><div class="rpt-card-val">R$ ${fmt(c.opening_amount || 0)}</div><div class="rpt-card-label">Valor inicial</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-money-bill-wave"></i></div><div class="rpt-card-val">R$ ${fmt(cash)}</div><div class="rpt-card-label">Dinheiro</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-qrcode"></i></div><div class="rpt-card-val">R$ ${fmt(pix)}</div><div class="rpt-card-label">Pix</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-credit-card"></i></div><div class="rpt-card-val">R$ ${fmt(card)}</div><div class="rpt-card-label">Cartão</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-globe"></i></div><div class="rpt-card-val">R$ ${fmt(online)}</div><div class="rpt-card-label">Online</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-truck"></i></div><div class="rpt-card-val">R$ ${fmt(fee)}</div><div class="rpt-card-label">Entregas</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-calculator"></i></div><div class="rpt-card-val">R$ ${fmt(expectedCash)}</div><div class="rpt-card-label">Esperado no caixa</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-receipt"></i></div><div class="rpt-card-val">${orders.length}</div><div class="rpt-card-label">Vendas</div></div>
+    </div>
+    <div class="form-group"><label class="form-label">Valor contado no caixa (dinheiro)</label><input type="text" id="caixa-counted" class="form-input" placeholder="0,00" inputmode="decimal"></div>
+    <div class="form-group"><label class="form-label">Observação do fechamento (opcional)</label><textarea id="caixa-close-notes" class="form-textarea" rows="2" placeholder="Ex: Tudo certo, sem diferença"></textarea></div>
+    <div class="g-card-actions"><button class="btn-primary" onclick="fecharCaixa('${c.id}', ${expectedCash})"><i class="fas fa-lock"></i> Fechar caixa</button><button class="btn-secondary" onclick="initCaixa()"><i class="fas fa-sync"></i> Atualizar</button></div>
+  </div>`;
+}
+
+async function abrirCaixa() {
+  const amount = parsePriceInput(elid('caixa-opening')?.value || '0');
+  const notes = elid('caixa-open-notes')?.value?.trim() || null;
+  const actor = getCurrentActor();
+  const { error } = await getSb().from('cash_closings').insert({
+    opening_amount: amount, status: 'aberto', notes,
+    opened_by_user_id: actor.id, opened_by_email: actor.email,
+  });
+  if (error) { toast('Erro ao abrir caixa: ' + error.message, true); return; }
+  toast('Caixa aberto!');
+  logAuditAction('open_cash_register', 'cash', null, 'Caixa aberto', null, { opening_amount: amount, source: 'gestao' });
+  initCaixa();
+}
+
+async function fecharCaixa(id, expectedCash) {
+  const counted = parsePriceInput(elid('caixa-counted')?.value || '0');
+  const notes = elid('caixa-close-notes')?.value?.trim() || null;
+  const diff = counted - expectedCash;
+  const actor = getCurrentActor();
+  const { error } = await getSb().from('cash_closings').update({
+    closed_at: new Date().toISOString(), status: 'fechado',
+    closed_by_user_id: actor.id, closed_by_email: actor.email,
+    expected_cash_amount: expectedCash, counted_cash_amount: counted,
+    difference_amount: diff, notes, updated_at: new Date().toISOString(),
+  }).eq('id', id);
+  if (error) { toast('Erro ao fechar caixa: ' + error.message, true); return; }
+  const diffLabel = diff === 0 ? 'Sem diferença' : (diff > 0 ? `Sobra: R$ ${fmt(diff)}` : `Falta: R$ ${fmt(Math.abs(diff))}`);
+  toast(`Caixa fechado. ${diffLabel}`);
+  logAuditAction('close_cash_register', 'cash', id, 'Caixa fechado', null, { expected: expectedCash, counted, difference: diff, source: 'gestao' });
+  initCaixa();
+}
+
+/* ══════════════════════════════════════
+   DESPESAS
+══════════════════════════════════════ */
+const EXPENSE_CATEGORIES = ['Ingredientes','Embalagens','Gás','Bebidas','Motoboy','Taxas de cartão','Taxas InfinitePay','Manutenção','Outros'];
+
+async function initDespesas() {
+  const el = elid('despesas-content');
+  if (!el) return;
+  el.innerHTML = '<p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p>';
+  try {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+    const { data, error } = await getSb().from('expenses').select('*').gte('expense_date', monthStart.slice(0, 10)).neq('status', 'cancelado').order('expense_date', { ascending: false });
+    if (error) throw error;
+    renderDespesas(data || []);
+  } catch (e) {
+    console.warn('[Despesas] Erro:', e);
+    el.innerHTML = '<p class="empty-msg">Erro ao carregar despesas. Verifique se a migration SQL foi executada.</p>';
+  }
+}
+
+function renderDespesas(expenses) {
+  const el = elid('despesas-content');
+  const total = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const byCategory = {};
+  expenses.forEach(e => { const c = e.category || 'Outros'; byCategory[c] = (byCategory[c] || 0) + Number(e.amount || 0); });
+
+  const catOptions = EXPENSE_CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
+  const rows = expenses.map(e => {
+    const d = new Date(e.expense_date + 'T12:00:00').toLocaleDateString('pt-BR');
+    return `<tr><td>${d}</td><td>${esc(e.category)}</td><td>${esc(e.description)}</td><td>R$ ${fmt(e.amount)}</td><td>${esc(e.payment_method || '—')}</td><td>${esc(e.created_by_email?.split('@')[0] || 'Sistema')}</td></tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="g-card">
+      <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-plus-circle"></i> Registrar despesa</h2></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Categoria *</label><select id="desp-cat" class="form-input">${catOptions}</select></div>
+        <div class="form-group"><label class="form-label">Valor *</label><input type="text" id="desp-amount" class="form-input" placeholder="0,00" inputmode="decimal"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Descrição *</label><input type="text" id="desp-desc" class="form-input" placeholder="Ex: Compra de pães"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Pagamento</label><select id="desp-pay" class="form-input"><option value="">—</option><option value="dinheiro">Dinheiro</option><option value="pix">Pix</option><option value="cartao">Cartão</option></select></div>
+        <div class="form-group"><label class="form-label">Observação</label><input type="text" id="desp-notes" class="form-input" placeholder="Opcional"></div>
+      </div>
+      <div class="g-card-actions"><button class="btn-primary" onclick="salvarDespesa()"><i class="fas fa-save"></i> Registrar despesa</button></div>
+    </div>
+    <div class="g-card">
+      <div class="g-card-head"><h2 class="g-card-title">Despesas do mês</h2><p class="g-card-desc">Total: <strong>R$ ${fmt(total)}</strong></p></div>
+      <div class="rpt-summary-box" style="margin-bottom:14px">${Object.entries(byCategory).map(([c, v]) => `<div class="rpt-summary-item">${esc(c)}: <strong>R$ ${fmt(v)}</strong></div>`).join('')}</div>
+      ${rows ? `<table class="rpt-table"><thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th>Pagamento</th><th>Registrado por</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty-msg">Nenhuma despesa registrada.</p>'}
+    </div>`;
+}
+
+async function salvarDespesa() {
+  const cat = elid('desp-cat')?.value;
+  const amount = parsePriceInput(elid('desp-amount')?.value || '0');
+  const desc = elid('desp-desc')?.value?.trim();
+  if (!desc) { toast('Informe a descrição da despesa.', true); return; }
+  if (!amount || amount <= 0) { toast('Informe o valor da despesa.', true); return; }
+  const actor = getCurrentActor();
+  const { error } = await getSb().from('expenses').insert({
+    category: cat, description: desc, amount,
+    payment_method: elid('desp-pay')?.value || null,
+    notes: elid('desp-notes')?.value?.trim() || null,
+    created_by_user_id: actor.id, created_by_email: actor.email,
+  });
+  if (error) { toast('Erro ao salvar despesa: ' + error.message, true); return; }
+  toast('Despesa registrada!');
+  logAuditAction('create_expense', 'expense', null, `${cat}: ${desc}`, null, { amount, source: 'gestao' });
+  initDespesas();
+}
+
+/* ══════════════════════════════════════
+   ESTOQUE
+══════════════════════════════════════ */
+async function initEstoque() {
+  const el = elid('estoque-content');
+  if (!el) return;
+  el.innerHTML = '<p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p>';
+  try {
+    const { data, error } = await getSb().from('inventory_items').select('*').eq('is_active', true).order('name');
+    if (error) throw error;
+    renderEstoque(data || []);
+  } catch (e) {
+    console.warn('[Estoque] Erro:', e);
+    el.innerHTML = '<p class="empty-msg">Erro ao carregar estoque. Verifique se a migration SQL foi executada.</p>';
+  }
+}
+
+function renderEstoque(items) {
+  const el = elid('estoque-content');
+  const total = items.length;
+  const low = items.filter(i => i.current_quantity > 0 && i.current_quantity <= i.minimum_quantity).length;
+  const zero = items.filter(i => i.current_quantity <= 0).length;
+  const estValue = items.reduce((s, i) => s + (Number(i.current_quantity || 0) * Number(i.cost_price || 0)), 0);
+
+  const rows = items.map(i => {
+    const qty = Number(i.current_quantity || 0);
+    const min = Number(i.minimum_quantity || 0);
+    let statusCls = 'rpt-pill-paid', statusTxt = 'OK';
+    if (qty <= 0) { statusCls = 'rpt-pill-cancelled'; statusTxt = 'Zerado'; }
+    else if (qty <= min) { statusCls = 'rpt-pill-pending'; statusTxt = 'Baixo'; }
+    return `<tr>
+      <td><strong>${esc(i.name)}</strong></td><td>${esc(i.category || '—')}</td>
+      <td>${qty} ${esc(i.unit || 'un')}</td><td>${min}</td>
+      <td>R$ ${fmt(i.cost_price || 0)}</td>
+      <td><span class="rpt-pill ${statusCls}">${statusTxt}</span></td>
+      <td>
+        <button class="btn-sale-detail" onclick="estoqueMovimento('${i.id}','entrada')"><i class="fas fa-plus"></i></button>
+        <button class="btn-sale-detail" onclick="estoqueMovimento('${i.id}','saida')"><i class="fas fa-minus"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rpt-cards" style="margin-bottom:16px">
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-boxes-stacked"></i></div><div class="rpt-card-val">${total}</div><div class="rpt-card-label">Itens em estoque</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-triangle-exclamation"></i></div><div class="rpt-card-val">${low}</div><div class="rpt-card-label">Estoque baixo</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-circle-xmark"></i></div><div class="rpt-card-val">${zero}</div><div class="rpt-card-label">Zerados</div></div>
+      <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-dollar-sign"></i></div><div class="rpt-card-val">R$ ${fmt(estValue)}</div><div class="rpt-card-label">Valor estimado</div></div>
+    </div>
+    <div class="g-card">
+      <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-plus-circle"></i> Novo item</h2></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Nome *</label><input type="text" id="est-name" class="form-input" placeholder="Ex: Pão de hambúrguer"></div>
+        <div class="form-group"><label class="form-label">Categoria</label><input type="text" id="est-cat" class="form-input" placeholder="Ex: Ingredientes"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Quantidade inicial</label><input type="number" id="est-qty" class="form-input" placeholder="0" inputmode="numeric"></div>
+        <div class="form-group"><label class="form-label">Estoque mínimo</label><input type="number" id="est-min" class="form-input" placeholder="10" inputmode="numeric"></div>
+        <div class="form-group"><label class="form-label">Custo unitário</label><input type="text" id="est-cost" class="form-input" placeholder="0,00" inputmode="decimal"></div>
+        <div class="form-group"><label class="form-label">Unidade</label><input type="text" id="est-unit" class="form-input" placeholder="un" value="un"></div>
+      </div>
+      <div class="g-card-actions"><button class="btn-primary" onclick="criarItemEstoque()"><i class="fas fa-save"></i> Adicionar item</button></div>
+    </div>
+    <div class="g-card">
+      <div class="g-card-head"><h2 class="g-card-title">Itens em estoque</h2></div>
+      ${rows ? `<table class="rpt-table"><thead><tr><th>Item</th><th>Categoria</th><th>Quantidade</th><th>Mínimo</th><th>Custo</th><th>Status</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="empty-msg">Nenhum item cadastrado.</p>'}
+    </div>`;
+}
+
+async function criarItemEstoque() {
+  const name = elid('est-name')?.value?.trim();
+  if (!name) { toast('Informe o nome do item.', true); return; }
+  const qty = Number(elid('est-qty')?.value || 0);
+  const { error } = await getSb().from('inventory_items').insert({
+    name, category: elid('est-cat')?.value?.trim() || null,
+    current_quantity: qty, minimum_quantity: Number(elid('est-min')?.value || 0),
+    cost_price: parsePriceInput(elid('est-cost')?.value || '0'),
+    unit: elid('est-unit')?.value?.trim() || 'un',
+  });
+  if (error) { toast('Erro ao criar item: ' + error.message, true); return; }
+  toast('Item adicionado ao estoque!');
+  logAuditAction('create_inventory_item', 'inventory', null, name, null, { quantity: qty, source: 'gestao' });
+  initEstoque();
+}
+
+async function estoqueMovimento(itemId, tipo) {
+  const label = tipo === 'entrada' ? 'Adicionar entrada' : 'Registrar saída';
+  const confirmed = await showConfirmModal({
+    title: label,
+    message: `Informe a quantidade para ${tipo}.`,
+    confirmText: 'Confirmar',
+    cancelText: 'Cancelar',
+  });
+  if (!confirmed) return;
+  const qtyStr = prompt(`Quantidade para ${tipo}:`);
+  if (!qtyStr) return;
+  const qty = Number(qtyStr);
+  if (!qty || qty <= 0) { toast('Quantidade inválida.', true); return; }
+  const reason = tipo === 'saida' ? (prompt('Motivo da saída (opcional):') || null) : null;
+  const actor = getCurrentActor();
+
+  const sign = tipo === 'entrada' ? qty : -qty;
+  const { error: movErr } = await getSb().from('inventory_movements').insert({
+    inventory_item_id: itemId, movement_type: tipo, quantity: qty,
+    reason, created_by_user_id: actor.id, created_by_email: actor.email,
+  });
+  if (movErr) { toast('Erro ao registrar movimentação.', true); return; }
+
+  await getSb().rpc('', {}).catch(() => {});
+  const { data: item } = await getSb().from('inventory_items').select('current_quantity,name').eq('id', itemId).single();
+  if (item) {
+    const newQty = Number(item.current_quantity || 0) + sign;
+    await getSb().from('inventory_items').update({ current_quantity: newQty, updated_at: new Date().toISOString() }).eq('id', itemId);
+    logAuditAction(tipo === 'entrada' ? 'inventory_entry' : 'inventory_exit', 'inventory', itemId, item.name, reason, { quantity: qty, new_quantity: newQty, source: 'gestao' });
+  }
+
+  toast(`${tipo === 'entrada' ? 'Entrada' : 'Saída'} registrada!`);
+  initEstoque();
+}
+
+/* ══════════════════════════════════════
    BOOTSTRAP
 ══════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
@@ -4479,3 +4778,8 @@ window.closeEmpDetailOutside          = closeEmpDetailOutside;
 window.cancelReasonModalClose         = cancelReasonModalClose;
 window.cancelReasonModalConfirm       = cancelReasonModalConfirm;
 window._cancelReasonBgClick           = _cancelReasonBgClick;
+window.abrirCaixa                     = abrirCaixa;
+window.fecharCaixa                    = fecharCaixa;
+window.salvarDespesa                  = salvarDespesa;
+window.criarItemEstoque               = criarItemEstoque;
+window.estoqueMovimento               = estoqueMovimento;

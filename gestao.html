@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=24">
+  <link rel="stylesheet" href="gestao.css?v=25">
 </head>
 <body>
 
@@ -98,9 +98,12 @@
       <li><button class="nav-item" onclick="showSection('pedidos')"><i class="fas fa-receipt"></i> Pedidos</button></li>
       <li><button class="nav-item" onclick="showSection('vendas')"><i class="fas fa-chart-bar"></i> Vendas</button></li>
       <li><button class="nav-item" onclick="showSection('balcao')"><i class="fas fa-cash-register"></i> Balcão</button></li>
+      <li><button class="nav-item" onclick="showSection('caixa')"><i class="fas fa-cash-register"></i> Caixa</button></li>
+      <li><button class="nav-item" onclick="showSection('despesas')"><i class="fas fa-file-invoice-dollar"></i> Despesas</button></li>
+      <li><button class="nav-item" onclick="showSection('estoque')"><i class="fas fa-boxes-stacked"></i> Estoque</button></li>
       <li><button class="nav-item" onclick="showSection('relatorios')"><i class="fas fa-chart-pie"></i> Relatórios</button></li>
       <li><button class="nav-item" onclick="showSection('config')"><i class="fas fa-sliders"></i> Configurações</button></li>
-      <li><button class="nav-item" onclick="showSection('acessos')"><i class="fas fa-user"></i> Acessos</button></li>
+      <li><button class="nav-item" onclick="showSection('acessos')"><i class="fas fa-user-shield"></i> Acessos</button></li>
     </ul>
     <button class="btn-logout" onclick="handleLogout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
   </nav>
@@ -338,6 +341,21 @@
         </aside>
 
       </div>
+    </section>
+
+    <!-- SECTION: Caixa -->
+    <section id="section-caixa" class="dash-section">
+      <div class="config-wrap" id="caixa-content"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
+    </section>
+
+    <!-- SECTION: Despesas -->
+    <section id="section-despesas" class="dash-section">
+      <div class="config-wrap" id="despesas-content"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
+    </section>
+
+    <!-- SECTION: Estoque -->
+    <section id="section-estoque" class="dash-section">
+      <div class="config-wrap" id="estoque-content"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
     </section>
 
     <!-- SECTION: Relatórios -->
@@ -903,7 +921,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=34"></script>
+<script src="gestao.js?v=35"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
