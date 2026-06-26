@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=25">
+  <link rel="stylesheet" href="gestao.css?v=26">
 </head>
 <body>
 
@@ -516,6 +516,36 @@
           </div>
         </div>
 
+        <!-- Card: Entregadores -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title">Entregadores</h2>
+            <p class="g-card-desc">Cadastre os entregadores/motoboys da loja.</p>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Nome *</label><input type="text" id="driver-name" class="form-input" placeholder="Nome do entregador"></div>
+            <div class="form-group"><label class="form-label">Telefone</label><input type="text" id="driver-phone" class="form-input" placeholder="(00) 00000-0000"></div>
+          </div>
+          <div class="g-card-actions"><button class="btn-primary" onclick="salvarEntregador()"><i class="fas fa-save"></i> Cadastrar entregador</button></div>
+          <div id="drivers-list" style="margin-top:16px"></div>
+        </div>
+
+        <!-- Card: Backup e exportação -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title">Backup e exportação</h2>
+            <p class="g-card-desc">Exporte os dados da loja em CSV.</p>
+          </div>
+          <div class="rpt-actions-row" style="flex-wrap:wrap">
+            <button class="btn-secondary" onclick="exportBackupData('pedidos')"><i class="fas fa-receipt"></i> Pedidos</button>
+            <button class="btn-secondary" onclick="exportBackupData('produtos')"><i class="fas fa-box"></i> Produtos</button>
+            <button class="btn-secondary" onclick="exportBackupData('estoque')"><i class="fas fa-boxes-stacked"></i> Estoque</button>
+            <button class="btn-secondary" onclick="exportBackupData('despesas')"><i class="fas fa-file-invoice-dollar"></i> Despesas</button>
+            <button class="btn-secondary" onclick="exportBackupData('caixa')"><i class="fas fa-cash-register"></i> Caixa</button>
+            <button class="btn-secondary" onclick="exportBackupData('auditoria')"><i class="fas fa-shield-halved"></i> Auditoria</button>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -524,14 +554,22 @@
       <div class="config-wrap">
         <div class="g-card">
           <div class="g-card-head">
-            <h2 class="g-card-title">Conta de acesso da loja</h2>
-            <p class="g-card-desc">Informações da sua conta de administrador.</p>
+            <h2 class="g-card-title">Sua conta</h2>
+            <p class="g-card-desc">Informações da sua conta de acesso.</p>
           </div>
           <div id="user-info-block"></div>
           <div class="g-card-actions acc-actions">
             <button class="btn-secondary" onclick="copyAccessInfo()"><i class="fas fa-copy"></i> Copiar dados de acesso</button>
             <button class="btn-primary" onclick="openChangePasswordModal()"><i class="fas fa-key"></i> Alterar senha</button>
           </div>
+        </div>
+
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title">Contas e cargos</h2>
+            <p class="g-card-desc">Gerencie as contas de acesso da loja e defina o cargo de cada funcionário.</p>
+          </div>
+          <div id="profiles-list"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
         </div>
 
         <div class="g-card">
@@ -921,7 +959,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=35"></script>
+<script src="gestao.js?v=36"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

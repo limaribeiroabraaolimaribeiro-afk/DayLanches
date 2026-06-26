@@ -1108,6 +1108,10 @@ function orderCard(o) {
       <div class="oc-extra-info">
         ${creator ? `<span class="oc-info-tag"><i class="fas fa-user"></i> ${esc(creator)}</span>` : ''}
         ${printedAt ? `<span class="oc-info-tag oc-info-printed"><i class="fas fa-print"></i> Impressa ${printedAt}</span>` : '<span class="oc-info-tag oc-info-noprint"><i class="fas fa-print"></i> Não impressa</span>'}
+        ${o.driver_name ? `<span class="oc-info-tag"><i class="fas fa-motorcycle"></i> ${esc(o.driver_name)}</span>` : ''}
+        ${Number(o.discount_amount || 0) > 0 ? `<span class="oc-info-tag oc-info-cancel"><i class="fas fa-percent"></i> Desconto R$ ${fmt(o.discount_amount)}</span>` : ''}
+        ${Number(o.refund_amount || 0) > 0 ? `<span class="oc-info-tag oc-info-cancel"><i class="fas fa-rotate-left"></i> Estorno R$ ${fmt(o.refund_amount)}</span>` : ''}
+        ${Number(o.courtesy_amount || 0) > 0 ? `<span class="oc-info-tag"><i class="fas fa-gift"></i> Cortesia R$ ${fmt(o.courtesy_amount)}</span>` : ''}
         ${o.cancel_reason ? `<span class="oc-info-tag oc-info-cancel"><i class="fas fa-ban"></i> ${esc(o.cancel_reason)}</span>` : ''}
       </div>
 
@@ -1119,6 +1123,8 @@ function orderCard(o) {
             <i class="fas fa-receipt"></i> ${(o.printed_at || gs.printedOrderIds.has(o.id))?'Reimprimir':'Imprimir'}
           </button>`:''}
           ${(!isPaid && !['cancelado'].includes(o.status))?`<button class="btn-oc-paid" onclick="confirmMarkAsPaid('${o.id}')"><i class="fas fa-hand-holding-dollar"></i> Pago</button>`:''}
+          ${(isPaid && !['cancelado'].includes(o.status) && !o.refund_amount)?`<button class="btn-sale-detail" onclick="applyDiscount('${o.id}')"><i class="fas fa-percent"></i></button><button class="btn-sale-detail" onclick="applyCourtesy('${o.id}')"><i class="fas fa-gift"></i></button><button class="btn-oc-cancel" onclick="refundPayment('${o.id}')"><i class="fas fa-rotate-left"></i> Estornar</button>`:''}
+          ${(!isBalcao && o.delivery_type !== 'pickup' && !o.driver_name && !['cancelado'].includes(o.status))?`<button class="btn-sale-detail" onclick="assignDriver('${o.id}')"><i class="fas fa-motorcycle"></i> Entregador</button>`:''}
           ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-ban"></i> Cancelar</button>`:''}
           <div class="oc-status-btns">${statusBtns(o)}</div>
         </div>
@@ -2419,6 +2425,7 @@ async function loadConfig() {
     setv('cfg-km',     data.delivery_price_per_km||'');
     gs.storeConfig = data;
     renderStoreLocationStatus();
+    loadDriversList();
   } catch (e) { console.warn('Erro config:', e); }
 }
 
@@ -2540,6 +2547,7 @@ function useStoreLocation() {
 function renderUserInfo() {
   const user = gs.currentUser;
   if (!user) return;
+  loadProfiles();
   const meta = user.user_metadata || {};
   const lastAccess = user.last_sign_in_at
     ? new Date(user.last_sign_in_at).toLocaleString('pt-BR')
@@ -2784,6 +2792,8 @@ async function logAuditAction(action, entityType, entityId, entityLabel, reason,
   try {
     const sb = getSb();
     const { data: { user } } = await sb.auth.getUser();
+    const meta = metadata || {};
+    if (!meta.source) meta.source = 'gestao';
     const row = {
       actor_user_id: user?.id || null,
       actor_email:   user?.email || null,
@@ -2793,7 +2803,9 @@ async function logAuditAction(action, entityType, entityId, entityLabel, reason,
       entity_id:     entityId || null,
       entity_label:  entityLabel || null,
       reason:        reason || null,
-      metadata:      metadata || {},
+      metadata:      meta,
+      source:        meta.source,
+      user_agent:    navigator.userAgent || null,
     };
     await sb.from('audit_logs').insert(row);
   } catch (e) {
@@ -3054,6 +3066,9 @@ function renderReports() {
     { icon: 'fa-cash-register', val: balcaoCount, label: 'Pedidos balcão' },
     { icon: 'fa-motorcycle', val: entregaCount, label: 'Pedidos entrega' },
     { icon: 'fa-store', val: retiradaCount, label: 'Pedidos retirada' },
+    { icon: 'fa-percent', val: `R$ ${fmt(paid.reduce((s, o) => s + Number(o.discount_amount || 0), 0))}`, label: 'Descontos' },
+    { icon: 'fa-rotate-left', val: `R$ ${fmt(orders.filter(o => o.refund_amount > 0).reduce((s, o) => s + Number(o.refund_amount || 0), 0))}`, label: 'Estornos' },
+    { icon: 'fa-gift', val: `R$ ${fmt(paid.reduce((s, o) => s + Number(o.courtesy_amount || 0), 0))}`, label: 'Cortesias' },
   ];
 
   elid('rpt-cards').innerHTML = cards.map(c => `
@@ -3176,6 +3191,12 @@ function renderRptClientes() {
   const rows = sorted.map(c => {
     const topProd = Object.entries(c.products).sort((a, b) => b[1] - a[1])[0];
     const topOrigin = Object.entries(c.origins).sort((a, b) => b[1] - a[1])[0];
+    const daysSince = c.lastOrder ? Math.floor((new Date() - c.lastOrder) / 86400000) : 999;
+    let clientStatus = 'Ativo', clientCls = 'rpt-pill-paid';
+    if (c.orders === 1) { clientStatus = 'Novo'; clientCls = 'rpt-pill-pending'; }
+    else if (c.orders >= 5) { clientStatus = 'Frequente'; clientCls = 'rpt-pill-paid'; }
+    if (c.totalPending > 0) { clientStatus = 'Com pendência'; clientCls = 'rpt-pill-cancelled'; }
+    else if (daysSince > 30) { clientStatus = 'Inativo'; clientCls = 'rpt-pill-cancelled'; }
     return `<tr>
       <td><strong><a href="#" class="rpt-link" onclick="event.preventDefault();openClientDetailModal('${esc(c.name)}','${esc(c.phone)}')">${esc(c.name)}</a></strong></td>
       <td>${esc(c.phone || '—')}</td>
@@ -3186,7 +3207,7 @@ function renderRptClientes() {
       <td>R$ ${fmt(c.totalFee)}</td>
       <td>${c.lastOrder ? c.lastOrder.toLocaleDateString('pt-BR') : '—'}</td>
       <td>${topProd ? esc(topProd[0]) : '—'}</td>
-      <td>${topOrigin ? esc(topOrigin[0]) : '—'}</td>
+      <td><span class="rpt-pill ${clientCls}">${clientStatus}</span></td>
     </tr>`;
   }).join('');
 
@@ -3196,7 +3217,7 @@ function renderRptClientes() {
     </div>
     <h3>Relatório de clientes</h3>
     <table class="rpt-table">
-      <thead><tr><th>Cliente</th><th>Telefone</th><th>Pedidos</th><th>Total gasto</th><th>Total pago</th><th>Pendente</th><th>Taxas entrega</th><th>Último pedido</th><th>Produto favorito</th><th>Origem</th></tr></thead>
+      <thead><tr><th>Cliente</th><th>Telefone</th><th>Pedidos</th><th>Total gasto</th><th>Total pago</th><th>Pendente</th><th>Taxas entrega</th><th>Último pedido</th><th>Produto favorito</th><th>Status</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -4017,6 +4038,260 @@ async function estoqueMovimento(itemId, tipo) {
 }
 
 /* ══════════════════════════════════════
+   PERMISSÕES POR CARGO
+══════════════════════════════════════ */
+const ROLE_LABELS = { admin:'Dona / Admin', gerente:'Gerente', caixa:'Caixa', atendente:'Atendente', cozinha:'Cozinha', entregador:'Entregador', funcionario:'Funcionário' };
+const ROLE_ACCESS = {
+  admin:      ['produtos','pedidos','vendas','balcao','caixa','despesas','estoque','relatorios','config','acessos'],
+  gerente:    ['produtos','pedidos','vendas','balcao','caixa','despesas','estoque','relatorios'],
+  caixa:      ['pedidos','vendas','balcao','caixa'],
+  atendente:  ['pedidos','balcao'],
+  cozinha:    ['pedidos'],
+  entregador: ['pedidos'],
+  funcionario:['pedidos','balcao','vendas'],
+};
+
+function getUserRole() {
+  return gs.currentUser?.user_metadata?.role || 'admin';
+}
+
+function canAccessSection(name) {
+  const role = getUserRole();
+  const allowed = ROLE_ACCESS[role] || ROLE_ACCESS.admin;
+  return allowed.includes(name);
+}
+
+async function loadProfiles() {
+  try {
+    const { data, error } = await getSb().from('profiles').select('*').order('name');
+    if (error) throw error;
+    renderProfilesList(data || []);
+  } catch (e) {
+    const el = elid('profiles-list');
+    if (el) el.innerHTML = '<p class="empty-msg">Execute a migration SQL para usar esta funcionalidade.</p>';
+  }
+}
+
+function renderProfilesList(profiles) {
+  const el = elid('profiles-list');
+  if (!el) return;
+  if (!profiles.length) { el.innerHTML = '<p class="empty-msg">Nenhuma conta cadastrada.</p>'; return; }
+
+  const roleOpts = Object.entries(ROLE_LABELS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+
+  el.innerHTML = `<table class="rpt-table">
+    <thead><tr><th>Nome</th><th>Email</th><th>Cargo</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody>${profiles.map(p => `<tr>
+      <td><strong>${esc(p.name || '—')}</strong></td>
+      <td>${esc(p.email || '—')}</td>
+      <td>${esc(ROLE_LABELS[p.role] || p.role || 'Funcionário')}</td>
+      <td><span class="rpt-pill ${p.is_active !== false ? 'rpt-pill-paid' : 'rpt-pill-cancelled'}">${p.is_active !== false ? 'Ativo' : 'Inativo'}</span></td>
+      <td>
+        <select class="form-input" style="width:auto;display:inline;font-size:.78rem" onchange="updateProfileRole('${p.id}',this.value,'${esc(p.name||'')}')">${Object.entries(ROLE_LABELS).map(([v, l]) => `<option value="${v}"${p.role === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+        <button class="btn-sale-detail" onclick="toggleProfileActive('${p.id}',${p.is_active !== false},'${esc(p.name||'')}')"><i class="fas fa-${p.is_active !== false ? 'ban' : 'check'}"></i></button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function updateProfileRole(id, newRole, name) {
+  const { error } = await getSb().from('profiles').update({ role: newRole, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Erro ao alterar cargo.', true); return; }
+  toast(`Cargo de ${name} alterado para ${ROLE_LABELS[newRole] || newRole}.`);
+  logAuditAction('update_user_role', 'user', id, name, null, { after: { role: newRole } });
+  loadProfiles();
+}
+
+async function toggleProfileActive(id, currentlyActive, name) {
+  const newStatus = !currentlyActive;
+  const { error } = await getSb().from('profiles').update({ is_active: newStatus, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Erro ao alterar status.', true); return; }
+  toast(`${name} ${newStatus ? 'ativado' : 'desativado'}.`);
+  logAuditAction(newStatus ? 'activate_user' : 'deactivate_user', 'user', id, name);
+  loadProfiles();
+}
+
+/* ══════════════════════════════════════
+   DESCONTOS, ESTORNOS E CORTESIAS
+══════════════════════════════════════ */
+async function applyDiscount(orderId) {
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const valStr = prompt('Valor do desconto (R$):');
+  if (!valStr) return;
+  const val = parsePriceInput(valStr);
+  if (!val || val <= 0) { toast('Valor inválido.', true); return; }
+  const reason = prompt('Motivo do desconto (obrigatório):');
+  if (!reason || !reason.trim()) { toast('Informe o motivo do desconto.', true); return; }
+  const actor = getCurrentActor();
+  const newTotal = Math.max(0, Number(o.total || 0) - val);
+  const { error } = await getSb().from('orders').update({
+    discount_amount: val, discount_reason: reason.trim(),
+    discount_by_user_id: actor.id, discount_by_email: actor.email,
+    total: newTotal, updated_at: new Date().toISOString(),
+  }).eq('id', orderId);
+  if (error) { toast('Erro ao aplicar desconto.', true); return; }
+  const num = o.order_number || orderId.slice(-8).toUpperCase();
+  toast(`Desconto de R$ ${fmt(val)} aplicado.`);
+  logAuditAction('apply_discount', 'order', orderId, `#${num}`, reason.trim(), { before: { total: o.total }, after: { total: newTotal, discount: val } });
+  await loadOrders();
+}
+
+async function refundPayment(orderId) {
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const valStr = prompt(`Valor do estorno (total do pedido: R$ ${fmt(o.total || 0)}):`);
+  if (!valStr) return;
+  const val = parsePriceInput(valStr);
+  if (!val || val <= 0) { toast('Valor inválido.', true); return; }
+  const reason = prompt('Motivo do estorno (obrigatório):');
+  if (!reason || !reason.trim()) { toast('Informe o motivo do estorno.', true); return; }
+  const actor = getCurrentActor();
+  const { error } = await getSb().from('orders').update({
+    refund_amount: val, refund_reason: reason.trim(),
+    refunded_at: new Date().toISOString(),
+    refunded_by_user_id: actor.id, refunded_by_email: actor.email,
+    payment_status: 'estornado', updated_at: new Date().toISOString(),
+  }).eq('id', orderId);
+  if (error) { toast('Erro ao estornar.', true); return; }
+  const num = o.order_number || orderId.slice(-8).toUpperCase();
+  toast(`Estorno de R$ ${fmt(val)} registrado.`);
+  logAuditAction('refund_payment', 'order', orderId, `#${num}`, reason.trim(), { before: { payment_status: o.payment_status }, after: { payment_status: 'estornado', refund: val } });
+  await loadOrders();
+}
+
+async function applyCourtesy(orderId) {
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const valStr = prompt('Valor da cortesia (R$):');
+  if (!valStr) return;
+  const val = parsePriceInput(valStr);
+  if (!val || val <= 0) { toast('Valor inválido.', true); return; }
+  const reason = prompt('Motivo da cortesia (obrigatório):');
+  if (!reason || !reason.trim()) { toast('Informe o motivo da cortesia.', true); return; }
+  const actor = getCurrentActor();
+  const newTotal = Math.max(0, Number(o.total || 0) - val);
+  const { error } = await getSb().from('orders').update({
+    courtesy_amount: val, courtesy_reason: reason.trim(),
+    courtesy_by_user_id: actor.id, courtesy_by_email: actor.email,
+    total: newTotal, updated_at: new Date().toISOString(),
+  }).eq('id', orderId);
+  if (error) { toast('Erro ao aplicar cortesia.', true); return; }
+  const num = o.order_number || orderId.slice(-8).toUpperCase();
+  toast(`Cortesia de R$ ${fmt(val)} aplicada.`);
+  logAuditAction('apply_courtesy', 'order', orderId, `#${num}`, reason.trim(), { before: { total: o.total }, after: { total: newTotal, courtesy: val } });
+  await loadOrders();
+}
+
+/* ══════════════════════════════════════
+   ENTREGADORES
+══════════════════════════════════════ */
+async function loadDrivers() {
+  try {
+    const { data } = await getSb().from('delivery_drivers').select('*').eq('is_active', true).order('name');
+    return data || [];
+  } catch (_) { return []; }
+}
+
+async function salvarEntregador() {
+  const name = elid('driver-name')?.value?.trim();
+  if (!name) { toast('Informe o nome do entregador.', true); return; }
+  const phone = elid('driver-phone')?.value?.trim() || null;
+  const { error } = await getSb().from('delivery_drivers').insert({ name, phone });
+  if (error) { toast('Erro ao cadastrar: ' + error.message, true); return; }
+  toast(`Entregador ${name} cadastrado!`);
+  logAuditAction('create_driver', 'driver', null, name);
+  elid('driver-name').value = '';
+  elid('driver-phone').value = '';
+  loadDriversList();
+}
+
+async function loadDriversList() {
+  const el = elid('drivers-list');
+  if (!el) return;
+  const drivers = await loadDrivers();
+  if (!drivers.length) { el.innerHTML = '<p class="empty-msg" style="font-size:.82rem">Nenhum entregador cadastrado.</p>'; return; }
+  el.innerHTML = `<table class="rpt-table"><thead><tr><th>Nome</th><th>Telefone</th><th>Status</th></tr></thead><tbody>${drivers.map(d => `<tr><td><strong>${esc(d.name)}</strong></td><td>${esc(d.phone || '—')}</td><td><span class="rpt-pill rpt-pill-paid">Ativo</span></td></tr>`).join('')}</tbody></table>`;
+}
+
+async function assignDriver(orderId) {
+  const drivers = await loadDrivers();
+  if (!drivers.length) { toast('Cadastre um entregador em Configurações primeiro.', true); return; }
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const names = drivers.map((d, i) => `${i + 1}. ${d.name}`).join('\n');
+  const choice = prompt(`Escolha o entregador:\n${names}\n\nDigite o número:`);
+  if (!choice) return;
+  const idx = Number(choice) - 1;
+  const driver = drivers[idx];
+  if (!driver) { toast('Entregador inválido.', true); return; }
+  const feeStr = prompt('Valor a pagar ao entregador (R$, 0 se não pagar):');
+  const fee = parsePriceInput(feeStr || '0');
+  const { error } = await getSb().from('orders').update({
+    driver_id: driver.id, driver_name: driver.name, driver_fee: fee,
+    updated_at: new Date().toISOString(),
+  }).eq('id', orderId);
+  if (error) { toast('Erro ao atribuir entregador.', true); return; }
+  const num = o.order_number || orderId.slice(-8).toUpperCase();
+  toast(`Entregador ${driver.name} atribuído.`);
+  logAuditAction('assign_driver', 'order', orderId, `#${num}`, null, { driver: driver.name, fee });
+  await loadOrders();
+}
+
+/* ══════════════════════════════════════
+   BACKUP / EXPORTAÇÃO GERAL
+══════════════════════════════════════ */
+async function exportBackupData(type) {
+  const actor = getCurrentActor();
+  let header, rows, data;
+
+  if (type === 'pedidos') {
+    data = gs.orders;
+    header = ['Pedido','Data','Cliente','Telefone','Total','Pagamento','Status','Origem'];
+    rows = data.map(o => [o.order_number || '', o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '', o.customer_name || '', o.customer_phone || '', fmt(o.total || 0), getPaymentLabel(o), o.status || '', getSaleOriginLabel(o)]);
+  } else if (type === 'produtos') {
+    data = gs.products;
+    header = ['Nome','Categoria','Preço','Ativo'];
+    rows = data.map(p => [p.name || '', p.category || '', fmt(p.price || 0), p.active !== false ? 'Sim' : 'Não']);
+  } else if (type === 'estoque') {
+    const { data: items } = await getSb().from('inventory_items').select('*').order('name');
+    header = ['Item','Categoria','Quantidade','Mínimo','Custo','Unidade','Ativo'];
+    rows = (items || []).map(i => [i.name, i.category || '', i.current_quantity, i.minimum_quantity, fmt(i.cost_price || 0), i.unit || 'un', i.is_active ? 'Sim' : 'Não']);
+  } else if (type === 'despesas') {
+    const { data: exp } = await getSb().from('expenses').select('*').neq('status', 'cancelado').order('expense_date', { ascending: false });
+    header = ['Data','Categoria','Descrição','Valor','Pagamento','Registrado por'];
+    rows = (exp || []).map(e => [e.expense_date, e.category, e.description, fmt(e.amount || 0), e.payment_method || '', e.created_by_email?.split('@')[0] || '']);
+  } else if (type === 'caixa') {
+    const { data: closings } = await getSb().from('cash_closings').select('*').order('opened_at', { ascending: false });
+    header = ['Aberto em','Fechado em','Aberto por','Fechado por','Valor inicial','Esperado','Contado','Diferença','Status'];
+    rows = (closings || []).map(c => [c.opened_at ? new Date(c.opened_at).toLocaleString('pt-BR') : '', c.closed_at ? new Date(c.closed_at).toLocaleString('pt-BR') : '', c.opened_by_email?.split('@')[0] || '', c.closed_by_email?.split('@')[0] || '', fmt(c.opening_amount || 0), fmt(c.expected_cash_amount || 0), fmt(c.counted_cash_amount || 0), fmt(c.difference_amount || 0), c.status]);
+  } else if (type === 'auditoria') {
+    const { data: logs } = await getSb().from('audit_logs').select('*').order('created_at', { ascending: false }).limit(1000);
+    header = ['Data','Conta','Ação','Tipo','Item','Motivo','Origem'];
+    rows = (logs || []).map(l => [new Date(l.created_at).toLocaleString('pt-BR'), l.actor_name || l.actor_email || '', l.action, l.entity_type, l.entity_label || '', l.reason || '', l.source || '']);
+  } else { toast('Tipo de exportação inválido.', true); return; }
+
+  if (!rows || !rows.length) { toast('Nenhum dado para exportar.', true); return; }
+
+  const csv = [header.join(','), ...rows.map(r => r.map(csvEscape).join(','))].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup-${type}-day-lanches-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  try {
+    await getSb().from('export_logs').insert({ export_type: type, exported_by_user_id: actor.id, exported_by_email: actor.email });
+  } catch (_) {}
+  logAuditAction('export_backup', 'backup', null, type);
+  toast(`Exportação de ${type} concluída!`);
+}
+
+/* ══════════════════════════════════════
    BOOTSTRAP
 ══════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
@@ -4783,3 +5058,11 @@ window.fecharCaixa                    = fecharCaixa;
 window.salvarDespesa                  = salvarDespesa;
 window.criarItemEstoque               = criarItemEstoque;
 window.estoqueMovimento               = estoqueMovimento;
+window.updateProfileRole              = updateProfileRole;
+window.toggleProfileActive            = toggleProfileActive;
+window.applyDiscount                  = applyDiscount;
+window.refundPayment                  = refundPayment;
+window.applyCourtesy                  = applyCourtesy;
+window.assignDriver                   = assignDriver;
+window.salvarEntregador               = salvarEntregador;
+window.exportBackupData               = exportBackupData;
