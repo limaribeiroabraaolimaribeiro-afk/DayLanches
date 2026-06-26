@@ -7,12 +7,15 @@
      GET  /order-tracking?token=     → dados públicos do pedido (página acompanhar)
      GET  /reverse-geocode?lat=&lon= → converte coordenadas em endereço
      GET  /health                    → health check
+     GET  /print-agent/health        → health check do Print Agent
+     GET  /print-agent/pending-orders → pedidos pendentes de impressão
+     POST /print-agent/mark-printed  → marca pedido como impresso
    ───────────────────────────────────────────────────────── */
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function json(data, status = 200) {
@@ -77,6 +80,19 @@ export default {
 
     if (pathname === '/reverse-geocode' && request.method === 'GET') {
       return handleReverseGeocode(url, env);
+    }
+
+    /* ── Print Agent routes ── */
+    if (pathname === '/print-agent/health' && request.method === 'GET') {
+      return handlePrintAgentHealth(request, env);
+    }
+
+    if (pathname === '/print-agent/pending-orders' && request.method === 'GET') {
+      return handlePrintAgentPendingOrders(request, env);
+    }
+
+    if (pathname === '/print-agent/mark-printed' && request.method === 'POST') {
+      return handlePrintAgentMarkPrinted(request, env);
     }
 
     return json({ error: 'Not found' }, 404);
@@ -295,5 +311,81 @@ async function handleReverseGeocode(url, env) {
   } catch (err) {
     console.error('[DayLanches] Erro no reverse geocode:', err);
     return json({ address: null });
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   PRINT AGENT — Impressão automática de comandas
+══════════════════════════════════════════════════════════ */
+
+function validatePrintAgentToken(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  if (!token || !env.PRINT_AGENT_TOKEN || token !== env.PRINT_AGENT_TOKEN) {
+    return false;
+  }
+  return true;
+}
+
+/* GET /print-agent/health */
+function handlePrintAgentHealth(request, env) {
+  if (!validatePrintAgentToken(request, env)) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+  return json({ ok: true, service: 'day-lanches-print-agent' });
+}
+
+/* GET /print-agent/pending-orders */
+async function handlePrintAgentPendingOrders(request, env) {
+  if (!validatePrintAgentToken(request, env)) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const fields = [
+      'id', 'order_number', 'created_at', 'customer_name', 'customer_phone',
+      'delivery_type', 'order_source', 'table_number', 'payment_method',
+      'payment_status', 'paid_at', 'status', 'total', 'items', 'notes',
+      'customer_address_text', 'location', 'printed_at',
+    ].join(',');
+
+    const params = `select=${fields}&printed_at=is.null&status=neq.cancelado&order=created_at.asc&limit=10`;
+    const orders = await sbGet(env, 'orders', params);
+
+    return json({ orders: Array.isArray(orders) ? orders : [] });
+  } catch (err) {
+    console.error('[DayLanches] Erro ao buscar pedidos pendentes:', err);
+    return json({ error: 'Erro interno ao buscar pedidos' }, 500);
+  }
+}
+
+/* POST /print-agent/mark-printed */
+async function handlePrintAgentMarkPrinted(request, env) {
+  if (!validatePrintAgentToken(request, env)) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ error: 'Invalid JSON' }, 400); }
+
+  const { order_id } = body;
+  if (!order_id) return json({ error: 'order_id required' }, 400);
+
+  try {
+    const res = await sbPatch(env, 'orders', `id=eq.${order_id}`, {
+      printed_at: new Date().toISOString(),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.error('[DayLanches] Erro ao marcar impresso:', res.status, detail);
+      return json({ error: 'Erro ao atualizar pedido' }, 500);
+    }
+
+    return json({ success: true });
+  } catch (err) {
+    console.error('[DayLanches] Erro ao marcar impresso:', err);
+    return json({ error: 'Erro interno' }, 500);
   }
 }
