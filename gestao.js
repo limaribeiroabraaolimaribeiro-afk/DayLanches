@@ -765,10 +765,19 @@ async function handleSaveProduct(e) {
     let err;
     let savedProductId = existingId;
     if (existingId) {
+      const oldP = gs.products.find(x => x.id === existingId);
       ({ error: err } = await getSb().from('products').update(data).eq('id', existingId));
       if (!err) {
         showToast('Produto salvo com sucesso.', 'success');
-        logAuditAction('edit_product', 'product', existingId, name, null, { price, category: cat });
+        const meta = { before: {}, after: {} };
+        if (oldP) {
+          if (oldP.name !== name) { meta.before.nome = oldP.name; meta.after.nome = name; }
+          if (oldP.price !== price) { meta.before.preco = oldP.price; meta.after.preco = price; }
+          if (oldP.category !== cat) { meta.before.categoria = oldP.category; meta.after.categoria = cat; }
+          if (oldP.active !== data.active) { meta.before.ativo = oldP.active; meta.after.ativo = data.active; }
+          if (oldP.image_url !== imgUrl) { meta.before.imagem = oldP.image_url ? 'sim' : 'nao'; meta.after.imagem = imgUrl ? 'sim' : 'nao'; }
+        }
+        logAuditAction('edit_product', 'product', existingId, name, null, meta);
       }
     } else {
       data.created_at = now;
@@ -1336,12 +1345,14 @@ function statusBtns(o) {
 function nextStatusBtns(o) { return statusBtns(o); }
 
 async function updateOrderStatus(id, status) {
+  const o = gs.orders.find(x => x.id === id);
+  const oldStatus = o?.status || '';
+  if (status === 'cancelado') { confirmCancelOrder(id); return; }
   const { error } = await getSb().from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { toast('Erro ao atualizar status.', true); return; }
   toast('Status atualizado!');
-  const o = gs.orders.find(x => x.id === id);
   const num = o?.order_number || id?.slice(-8).toUpperCase() || '';
-  logAuditAction('change_status', 'order', id, `#${num}`, null, { new_status: status });
+  logAuditAction('change_status', 'order', id, `#${num}`, null, { before: { status: oldStatus }, after: { status } });
   await loadOrders();
   if (pdv.initialized) pdvRenderMesas();
 }
@@ -2427,7 +2438,14 @@ async function handleSaveConfig(e) {
   const { error } = await getSb().from('store_settings').upsert(data);
   if (error) { toast('Erro ao salvar: ' + error.message, true); return; }
   toast('Configurações salvas!');
-  logAuditAction('save_config', 'config', 'store', 'Configurações da loja');
+  const meta = { before: {}, after: {} };
+  if (cfg.whatsapp !== data.whatsapp) { meta.before.whatsapp = cfg.whatsapp || ''; meta.after.whatsapp = data.whatsapp; }
+  if (cfg.delivery_price_per_km !== data.delivery_price_per_km) { meta.before.frete_km = cfg.delivery_price_per_km; meta.after.frete_km = data.delivery_price_per_km; }
+  const oldSched = typeof cfg.schedule === 'string' ? cfg.schedule : cfg.schedule?.text || '';
+  const newSched = data.schedule?.text || '';
+  if (oldSched !== newSched) { meta.before.horario = oldSched; meta.after.horario = newSched; }
+  if (cfg.instagram !== data.instagram) { meta.before.instagram = cfg.instagram || ''; meta.after.instagram = data.instagram; }
+  logAuditAction('save_config', 'config', 'store', 'Configurações da loja', null, meta);
   await loadConfig();
 }
 
@@ -2831,7 +2849,7 @@ function _cancelReasonBgClick(e) {
 ══════════════════════════════════════ */
 const rpt = {
   filter: { type: 'today', start: '', end: '' },
-  tab: 'financeiro',
+  tab: 'visao',
   auditLogs: [],
   initialized: false,
 };
@@ -2940,7 +2958,12 @@ async function loadAuditLogs() {
 
 function showReportTab(tab) {
   rpt.tab = tab;
-  document.querySelectorAll('.rpt-tab').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(tab.slice(0, 4))));
+  document.querySelectorAll('.rpt-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.rpt-tab').forEach(b => {
+    const txt = b.textContent.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const t = tab.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (txt.startsWith(t.slice(0, 4)) || (tab === 'visao' && txt.includes('visao'))) b.classList.add('active');
+  });
   document.querySelectorAll('.rpt-tab-content').forEach(el => el.style.display = 'none');
   const target = elid(`rpt-tab-${tab}`);
   if (target) target.style.display = '';
@@ -2988,11 +3011,27 @@ function renderReports() {
   });
   const topEmployee = Object.entries(employeeMap).sort((a, b) => b[1] - a[1])[0];
 
+  const cancelledCount = orders.filter(o => o.status === 'cancelado').length;
+
+  const clientMap = {};
+  paid.forEach(o => { const n = o.customer_name || 'Sem nome'; clientMap[n] = (clientMap[n] || 0) + Number(o.total || 0); });
+  const topClient = Object.entries(clientMap).sort((a, b) => b[1] - a[1])[0];
+
+  const payMethodCount = {};
+  paid.forEach(o => { const m = getPaymentLabel(o); payMethodCount[m] = (payMethodCount[m] || 0) + 1; });
+  const topPayMethod = Object.entries(payMethodCount).sort((a, b) => b[1] - a[1])[0];
+
+  const onlineCount = orders.filter(o => o.order_source !== 'balcao' && o.delivery_type !== 'balcao').length;
+  const balcaoCount = orders.filter(o => o.order_source === 'balcao' || o.delivery_type === 'balcao').length;
+  const entregaCount = orders.filter(o => o.delivery_type === 'delivery' && o.order_source !== 'balcao').length;
+  const retiradaCount = orders.filter(o => o.delivery_type === 'pickup').length;
+
   const cards = [
-    { icon: 'fa-hand-holding-dollar', val: `R$ ${fmt(totalSold)}`, label: 'Total vendido' },
+    { icon: 'fa-hand-holding-dollar', val: `R$ ${fmt(totalSold)}`, label: 'Faturamento total' },
     { icon: 'fa-receipt', val: totalOrders, label: 'Total de pedidos' },
     { icon: 'fa-circle-check', val: paidCount, label: 'Pedidos pagos' },
     { icon: 'fa-clock', val: pendCount, label: 'Pedidos pendentes' },
+    { icon: 'fa-ban', val: cancelledCount, label: 'Pedidos cancelados' },
     { icon: 'fa-chart-line', val: `R$ ${fmt(ticketAvg)}`, label: 'Ticket médio' },
     { icon: 'fa-truck', val: `R$ ${fmt(totalFee)}`, label: 'Taxas de entrega' },
     { icon: 'fa-money-bill-wave', val: `R$ ${fmt(totalCash)}`, label: 'Total em dinheiro' },
@@ -3000,7 +3039,13 @@ function renderReports() {
     { icon: 'fa-credit-card', val: `R$ ${fmt(totalCard)}`, label: 'Total em cartão' },
     { icon: 'fa-globe', val: `R$ ${fmt(totalOnline)}`, label: 'Total online' },
     { icon: 'fa-star', val: topProduct ? topProduct[0] : '—', label: 'Mais vendido' },
-    { icon: 'fa-user', val: topEmployee ? topEmployee[0].split('@')[0] : '—', label: 'Mais atendimentos' },
+    { icon: 'fa-user-tie', val: topEmployee ? topEmployee[0].split('@')[0] : '—', label: 'Mais atendimentos' },
+    { icon: 'fa-user', val: topClient ? topClient[0] : '—', label: 'Cliente que mais comprou' },
+    { icon: 'fa-wallet', val: topPayMethod ? `${topPayMethod[0]} (${topPayMethod[1]})` : '—', label: 'Pagamento mais usado' },
+    { icon: 'fa-laptop', val: onlineCount, label: 'Pedidos online' },
+    { icon: 'fa-cash-register', val: balcaoCount, label: 'Pedidos balcão' },
+    { icon: 'fa-motorcycle', val: entregaCount, label: 'Pedidos entrega' },
+    { icon: 'fa-store', val: retiradaCount, label: 'Pedidos retirada' },
   ];
 
   elid('rpt-cards').innerHTML = cards.map(c => `
@@ -3015,13 +3060,24 @@ function renderReports() {
 
 function renderReportTab(tab) {
   switch (tab) {
+    case 'visao':         renderRptVisaoGeral(); break;
     case 'financeiro':    renderRptFinanceiro(); break;
+    case 'clientes':      renderRptClientes(); break;
     case 'entregas':      renderRptEntregas(); break;
     case 'produtos':      renderRptProdutos(); break;
     case 'funcionarios':  renderRptFuncionarios(); break;
     case 'cancelados':    renderRptCancelados(); break;
     case 'atividades':    renderRptAtividades(); break;
+    case 'revisoes':      renderRptRevisoes(); break;
+    case 'impressoes':    renderRptImpressoes(); break;
   }
+}
+
+/* ── Tab: Visão geral ── */
+function renderRptVisaoGeral() {
+  const el = elid('rpt-tab-visao');
+  if (!el) return;
+  el.innerHTML = '<p class="rpt-visao-hint"><i class="fas fa-info-circle"></i> Os cards acima resumem a visão geral do período. Use as abas para explorar cada área em detalhes.</p>';
 }
 
 /* ── Tab: Financeiro ── */
@@ -3030,20 +3086,43 @@ function renderRptFinanceiro() {
   const el = elid('rpt-tab-financeiro');
   if (!el) return;
 
-  if (!orders.length) { el.innerHTML = '<p class="empty-msg">Nenhum pedido no período.</p>'; return; }
+  const paid = orders.filter(o => isPaidOrder(o));
+  const pending = orders.filter(o => !isPaidOrder(o));
+  const totalSold = paid.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalPending = pending.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalCancelled = getFilteredReportOrders().filter(o => o.status === 'cancelado').reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalFee = paid.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+
+  const payBreakdown = {};
+  paid.forEach(o => { const m = getPaymentLabel(o); if (!payBreakdown[m]) payBreakdown[m] = { count: 0, total: 0 }; payBreakdown[m].count++; payBreakdown[m].total += Number(o.total || 0); });
+
+  let summaryHtml = `<div class="rpt-summary-box" style="margin-bottom:16px">
+    <div class="rpt-summary-item">Total vendido: <strong>R$ ${fmt(totalSold)}</strong></div>
+    <div class="rpt-summary-item">Total pendente: <strong>R$ ${fmt(totalPending)}</strong></div>
+    <div class="rpt-summary-item">Total cancelado: <strong>R$ ${fmt(totalCancelled)}</strong></div>
+    <div class="rpt-summary-item">Taxas de entrega: <strong>R$ ${fmt(totalFee)}</strong></div>
+    ${Object.entries(payBreakdown).map(([m, d]) => `<div class="rpt-summary-item">${esc(m)}: <strong>${d.count} vendas · R$ ${fmt(d.total)}</strong></div>`).join('')}
+  </div>`;
+
+  if (!orders.length) { el.innerHTML = summaryHtml + '<p class="empty-msg">Nenhum pedido no período.</p>'; return; }
 
   const rows = orders.map(o => {
     const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
     const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
-    const paid = isPaidOrder(o);
+    const paid2 = isPaidOrder(o);
+    const paidDate = o.paid_at ? new Date(o.paid_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    const origin = getSaleOriginLabel(o);
     return `<tr>
       <td>${date}</td>
       <td>#${esc(num)}</td>
       <td>${esc(o.customer_name || '—')}</td>
-      <td>${esc(getPaymentLabel(o))}</td>
-      <td><span class="rpt-pill ${paid ? 'rpt-pill-paid' : 'rpt-pill-pending'}">${paid ? 'Pago' : 'Pendente'}</span></td>
       <td>R$ ${fmt(o.total || 0)}</td>
-      <td>${esc(o.created_by_email?.split('@')[0] || 'Sistema')}</td>
+      <td>R$ ${fmt(o.delivery_fee || 0)}</td>
+      <td>${esc(getPaymentLabel(o))}</td>
+      <td><span class="rpt-pill ${paid2 ? 'rpt-pill-paid' : 'rpt-pill-pending'}">${paid2 ? 'Pago' : 'Pendente'}</span></td>
+      <td>${paidDate}</td>
+      <td>${esc(o.paid_by_email?.split('@')[0] || (paid2 ? 'Sem registro' : '—'))}</td>
+      <td>${esc(origin)}</td>
     </tr>`;
   }).join('');
 
@@ -3051,11 +3130,90 @@ function renderRptFinanceiro() {
     <div class="rpt-tab-export">
       <button class="btn-secondary" onclick="exportReportCSV('financeiro')"><i class="fas fa-file-csv"></i> CSV</button>
     </div>
+    ${summaryHtml}
     <table class="rpt-table">
-      <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Pagamento</th><th>Status</th><th>Total</th><th>Feito por</th></tr></thead>
+      <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Total</th><th>Entrega</th><th>Pagamento</th><th>Status</th><th>Pago em</th><th>Confirmado por</th><th>Origem</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
+
+/* ── Tab: Clientes ── */
+function renderRptClientes() {
+  const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado');
+  const el = elid('rpt-tab-clientes');
+  if (!el) return;
+
+  const clientMap = {};
+  orders.forEach(o => {
+    const name = o.customer_name || 'Sem nome';
+    const phone = o.customer_phone || '';
+    const key = name + '|' + phone;
+    if (!clientMap[key]) clientMap[key] = { name, phone, orders: 0, totalSpent: 0, totalPaid: 0, totalPending: 0, totalFee: 0, lastOrder: null, products: {}, origins: {}, cancelled: 0, orderList: [] };
+    const c = clientMap[key];
+    c.orders++;
+    c.totalSpent += Number(o.total || 0);
+    if (isPaidOrder(o)) c.totalPaid += Number(o.total || 0); else c.totalPending += Number(o.total || 0);
+    c.totalFee += Number(o.delivery_fee || 0);
+    const d = new Date(o.created_at);
+    if (!c.lastOrder || d > c.lastOrder) c.lastOrder = d;
+    const origin = getSaleOriginLabel(o);
+    c.origins[origin] = (c.origins[origin] || 0) + 1;
+    (Array.isArray(o.items) ? o.items : []).forEach(i => { const n = i.name || '?'; c.products[n] = (c.products[n] || 0) + (i.qty || 1); });
+    c.orderList.push(o);
+  });
+
+  const sorted = Object.values(clientMap).sort((a, b) => b.totalSpent - a.totalSpent);
+  if (!sorted.length) { el.innerHTML = '<p class="empty-msg">Nenhum cliente no período.</p>'; return; }
+
+  const rows = sorted.map(c => {
+    const topProd = Object.entries(c.products).sort((a, b) => b[1] - a[1])[0];
+    const topOrigin = Object.entries(c.origins).sort((a, b) => b[1] - a[1])[0];
+    return `<tr>
+      <td><strong><a href="#" class="rpt-link" onclick="event.preventDefault();openClientDetailModal('${esc(c.name)}','${esc(c.phone)}')">${esc(c.name)}</a></strong></td>
+      <td>${esc(c.phone || '—')}</td>
+      <td>${c.orders}</td>
+      <td>R$ ${fmt(c.totalSpent)}</td>
+      <td>R$ ${fmt(c.totalPaid)}</td>
+      <td>${c.totalPending > 0 ? `<span class="rpt-pill rpt-pill-pending">R$ ${fmt(c.totalPending)}</span>` : '—'}</td>
+      <td>R$ ${fmt(c.totalFee)}</td>
+      <td>${c.lastOrder ? c.lastOrder.toLocaleDateString('pt-BR') : '—'}</td>
+      <td>${topProd ? esc(topProd[0]) : '—'}</td>
+      <td>${topOrigin ? esc(topOrigin[0]) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('clientes')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <h3>Relatório de clientes</h3>
+    <table class="rpt-table">
+      <thead><tr><th>Cliente</th><th>Telefone</th><th>Pedidos</th><th>Total gasto</th><th>Total pago</th><th>Pendente</th><th>Taxas entrega</th><th>Último pedido</th><th>Produto favorito</th><th>Origem</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function openClientDetailModal(name, phone) {
+  const orders = gs.orders.filter(o => o.customer_name === name && (o.customer_phone || '') === phone);
+  elid('client-detail-subtitle').textContent = name;
+  let html = `<h3 style="margin:0 0 12px">Pedidos de ${esc(name)}</h3>`;
+  if (!orders.length) { html += '<p class="empty-msg">Nenhum pedido encontrado.</p>'; }
+  else {
+    html += '<table class="rpt-table"><thead><tr><th>Data</th><th>Pedido</th><th>Itens</th><th>Total</th><th>Entrega</th><th>Pagamento</th><th>Status</th></tr></thead><tbody>';
+    orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).forEach(o => {
+      const d = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+      const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+      const items = (Array.isArray(o.items) ? o.items : []).map(i => `${i.qty||1}x ${i.name||'?'}`).join(', ');
+      html += `<tr><td>${d}</td><td>#${esc(num)}</td><td class="sd-opts-cell">${esc(items || '—')}</td><td>R$ ${fmt(o.total||0)}</td><td>R$ ${fmt(o.delivery_fee||0)}</td><td>${esc(getPaymentLabel(o))}</td><td><span class="rpt-pill ${isPaidOrder(o)?'rpt-pill-paid':'rpt-pill-pending'}">${isPaidOrder(o)?'Pago':'Pendente'}</span></td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  elid('client-detail-body').innerHTML = html;
+  elid('client-detail-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeClientDetail() { elid('client-detail-overlay').style.display = 'none'; document.body.style.overflow = ''; }
+function closeClientDetailOutside(e) { if (e.target === elid('client-detail-overlay')) closeClientDetail(); }
 
 /* ── Tab: Entregas ── */
 function renderRptEntregas() {
@@ -3083,23 +3241,32 @@ function renderRptEntregas() {
   }).join('');
 
   const totalFee = orders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
-  const avgFee = orders.length ? totalFee / orders.length : 0;
+  const deliveryOrders = orders.filter(o => Number(o.delivery_fee || 0) > 0);
+  const avgFee = deliveryOrders.length ? totalFee / deliveryOrders.length : 0;
   const deliveries = orders.filter(o => o.delivery_type !== 'pickup' && o.order_source !== 'balcao' && o.delivery_type !== 'balcao').length;
+  const maxFee = deliveryOrders.length ? Math.max(...deliveryOrders.map(o => Number(o.delivery_fee || 0))) : 0;
+  const minFee = deliveryOrders.length ? Math.min(...deliveryOrders.map(o => Number(o.delivery_fee || 0))) : 0;
+  const feeByClient = {};
+  deliveryOrders.forEach(o => { const n = o.customer_name || 'Sem nome'; feeByClient[n] = (feeByClient[n] || 0) + Number(o.delivery_fee || 0); });
+  const topFeeClient = Object.entries(feeByClient).sort((a, b) => b[1] - a[1])[0];
 
   el.innerHTML = `
     <div class="rpt-tab-export">
       <button class="btn-secondary" onclick="exportReportCSV('entregas')"><i class="fas fa-file-csv"></i> CSV</button>
     </div>
+    <div class="rpt-summary-box" style="margin-bottom:16px">
+      <div class="rpt-summary-item">Total de entregas: <strong>${deliveries}</strong></div>
+      <div class="rpt-summary-item">Total em taxas: <strong>R$ ${fmt(totalFee)}</strong></div>
+      <div class="rpt-summary-item">Média por entrega: <strong>R$ ${fmt(avgFee)}</strong></div>
+      <div class="rpt-summary-item">Maior taxa: <strong>R$ ${fmt(maxFee)}</strong></div>
+      <div class="rpt-summary-item">Menor taxa: <strong>R$ ${fmt(minFee)}</strong></div>
+      ${topFeeClient ? `<div class="rpt-summary-item">Mais pagou taxa: <strong>${esc(topFeeClient[0])} (R$ ${fmt(topFeeClient[1])})</strong></div>` : ''}
+    </div>
     <h3>Taxas de entrega por cliente</h3>
     <table class="rpt-table">
       <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Telefone</th><th>Tipo</th><th>Taxa entrega</th><th>Total</th><th>Pagamento</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>
-    <div class="rpt-summary-box">
-      <div class="rpt-summary-item">Total em taxas: <strong>R$ ${fmt(totalFee)}</strong></div>
-      <div class="rpt-summary-item">Média por pedido: <strong>R$ ${fmt(avgFee)}</strong></div>
-      <div class="rpt-summary-item">Entregas: <strong>${deliveries}</strong></div>
-    </div>`;
+    </table>`;
 }
 
 /* ── Tab: Produtos ── */
@@ -3206,7 +3373,7 @@ function renderRptFuncionarios() {
     <table class="rpt-table">
       <thead><tr><th>Funcionário</th><th>Pedidos</th><th>Clientes</th><th>Pagos</th><th>Pendentes</th><th>Cancelados</th><th>Comandas</th><th>Total vendido</th><th>Dinheiro</th><th>Pix</th><th>Cartão</th><th>Última ação</th></tr></thead>
       <tbody>${rows.map(([name, d]) => `<tr>
-        <td><strong>${esc(name.includes('@') ? name.split('@')[0] : name)}</strong></td>
+        <td><strong><a href="#" class="rpt-link" onclick="event.preventDefault();openEmpDetailModal('${esc(name)}')">${esc(name.includes('@') ? name.split('@')[0] : name)}</a></strong></td>
         <td>${d.created}</td>
         <td>${d.clients.size}</td>
         <td>${d.paid}</td>
@@ -3234,6 +3401,7 @@ function renderRptCancelados() {
     const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
     const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
     const cancelDate = o.cancelled_at ? new Date(o.cancelled_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    const items = (Array.isArray(o.items) ? o.items : []).map(i => `${i.qty||1}x ${i.name||'?'}`).join(', ');
     return `<tr>
       <td>${date}</td>
       <td>#${esc(num)}</td>
@@ -3242,6 +3410,8 @@ function renderRptCancelados() {
       <td>${esc(o.cancelled_by_email?.split('@')[0] || 'Sem registro')}</td>
       <td>${esc(o.cancel_reason || 'Não informado')}</td>
       <td>${cancelDate}</td>
+      <td>${esc(getSaleOriginLabel(o))}</td>
+      <td class="sd-opts-cell">${esc(items || '—')}</td>
     </tr>`;
   }).join('');
 
@@ -3251,7 +3421,7 @@ function renderRptCancelados() {
     </div>
     <h3>Pedidos cancelados / excluídos</h3>
     <table class="rpt-table">
-      <thead><tr><th>Data pedido</th><th>Pedido</th><th>Cliente</th><th>Total</th><th>Quem cancelou</th><th>Motivo</th><th>Horário</th></tr></thead>
+      <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Total</th><th>Quem cancelou</th><th>Motivo</th><th>Horário</th><th>Origem</th><th>Itens</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -3305,6 +3475,123 @@ function renderRptAtividades() {
       <tbody>${rows}</tbody>
     </table>`;
 }
+
+/* ══════════════════════════════════════
+   Tab: Revisões
+══════════════════════════════════════ */
+function renderRptRevisoes() {
+  const el = elid('rpt-tab-revisoes');
+  if (!el) return;
+
+  const logs = rpt.auditLogs.filter(l => {
+    const m = l.metadata || {};
+    return (m.before && Object.keys(m.before).length > 0) || (m.after && Object.keys(m.after).length > 0);
+  });
+
+  if (!logs.length) { el.innerHTML = '<p class="empty-msg">Nenhuma revisão/alteração com detalhes no período.</p>'; return; }
+
+  const ACTION_LABELS = { edit_product: 'Produto editado', save_config: 'Configuração alterada', change_status: 'Status alterado', mark_paid: 'Pagamento confirmado' };
+
+  const rows = logs.map(l => {
+    const d = new Date(l.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const actor = l.actor_name || l.actor_email?.split('@')[0] || 'Sistema';
+    const act = ACTION_LABELS[l.action] || l.action;
+    const m = l.metadata || {};
+    const before = m.before || {};
+    const after = m.after || {};
+    const changes = Object.keys({ ...before, ...after }).filter(k => k !== '').map(k => {
+      const bv = before[k] != null ? before[k] : '—';
+      const av = after[k] != null ? after[k] : '—';
+      const bStr = typeof bv === 'boolean' ? (bv ? 'Sim' : 'Não') : (typeof bv === 'number' ? `R$ ${fmt(bv)}` : String(bv));
+      const aStr = typeof av === 'boolean' ? (av ? 'Sim' : 'Não') : (typeof av === 'number' ? `R$ ${fmt(av)}` : String(av));
+      return `<div class="rpt-revision-change"><span class="rpt-rev-field">${esc(k)}:</span> <span class="rpt-rev-before">${esc(bStr)}</span> → <span class="rpt-rev-after">${esc(aStr)}</span></div>`;
+    }).join('');
+    return `<tr>
+      <td>${d}</td>
+      <td><strong>${esc(actor)}</strong></td>
+      <td>${esc(act)}</td>
+      <td>${l.entity_label ? esc(l.entity_label) : '—'}</td>
+      <td>${changes || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('revisoes')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <h3>Revisões e alterações (antes/depois)</h3>
+    <table class="rpt-table">
+      <thead><tr><th>Data</th><th>Conta</th><th>Ação</th><th>Item</th><th>Alterações</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ══════════════════════════════════════
+   Tab: Impressões
+══════════════════════════════════════ */
+function renderRptImpressoes() {
+  const el = elid('rpt-tab-impressoes');
+  if (!el) return;
+
+  const logs = rpt.auditLogs.filter(l => ['print_receipt', 'reprint_receipt', 'auto_print_order'].includes(l.action));
+  if (!logs.length) { el.innerHTML = '<p class="empty-msg">Nenhuma impressão registrada no período.</p>'; return; }
+
+  const ACTION_LABELS = { print_receipt: 'Impressão manual', reprint_receipt: 'Reimpressão', auto_print_order: 'Impressão automática (Print Agent)' };
+
+  const rows = logs.map(l => {
+    const d = new Date(l.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const actor = l.actor_name || l.actor_email?.split('@')[0] || 'Sistema';
+    return `<tr>
+      <td>${d}</td>
+      <td>${l.entity_label ? esc(l.entity_label) : '—'}</td>
+      <td>${esc(ACTION_LABELS[l.action] || l.action)}</td>
+      <td><strong>${esc(actor)}</strong></td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('impressoes')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <h3>Impressões de comandas</h3>
+    <table class="rpt-table">
+      <thead><tr><th>Data</th><th>Pedido</th><th>Tipo</th><th>Impresso por</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ── Employee Detail Modal ── */
+async function openEmpDetailModal(email) {
+  elid('emp-detail-subtitle').textContent = email.includes('@') ? email.split('@')[0] : email;
+
+  let logs = [];
+  try {
+    const [start, end] = getReportDateRange();
+    const q = getSb().from('audit_logs').select('*').gte('created_at', start.toISOString()).lte('created_at', end.toISOString()).order('created_at', { ascending: false }).limit(200);
+    if (email.includes('@')) q.eq('actor_email', email); else q.eq('actor_name', email);
+    const { data } = await q;
+    logs = data || [];
+  } catch(_) {}
+
+  const ACTION_LABELS = { create_order:'Pedido criado', cancel_order:'Pedido cancelado', mark_paid:'Pagamento confirmado', change_status:'Status alterado', print_receipt:'Comanda impressa', reprint_receipt:'Comanda reimpressa', auto_print_order:'Impressão automática', create_product:'Produto criado', edit_product:'Produto editado', delete_product:'Produto excluído', save_config:'Configuração alterada', save_location:'Localização alterada', export_report:'Relatório exportado', change_password:'Senha alterada' };
+
+  let html = '';
+  if (!logs.length) { html = '<p class="empty-msg">Nenhuma atividade registrada no período.</p>'; }
+  else {
+    html = '<table class="rpt-table"><thead><tr><th>Data</th><th>Ação</th><th>Item</th><th>Motivo</th></tr></thead><tbody>';
+    logs.forEach(l => {
+      const d = new Date(l.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      html += `<tr><td>${d}</td><td>${esc(ACTION_LABELS[l.action] || l.action)}</td><td>${l.entity_label ? esc(l.entity_label) : '—'}</td><td>${l.reason ? esc(l.reason) : '—'}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+
+  elid('emp-detail-body').innerHTML = html;
+  elid('emp-detail-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeEmpDetail() { elid('emp-detail-overlay').style.display = 'none'; document.body.style.overflow = ''; }
+function closeEmpDetailOutside(e) { if (e.target === elid('emp-detail-overlay')) closeEmpDetail(); }
 
 /* ══════════════════════════════════════
    REPORTS — Export
@@ -3383,6 +3670,33 @@ function exportReportCSV(type) {
       l.actor_name || l.actor_email || 'Sistema',
       l.action, l.entity_label || '', l.reason || '',
     ]);
+  } else if (type === 'clientes') {
+    const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado');
+    const clientMap = {};
+    orders.forEach(o => {
+      const key = (o.customer_name || 'Sem nome') + '|' + (o.customer_phone || '');
+      if (!clientMap[key]) clientMap[key] = { name: o.customer_name || 'Sem nome', phone: o.customer_phone || '', orders: 0, total: 0, paid: 0, pending: 0, fee: 0 };
+      const c = clientMap[key]; c.orders++; c.total += Number(o.total || 0); c.fee += Number(o.delivery_fee || 0);
+      if (isPaidOrder(o)) c.paid += Number(o.total || 0); else c.pending += Number(o.total || 0);
+    });
+    const sorted = Object.values(clientMap).sort((a, b) => b.total - a.total);
+    if (!sorted.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Cliente','Telefone','Pedidos','Total gasto','Pago','Pendente','Taxas entrega'];
+    rows = sorted.map(c => [c.name, c.phone, c.orders, fmt(c.total), fmt(c.paid), fmt(c.pending), fmt(c.fee)]);
+  } else if (type === 'revisoes') {
+    const logs = rpt.auditLogs.filter(l => { const m = l.metadata || {}; return (m.before && Object.keys(m.before).length) || (m.after && Object.keys(m.after).length); });
+    if (!logs.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Data','Conta','Acao','Item','Alteracoes'];
+    rows = logs.map(l => {
+      const m = l.metadata || {};
+      const changes = Object.keys({ ...(m.before||{}), ...(m.after||{}) }).map(k => `${k}: ${m.before?.[k] ?? '—'} → ${m.after?.[k] ?? '—'}`).join('; ');
+      return [new Date(l.created_at).toLocaleString('pt-BR'), l.actor_name || l.actor_email || 'Sistema', l.action, l.entity_label || '', changes];
+    });
+  } else if (type === 'impressoes') {
+    const logs = rpt.auditLogs.filter(l => ['print_receipt','reprint_receipt','auto_print_order'].includes(l.action));
+    if (!logs.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Data','Pedido','Tipo','Impresso por'];
+    rows = logs.map(l => [new Date(l.created_at).toLocaleString('pt-BR'), l.entity_label || '', l.action, l.actor_name || l.actor_email || 'Sistema']);
   } else return;
 
   const csv = [header.join(','), ...rows.map(r => r.map(csvEscape).join(','))].join('\n');
@@ -4156,6 +4470,12 @@ window.showReportTab                  = showReportTab;
 window.renderReports                  = renderReports;
 window.exportReportCSV                = exportReportCSV;
 window.printReport                    = printReport;
+window.openClientDetailModal          = openClientDetailModal;
+window.closeClientDetail              = closeClientDetail;
+window.closeClientDetailOutside       = closeClientDetailOutside;
+window.openEmpDetailModal             = openEmpDetailModal;
+window.closeEmpDetail                 = closeEmpDetail;
+window.closeEmpDetailOutside          = closeEmpDetailOutside;
 window.cancelReasonModalClose         = cancelReasonModalClose;
 window.cancelReasonModalConfirm       = cancelReasonModalConfirm;
 window._cancelReasonBgClick           = _cancelReasonBgClick;

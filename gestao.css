@@ -3346,6 +3346,42 @@ body.is-balcao .dash-header { display: none !important; }
 .rpt-pill-pending { background: #FFF7ED; color: #EA580C; }
 .rpt-pill-cancelled { background: var(--danger-bg); color: #DC2626; }
 
+.rpt-link {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+.rpt-link:hover { text-decoration: underline; }
+
+.rpt-visao-hint {
+  font-size: .88rem;
+  color: var(--text-med);
+  padding: 20px;
+  background: #F0F7FF;
+  border-radius: 8px;
+  border: 1px solid #D0E3F7;
+  line-height: 1.5;
+}
+.rpt-visao-hint i { color: #2980B9; margin-right: 6px; }
+
+.rpt-revision-change {
+  font-size: .78rem;
+  line-height: 1.6;
+}
+.rpt-rev-field {
+  font-weight: 600;
+  color: var(--text-med);
+  text-transform: capitalize;
+}
+.rpt-rev-before {
+  color: #DC2626;
+  text-decoration: line-through;
+}
+.rpt-rev-after {
+  color: #16a34a;
+  font-weight: 600;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .rpt-cards {

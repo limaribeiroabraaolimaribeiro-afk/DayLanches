@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=23">
+  <link rel="stylesheet" href="gestao.css?v=24">
 </head>
 <body>
 
@@ -407,21 +407,29 @@
 
         <!-- Abas dos relatórios -->
         <div class="rpt-tabs">
-          <button class="rpt-tab active" onclick="showReportTab('financeiro')">Financeiro</button>
+          <button class="rpt-tab active" onclick="showReportTab('visao')">Visão geral</button>
+          <button class="rpt-tab" onclick="showReportTab('financeiro')">Financeiro</button>
+          <button class="rpt-tab" onclick="showReportTab('clientes')">Clientes</button>
           <button class="rpt-tab" onclick="showReportTab('entregas')">Entregas</button>
           <button class="rpt-tab" onclick="showReportTab('produtos')">Produtos</button>
           <button class="rpt-tab" onclick="showReportTab('funcionarios')">Funcionários</button>
           <button class="rpt-tab" onclick="showReportTab('cancelados')">Cancelados</button>
           <button class="rpt-tab" onclick="showReportTab('atividades')">Atividades</button>
+          <button class="rpt-tab" onclick="showReportTab('revisoes')">Revisões</button>
+          <button class="rpt-tab" onclick="showReportTab('impressoes')">Impressões</button>
         </div>
 
         <!-- Conteúdo de cada aba -->
-        <div class="rpt-tab-content" id="rpt-tab-financeiro"></div>
+        <div class="rpt-tab-content" id="rpt-tab-visao"></div>
+        <div class="rpt-tab-content" id="rpt-tab-financeiro" style="display:none"></div>
+        <div class="rpt-tab-content" id="rpt-tab-clientes" style="display:none"></div>
         <div class="rpt-tab-content" id="rpt-tab-entregas" style="display:none"></div>
         <div class="rpt-tab-content" id="rpt-tab-produtos" style="display:none"></div>
         <div class="rpt-tab-content" id="rpt-tab-funcionarios" style="display:none"></div>
         <div class="rpt-tab-content" id="rpt-tab-cancelados" style="display:none"></div>
         <div class="rpt-tab-content" id="rpt-tab-atividades" style="display:none"></div>
+        <div class="rpt-tab-content" id="rpt-tab-revisoes" style="display:none"></div>
+        <div class="rpt-tab-content" id="rpt-tab-impressoes" style="display:none"></div>
 
       </div>
     </section>
@@ -805,6 +813,34 @@
   </div>
 </div>
 
+<!-- ===================== MODAL: HISTÓRICO DO CLIENTE ===================== -->
+<div id="client-detail-overlay" class="modal-overlay" style="display:none" onclick="closeClientDetailOutside(event)">
+  <div class="modal-box order-detail-modal">
+    <div class="pform-header">
+      <div>
+        <h2 class="pform-title"><i class="fas fa-user"></i> Histórico do cliente</h2>
+        <p class="pform-subtitle" id="client-detail-subtitle"></p>
+      </div>
+      <button class="btn-icon modal-close" onclick="closeClientDetail()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="order-detail-body-wrap" id="client-detail-body"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: HISTÓRICO DO FUNCIONÁRIO ===================== -->
+<div id="emp-detail-overlay" class="modal-overlay" style="display:none" onclick="closeEmpDetailOutside(event)">
+  <div class="modal-box order-detail-modal">
+    <div class="pform-header">
+      <div>
+        <h2 class="pform-title"><i class="fas fa-id-badge"></i> Histórico do funcionário</h2>
+        <p class="pform-subtitle" id="emp-detail-subtitle"></p>
+      </div>
+      <button class="btn-icon modal-close" onclick="closeEmpDetail()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="order-detail-body-wrap" id="emp-detail-body"></div>
+  </div>
+</div>
+
 <!-- ===================== MODAL: DETALHES DO PEDIDO ===================== -->
 <div id="order-detail-overlay" class="modal-overlay" style="display:none" onclick="closeOrderDetailOutside(event)">
   <div class="modal-box order-detail-modal">
@@ -867,7 +903,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=33"></script>
+<script src="gestao.js?v=34"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
