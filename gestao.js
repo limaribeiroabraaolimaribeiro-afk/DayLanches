@@ -1260,10 +1260,8 @@ async function openOrderDetailModal(orderId) {
     logs.forEach(l => {
       const d = new Date(l.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
       const actor = l.actor_name || l.actor_email?.split('@')[0] || 'Sistema';
-      const act = getFriendlyAction(l.action, l.entity_label);
-      const meta = l.metadata || {};
-      const detail = meta.after?.status ? ` → ${ORDER_STATUS_LABELS[meta.after.status] || meta.after.status}` : (meta.payment_method ? ` (${PAY_METHOD_LABELS[meta.payment_method] || meta.payment_method})` : '');
-      html += `<tr><td>${d}</td><td><strong>${esc(actor)}</strong></td><td>${esc(act)}${detail}</td><td>${l.reason ? esc(l.reason) : '—'}</td></tr>`;
+      const act = getFriendlyAction(l.action, l.entity_label, l.metadata);
+      html += `<tr><td>${d}</td><td><strong>${esc(actor)}</strong></td><td>${esc(act)}</td><td>${l.reason ? esc(l.reason) : 'Sem observação'}</td></tr>`;
     });
     html += `</tbody></table>`;
   } else {
@@ -2817,60 +2815,88 @@ function getCurrentActor() {
 }
 
 const _FRIENDLY_ACTIONS = {
-  create_order:           'Criou um pedido',
-  create_counter_order:   'Criou pedido no balcão',
-  cancel_order:           'Cancelou pedido',
-  mark_paid:              'Marcou pedido como pago',
-  mark_order_paid:        'Marcou pedido como pago',
-  change_status:          'Alterou status do pedido',
-  update_order_status:    'Alterou status do pedido',
-  print_receipt:          'Imprimiu comanda',
-  print_order_receipt:    'Imprimiu comanda',
-  reprint_receipt:        'Reimprimiu comanda',
-  reprint_order_receipt:  'Reimprimiu comanda',
-  auto_print_order:       'Impressão automática (Print Agent)',
-  create_product:         'Criou produto',
-  edit_product:           'Alterou produto',
-  update_product:         'Alterou produto',
-  delete_product:         'Removeu produto',
-  toggle_product:         'Alterou status do produto',
-  save_config:            'Alterou configuração',
-  save_location:          'Alterou localização da loja',
-  export_report:          'Exportou relatório',
-  export_backup:          'Exportou dados',
-  print_report:           'Imprimiu relatório',
-  change_password:        'Alterou a senha',
-  open_cash_register:     'Abriu o caixa',
-  close_cash_register:    'Fechou o caixa',
-  create_expense:         'Registrou despesa',
-  update_expense:         'Alterou despesa',
-  cancel_expense:         'Cancelou despesa',
-  create_inventory_item:  'Criou item no estoque',
-  update_inventory_item:  'Alterou item no estoque',
+  create_order:           'Pedido criado',
+  create_counter_order:   'Pedido criado no balcão',
+  cancel_order:           'Pedido cancelado',
+  mark_paid:              'Pagamento confirmado',
+  mark_order_paid:        'Pagamento confirmado',
+  change_status:          'Status do pedido alterado',
+  update_order_status:    'Status do pedido alterado',
+  print_receipt:          'Comanda impressa',
+  print_order_receipt:    'Comanda impressa',
+  reprint_receipt:        'Comanda reimpressa',
+  reprint_order_receipt:  'Comanda reimpressa',
+  auto_print_order:       'Comanda impressa automaticamente',
+  create_product:         'Produto cadastrado',
+  edit_product:           'Produto editado',
+  update_product:         'Produto editado',
+  delete_product:         'Produto excluído',
+  toggle_product:         'Status do produto alterado',
+  save_config:            'Configurações da loja alteradas',
+  update_store_config:    'Configurações da loja alteradas',
+  save_location:          'Localização da loja atualizada',
+  update_location:        'Localização da loja atualizada',
+  export_report:          'Exportação realizada',
+  export_backup:          'Exportação realizada',
+  export_data:            'Exportação realizada',
+  print_report:           'Relatório impresso',
+  change_password:        'Senha alterada',
+  open_cash_register:     'Caixa aberto',
+  close_cash_register:    'Caixa fechado',
+  create_expense:         'Despesa registrada',
+  update_expense:         'Despesa alterada',
+  cancel_expense:         'Despesa cancelada',
+  create_inventory_item:  'Item de estoque cadastrado',
+  update_inventory_item:  'Item de estoque alterado',
   inventory_entry:        'Entrada no estoque',
   inventory_exit:         'Saída do estoque',
   inventory_adjustment:   'Ajuste de estoque',
-  inventory_loss:         'Registrou perda no estoque',
-  create_driver:          'Cadastrou entregador',
-  assign_driver:          'Atribuiu entregador',
+  inventory_loss:         'Perda registrada no estoque',
+  create_driver:          'Entregador cadastrado',
+  assign_driver:          'Entregador vinculado ao pedido',
   start_delivery:         'Saiu para entrega',
   complete_delivery:      'Entrega concluída',
-  create_user_account:    'Criou conta de acesso',
-  update_user_role:       'Alterou cargo',
-  deactivate_user:        'Desativou conta',
-  activate_user:          'Ativou conta',
-  apply_discount:         'Aplicou desconto',
-  refund_payment:         'Estornou pagamento',
-  apply_courtesy:         'Aplicou cortesia',
+  create_user_account:    'Novo acesso criado',
+  create_access:          'Novo acesso criado',
+  update_user_role:       'Cargo do usuário alterado',
+  deactivate_user:        'Conta desativada',
+  activate_user:          'Conta ativada',
+  apply_discount:         'Desconto aplicado',
+  refund_payment:         'Pagamento estornado',
+  apply_courtesy:         'Cortesia aplicada',
 };
 
-function getFriendlyAction(action, entityLabel) {
-  const base = _FRIENDLY_ACTIONS[action];
-  if (base) {
-    if (entityLabel) return `${base} ${entityLabel}`;
-    return base;
+const _STATUS_LABELS_PT = { novo:'Novo', em_preparo:'Em preparo', saiu_para_entrega:'Saiu para entrega', finalizado:'Finalizado', cancelado:'Cancelado' };
+
+function getFriendlyAction(action, entityLabel, metadata) {
+  const base = _FRIENDLY_ACTIONS[action] || 'Ação registrada';
+  const meta = metadata || {};
+  const label = entityLabel || '';
+
+  if ((action === 'change_status' || action === 'update_order_status') && meta.before?.status && meta.after?.status) {
+    const from = _STATUS_LABELS_PT[meta.before.status] || meta.before.status;
+    const to   = _STATUS_LABELS_PT[meta.after.status]  || meta.after.status;
+    return label ? `Status do pedido ${label} alterado de "${from}" para "${to}"` : `Status do pedido alterado de "${from}" para "${to}"`;
   }
-  return 'Ação registrada';
+
+  if (action === 'assign_driver' && meta.driver) return `Entregador vinculado ao pedido${label ? ' ' + label : ''}: ${meta.driver}`;
+  if (action === 'create_inventory_item' && label) return `Item de estoque cadastrado: ${label}`;
+  if (action === 'inventory_entry' && label) return `Entrada no estoque: ${label}`;
+  if (action === 'inventory_exit' && label) return `Saída do estoque: ${label}`;
+  if (action === 'create_expense' && label) return `Despesa registrada: ${label}`;
+  if (action === 'create_driver' && label) return `Entregador cadastrado: ${label}`;
+  if (action === 'update_user_role' && label) return `Cargo alterado: ${label}`;
+
+  if (action === 'apply_discount' && label) return `Desconto aplicado no pedido ${label}`;
+  if (action === 'apply_courtesy' && label) return `Cortesia aplicada no pedido ${label}`;
+  if (action === 'refund_payment' && label) return `Pagamento estornado no pedido ${label}`;
+  if (action === 'mark_paid' || action === 'mark_order_paid') {
+    const pay = meta.payment_method ? ` (${PAY_METHOD_LABELS[meta.payment_method] || meta.payment_method})` : '';
+    return label ? `Pagamento confirmado: ${label}${pay}` : `Pagamento confirmado${pay}`;
+  }
+
+  if (label) return `${base}: ${label}`;
+  return base;
 }
 
 /* ══════════════════════════════════════
@@ -3515,12 +3541,12 @@ function renderRptAtividades() {
   const rows = rpt.auditLogs.map(log => {
     const date = new Date(log.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
     const actor = log.actor_name || log.actor_email?.split('@')[0] || 'Sistema';
-    const actionText = getFriendlyAction(log.action, log.entity_label);
+    const actionText = getFriendlyAction(log.action, log.entity_label, log.metadata);
     return `<tr>
       <td>${date}</td>
       <td><span class="rpt-activity-actor">${esc(actor)}</span></td>
       <td><span class="rpt-activity-action">${esc(actionText)}</span></td>
-      <td>${log.reason ? `<span class="rpt-activity-reason">${esc(log.reason)}</span>` : '—'}</td>
+      <td>${log.reason ? `<span class="rpt-activity-reason">${esc(log.reason)}</span>` : 'Sem observação'}</td>
     </tr>`;
   }).join('');
 
@@ -3552,7 +3578,7 @@ function renderRptRevisoes() {
   const rows = logs.map(l => {
     const d = new Date(l.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
     const actor = l.actor_name || l.actor_email?.split('@')[0] || 'Sistema';
-    const act = getFriendlyAction(l.action, null);
+    const act = getFriendlyAction(l.action, l.entity_label, l.metadata);
     const m = l.metadata || {};
     const before = m.before || {};
     const after = m.after || {};
@@ -3599,7 +3625,7 @@ function renderRptImpressoes() {
     return `<tr>
       <td>${d}</td>
       <td>${l.entity_label ? esc(l.entity_label) : '—'}</td>
-      <td>${esc(getFriendlyAction(l.action, null))}</td>
+      <td>${esc(getFriendlyAction(l.action, null, l.metadata))}</td>
       <td><strong>${esc(actor)}</strong></td>
     </tr>`;
   }).join('');
@@ -3631,10 +3657,10 @@ async function openEmpDetailModal(email) {
   let html = '';
   if (!logs.length) { html = '<p class="empty-msg">Nenhuma atividade registrada no período.</p>'; }
   else {
-    html = '<table class="rpt-table"><thead><tr><th>Data</th><th>Ação</th><th>Item</th><th>Motivo</th></tr></thead><tbody>';
+    html = '<table class="rpt-table"><thead><tr><th>Data</th><th>Ação</th><th>Motivo</th></tr></thead><tbody>';
     logs.forEach(l => {
       const d = new Date(l.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-      html += `<tr><td>${d}</td><td>${esc(getFriendlyAction(l.action, null))}</td><td>${l.entity_label ? esc(l.entity_label) : '—'}</td><td>${l.reason ? esc(l.reason) : '—'}</td></tr>`;
+      html += `<tr><td>${d}</td><td>${esc(getFriendlyAction(l.action, l.entity_label, l.metadata))}</td><td>${l.reason ? esc(l.reason) : 'Sem observação'}</td></tr>`;
     });
     html += '</tbody></table>';
   }
@@ -3721,7 +3747,7 @@ function exportReportCSV(type) {
     rows = rpt.auditLogs.map(l => [
       new Date(l.created_at).toLocaleString('pt-BR'),
       l.actor_name || l.actor_email || 'Sistema',
-      getFriendlyAction(l.action, l.entity_label), '', l.reason || '',
+      getFriendlyAction(l.action, l.entity_label, l.metadata), '', l.reason || 'Sem observação',
     ]);
   } else if (type === 'clientes') {
     const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado');
@@ -3743,13 +3769,13 @@ function exportReportCSV(type) {
     rows = logs.map(l => {
       const m = l.metadata || {};
       const changes = Object.keys({ ...(m.before||{}), ...(m.after||{}) }).map(k => `${k}: ${m.before?.[k] ?? '—'} → ${m.after?.[k] ?? '—'}`).join('; ');
-      return [new Date(l.created_at).toLocaleString('pt-BR'), l.actor_name || l.actor_email || 'Sistema', getFriendlyAction(l.action, null), l.entity_label || '', changes];
+      return [new Date(l.created_at).toLocaleString('pt-BR'), l.actor_name || l.actor_email || 'Sistema', getFriendlyAction(l.action, l.entity_label, l.metadata), '', changes];
     });
   } else if (type === 'impressoes') {
     const logs = rpt.auditLogs.filter(l => ['print_receipt','reprint_receipt','auto_print_order'].includes(l.action));
     if (!logs.length) { toast('Nenhum dado para exportar.', true); return; }
     header = ['Data','Pedido','Tipo','Impresso por'];
-    rows = logs.map(l => [new Date(l.created_at).toLocaleString('pt-BR'), l.entity_label || '', getFriendlyAction(l.action, null), l.actor_name || l.actor_email || 'Sistema']);
+    rows = logs.map(l => [new Date(l.created_at).toLocaleString('pt-BR'), l.entity_label || '', getFriendlyAction(l.action, l.entity_label, l.metadata), l.actor_name || l.actor_email || 'Sistema']);
   } else return;
 
   const csv = [header.join(','), ...rows.map(r => r.map(csvEscape).join(','))].join('\n');
@@ -4292,7 +4318,7 @@ async function exportBackupData(type) {
   } else if (type === 'auditoria') {
     const { data: logs } = await getSb().from('audit_logs').select('*').order('created_at', { ascending: false }).limit(1000);
     header = ['Data','Conta','Ação','Tipo','Item','Motivo','Origem'];
-    rows = (logs || []).map(l => [new Date(l.created_at).toLocaleString('pt-BR'), l.actor_name || l.actor_email || '', getFriendlyAction(l.action, null), l.entity_type, l.entity_label || '', l.reason || '', l.source || '']);
+    rows = (logs || []).map(l => [new Date(l.created_at).toLocaleString('pt-BR'), l.actor_name || l.actor_email || '', getFriendlyAction(l.action, l.entity_label, l.metadata), l.entity_type, l.entity_label || '', l.reason || 'Sem observação', l.source || '']);
   } else { toast('Tipo de exportação inválido.', true); return; }
 
   if (!rows || !rows.length) { toast('Nenhum dado para exportar.', true); return; }
