@@ -958,16 +958,7 @@ function updateOrderFilterCounts() {
 }
 
 function toggleOrderDetails(orderId) {
-  const det = elid(`ocdet-${orderId}`);
-  const btn = elid(`ocdet-btn-${orderId}`);
-  if (!det) return;
-  const open = det.style.display !== 'none';
-  det.style.display = open ? 'none' : 'block';
-  /* Footer toggle: visível quando colapsado, escondido quando expandido */
-  if (btn) {
-    btn.style.display = open ? '' : 'none';
-    if (open) btn.innerHTML = '<i class="fas fa-chevron-down"></i> Ver detalhes';
-  }
+  openOrderDetailModal(orderId);
 }
 
 async function confirmCancelOrder(id) {
@@ -1018,36 +1009,24 @@ function orderCard(o) {
     saiu_para_entrega:'st-entrega',
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
-  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha', a_definir:'A definir' };
 
-  /* Após webhook: resolve label a partir do capture_method da InfinitePay */
-  function resolvePayLabel(order) {
-    if (order.payment_status === 'pago' && order.capture_method) {
-      const cm = String(order.capture_method).toLowerCase();
-      if (cm.includes('pix'))            return 'PIX';
-      if (cm.includes('credit') || cm.includes('debit') || cm.includes('card') || cm.includes('cartao') || cm.includes('credito') || cm.includes('debito')) return 'Cartão';
-      return 'Online confirmado';
-    }
-    return payLabels[order.payment_method] || esc(order.payment_method || '—');
-  }
-  const payStatusLabel = {
-    aguardando_pagamento: { text:'Aguardando pag.', cls:'ps-waiting' },
-    aguardando_comprovante: { text:'Aguardando comprovante', cls:'ps-waiting' },
-    checkout_criado:      { text:'Checkout criado', cls:'ps-created' },
-    pago:                 { text:'Pago ✓', cls:'ps-paid' },
-    pagamento_na_entrega: { text:'Na entrega', cls:'ps-delivery' },
-    cancelado:            { text:'Cancelado', cls:'ps-cancelled' },
-  };
-  const psInfo = payStatusLabel[o.payment_status] || null;
   const date  = o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) + ' — ' + new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
   const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
-  const loc   = o.location && typeof o.location === 'object' ? o.location : null;
-  const phone   = (o.customer_phone || '').replace(/\D/g, '');
-  const waPhone = (phone.startsWith('55') && phone.length >= 12) ? phone : '55' + phone;
-  const waLink  = phone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(buildCallCustomerMessage(o))}` : '';
-  const hasOpts = items.some(i => (i.options||[]).length > 0);
   const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const originLabel = isBalcao ? 'Balcão' : (o.delivery_type === 'pickup' ? 'Retirada' : (o.delivery_type === 'delivery' || (!isBalcao && o.delivery_type !== 'pickup') ? 'Entrega' : 'Online'));
+  const originIcon = isBalcao ? 'fa-cash-register' : (o.delivery_type === 'pickup' ? 'fa-store' : 'fa-motorcycle');
+  const creator = o.created_by_email?.split('@')[0] || (isBalcao ? null : 'Cliente online');
+  const isPaid = isPaidOrder(o);
+  const payLabel = getPaymentLabel(o);
+  const psLabel = getOrderPayStatusText(o);
+  const psCls = getOrderPayStatusCls(o);
+  const fee = Number(o.delivery_fee || 0);
+
+  const itemsPreview = items.slice(0, 3);
+  const extraCount = items.length - 3;
+
+  const printedAt = o.printed_at ? new Date(o.printed_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : null;
 
   return `
     <div class="oc ${stClass[o.status]||''}${gs.newOrderIds.has(o.id)?' oc-new':''}">
@@ -1056,9 +1035,9 @@ function orderCard(o) {
       <div class="oc-head">
         <div class="oc-head-left">
           <span class="oc-num">#${esc(num)}</span>
-          ${isBalcao ? `<span class="oc-source-badge"><i class="fas fa-cash-register"></i> Balcão</span>${o.table_number ? `<span class="oc-mesa-badge"><i class="fas fa-chair"></i> Mesa ${o.table_number}</span>` : ''}` : ''}
+          <span class="oc-origin-badge"><i class="fas ${originIcon}"></i> ${originLabel}</span>
+          ${isBalcao && o.table_number ? `<span class="oc-mesa-badge"><i class="fas fa-chair"></i> Mesa ${o.table_number}</span>` : ''}
           <span class="oc-date">${date}</span>
-          ${(o.printed_at || gs.printedOrderIds.has(o.id)) ? '<span class="oc-printed-badge"><i class="fas fa-check"></i> Comanda impressa</span>' : ''}
         </div>
         <span class="oc-badge ${stClass[o.status]||''}">${statusLabels[o.status]||o.status}</span>
       </div>
@@ -1074,16 +1053,16 @@ function orderCard(o) {
           <span class="oc-field-value">${o.customer_phone ? esc(o.customer_phone) : '<span class="oc-no-info">Não informado</span>'}</span>
         </div>
         <div class="oc-field">
-          <span class="oc-field-label">Entrega</span>
-          <span class="oc-field-value"><i class="fas fa-${isBalcao?'cash-register':o.delivery_type==='pickup'?'store':'motorcycle'}" style="color:var(--primary)"></i> ${isBalcao?(o.table_number?`Mesa ${o.table_number}`:'Balcão / Presencial'):o.delivery_type==='pickup'?'Retirada':'Entrega'}</span>
+          <span class="oc-field-label">${isBalcao ? 'Tipo' : 'Tipo do pedido'}</span>
+          <span class="oc-field-value"><i class="fas ${originIcon}" style="color:var(--primary)"></i> ${isBalcao ? (o.table_number ? `Mesa ${o.table_number}` : 'Balcão') : originLabel}</span>
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Pagamento</span>
-          <span class="oc-field-value">${resolvePayLabel(o)}${o.troco?` <small class="oc-troco">troco p/ R$ ${esc(String(o.troco))}</small>`:''}</span>
+          <span class="oc-field-value">${esc(payLabel)}${o.troco?` <small class="oc-troco">troco p/ R$ ${esc(String(o.troco))}</small>`:''}</span>
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Status pagamento</span>
-          <span class="oc-field-value">${psInfo?`<span class="oc-ps-badge ${psInfo.cls}">${psInfo.text}</span>`:'<span class="oc-no-info">—</span>'}</span>
+          <span class="oc-field-value"><span class="oc-ps-badge ${psCls}">${psLabel}</span></span>
         </div>
         <div class="oc-field">
           <span class="oc-field-label">Total</span>
@@ -1091,93 +1070,217 @@ function orderCard(o) {
         </div>
       </div>
 
-      <!-- DETALHES EXPANSÍVEIS -->
-      <div class="oc-details" id="ocdet-${o.id}" style="display:none">
-        <div class="order-expanded-body">
-          <div class="order-details-compact-grid">
+      <!-- ITENS RESUMIDOS -->
+      <div class="oc-items-preview">
+        ${itemsPreview.map(i => {
+          const t = i.total || (i.finalUnitPrice||i.unitPrice||0)*(i.qty||1) || 0;
+          return `<div class="oc-item-row"><span>${i.qty||1}x ${esc(i.name||'?')}</span><span>R$ ${fmt(t)}</span></div>`;
+        }).join('')}
+        ${extraCount > 0 ? `<div class="oc-item-more">+ ${extraCount} ${extraCount === 1 ? 'item' : 'itens'}</div>` : ''}
+      </div>
 
-            <div class="order-detail-box">
-              <div class="order-detail-box-title"><i class="fas fa-list-ul"></i> Produtos</div>
-              <div class="order-products-list">
-                ${items.map(i => {
-                  const opts = (i.options||[]);
-                  const total = i.total || (i.finalUnitPrice||i.unitPrice||0)*i.qty || 0;
-                  return `<div class="order-product-row">
-                    <span class="order-product-name">${i.qty}x ${esc(i.name)}${opts.length?`<div class="order-product-opts">${opts.map(og=>`<span class="oc-det-opt"><span class="oc-det-opt-group">${esc(og.groupTitle)}:</span> ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</span>`).join('')}</div>`:''}</span>
-                    <span class="order-product-price">R$ ${fmt(total)}</span>
-                  </div>`;
-                }).join('')}
-              </div>
-              ${o.notes?`<p class="oc-obs order-obs-inline">${esc(o.notes)}</p>`:''}
-            </div>
-
-            <div class="order-detail-box">
-              <div class="order-detail-box-title"><i class="fas fa-receipt"></i> Resumo financeiro</div>
-              <div class="order-financial-list">
-                <div class="order-financial-row">
-                  <span class="order-financial-label">Subtotal</span>
-                  <span class="order-financial-value">R$ ${fmt(o.subtotal||0)}</span>
-                </div>
-                <div class="order-financial-row">
-                  <span class="order-financial-label">Frete</span>
-                  <span class="order-financial-value">${(o.delivery_fee||0)>0?`R$ ${fmt(o.delivery_fee)}`:'Grátis'}</span>
-                </div>
-                ${o.troco?`<div class="order-financial-row">
-                  <span class="order-financial-label">Troco para</span>
-                  <span class="order-financial-value">R$ ${esc(String(o.troco))}</span>
-                </div>`:''}
-                <div class="order-financial-row order-financial-row--total">
-                  <span class="order-financial-label">Total</span>
-                  <span class="order-financial-value">R$ ${fmt(o.total||0)}</span>
-                </div>
-              </div>
-            </div>
-
-            ${(loc && !isBalcao)?(()=>{
-              const addrTxt = o.customer_address_text || loc.address || '';
-              return `<div class="order-detail-box">
-              <div class="order-detail-box-title"><i class="fas fa-map-location-dot"></i> Localização</div>
-              ${addrTxt?`<p class="order-address-text">${esc(addrTxt).replace(/\n/g,'<br>')}</p>`:''}
-              <div class="order-actions-grid">
-                ${loc.mapsLink  ?`<a class="btn-oc-map"   href="${esc(loc.mapsLink)}"  target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a>`:''}
-                ${loc.routeLink ?`<a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a>`:''}
-              </div>
-            </div>`;})():''}
-
-            <div class="order-detail-box${(!loc||isBalcao)?' order-detail-box--full':''}">
-              <div class="order-detail-box-title"><i class="fas fa-bolt"></i> Ações</div>
-              <div class="order-actions-grid">
-                ${(waLink && !isBalcao)?`<a class="btn-oc-wapp" href="${waLink}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> Chamar cliente</a>`:''}
-                <button class="btn-oc-copy" onclick="copyOrderText('${o.id}')"><i class="fas fa-copy"></i> Copiar pedido</button>
-                ${o.receipt_url?`<a class="btn-oc-receipt" href="${esc(o.receipt_url)}" target="_blank" rel="noopener"><i class="fas fa-file-invoice"></i> Ver comprovante</a>`:''}
-                ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel order-action-full" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-times"></i> Cancelar pedido</button>`:''}
-              </div>
-            </div>
-
-          </div>
-          <div class="order-details-footer">
-            <button class="btn-oc-toggle" onclick="toggleOrderDetails('${o.id}')">
-              <i class="fas fa-chevron-up"></i> Ocultar detalhes
-            </button>
-          </div>
+      <!-- RESUMO FINANCEIRO + INFO -->
+      <div class="oc-summary-row">
+        <div class="oc-summary-col">
+          <span class="oc-summary-label">Subtotal</span>
+          <span>R$ ${fmt(o.subtotal||0)}</span>
+        </div>
+        ${fee > 0 ? `<div class="oc-summary-col"><span class="oc-summary-label">Entrega</span><span>R$ ${fmt(fee)}</span></div>` : ''}
+        <div class="oc-summary-col oc-summary-total">
+          <span class="oc-summary-label">Total</span>
+          <span>R$ ${fmt(o.total||0)}</span>
         </div>
       </div>
 
-      <!-- RODAPÉ: ver detalhes + avançar status -->
+      <!-- BADGES EXTRAS -->
+      <div class="oc-extra-info">
+        ${creator ? `<span class="oc-info-tag"><i class="fas fa-user"></i> ${esc(creator)}</span>` : ''}
+        ${printedAt ? `<span class="oc-info-tag oc-info-printed"><i class="fas fa-print"></i> Impressa ${printedAt}</span>` : '<span class="oc-info-tag oc-info-noprint"><i class="fas fa-print"></i> Não impressa</span>'}
+        ${o.cancel_reason ? `<span class="oc-info-tag oc-info-cancel"><i class="fas fa-ban"></i> ${esc(o.cancel_reason)}</span>` : ''}
+      </div>
+
+      <!-- RODAPÉ: botões -->
       <div class="oc-footer">
-        <button class="btn-oc-toggle" id="ocdet-btn-${o.id}" onclick="toggleOrderDetails('${o.id}')">
-          <i class="fas fa-chevron-down"></i> Ver detalhes
-        </button>
+        <button class="btn-oc-detail" onclick="openOrderDetailModal('${o.id}')"><i class="fas fa-eye"></i> Ver detalhes</button>
         <div class="oc-footer-actions">
           ${o.status!=='cancelado'?`<button class="btn-oc-print" onclick="printOrderReceipt('${o.id}')">
-            <i class="fas fa-receipt"></i> ${(o.printed_at || gs.printedOrderIds.has(o.id))?'Reimprimir comanda':'Imprimir comanda'}
+            <i class="fas fa-receipt"></i> ${(o.printed_at || gs.printedOrderIds.has(o.id))?'Reimprimir':'Imprimir'}
           </button>`:''}
-          ${(!isPaidOrder(o) && !['cancelado'].includes(o.status))?`<button class="btn-oc-paid" onclick="confirmMarkAsPaid('${o.id}')"><i class="fas fa-hand-holding-dollar"></i> Marcar como pago</button>`:''}
+          ${(!isPaid && !['cancelado'].includes(o.status))?`<button class="btn-oc-paid" onclick="confirmMarkAsPaid('${o.id}')"><i class="fas fa-hand-holding-dollar"></i> Pago</button>`:''}
+          ${!['finalizado','cancelado'].includes(o.status)?`<button class="btn-oc-cancel" onclick="confirmCancelOrder('${o.id}')"><i class="fas fa-ban"></i> Cancelar</button>`:''}
           <div class="oc-status-btns">${statusBtns(o)}</div>
         </div>
       </div>
 
     </div>`;
+}
+
+function getOrderPayStatusText(o) {
+  if (isPaidOrder(o)) return 'Pago ✓';
+  if (o.payment_status === 'pendente' || !o.payment_status) return 'Pendente';
+  if (o.payment_status === 'aguardando_pagamento') return 'Aguardando pag.';
+  if (o.payment_status === 'aguardando_comprovante') return 'Aguardando comprovante';
+  if (o.payment_status === 'checkout_criado') return 'Checkout criado';
+  if (o.payment_status === 'pagamento_na_entrega') return 'Na entrega';
+  if (o.payment_status === 'cancelado') return 'Cancelado';
+  return 'Pendente';
+}
+
+function getOrderPayStatusCls(o) {
+  if (isPaidOrder(o)) return 'ps-paid';
+  if (o.payment_status === 'cancelado') return 'ps-cancelled';
+  if (o.payment_status === 'pagamento_na_entrega') return 'ps-delivery';
+  return 'ps-waiting';
+}
+
+/* ── Order Detail Modal ── */
+async function openOrderDetailModal(orderId) {
+  const o = gs.orders.find(x => x.id === orderId);
+  if (!o) return;
+  const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+  const items = Array.isArray(o.items) ? o.items : [];
+  const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
+  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const originLabel = isBalcao ? 'Balcão' : (o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega');
+  const loc = o.location && typeof o.location === 'object' ? o.location : null;
+  const addrTxt = o.customer_address_text || loc?.address || '';
+  const creator = o.created_by_email?.split('@')[0] || (isBalcao ? 'Sem registro' : 'Cliente online');
+  const payer   = o.paid_by_email?.split('@')[0] || (isPaidOrder(o) ? 'Sem registro' : '—');
+  const handler = o.handled_by_email?.split('@')[0] || creator;
+  const isPaid = isPaidOrder(o);
+  const paidDate = o.paid_at ? new Date(o.paid_at).toLocaleString('pt-BR') : '—';
+  const printedAt = o.printed_at ? new Date(o.printed_at).toLocaleString('pt-BR') : null;
+
+  let logs = [];
+  try {
+    const { data } = await getSb().from('audit_logs').select('*')
+      .eq('entity_type', 'order').eq('entity_id', orderId)
+      .order('created_at', { ascending: false }).limit(30);
+    logs = data || [];
+  } catch(_) {}
+
+  const ACTION_LABELS = {
+    create_order: 'Pedido criado', cancel_order: 'Pedido cancelado',
+    mark_paid: 'Marcou como pago', change_status: 'Status alterado',
+    print_receipt: 'Comanda impressa', reprint_receipt: 'Comanda reimpressa',
+    auto_print_order: 'Impressão automática',
+  };
+
+  elid('order-detail-subtitle').textContent = `Pedido #${num}`;
+
+  let html = `<div class="od-tabs">
+    <button class="od-tab active" onclick="showOrderDetailTab('resumo')">Resumo</button>
+    <button class="od-tab" onclick="showOrderDetailTab('itens')">Itens</button>
+    <button class="od-tab" onclick="showOrderDetailTab('financeiro')">Financeiro</button>
+    ${(!isBalcao && loc) || isBalcao ? `<button class="od-tab" onclick="showOrderDetailTab('local')">${isBalcao ? 'Mesa' : 'Entrega'}</button>` : ''}
+    <button class="od-tab" onclick="showOrderDetailTab('historico')">Histórico</button>
+  </div>`;
+
+  html += `<div class="od-panel" id="od-panel-resumo">
+    <div class="sd-grid">
+      <div class="sd-box">
+        <div class="sd-box-title"><i class="fas fa-info-circle"></i> Informações</div>
+        <div class="sd-row"><span class="sd-label">Pedido</span><span class="sd-value">#${esc(num)}</span></div>
+        <div class="sd-row"><span class="sd-label">Origem</span><span class="sd-value">${originLabel}</span></div>
+        ${isBalcao && o.table_number ? `<div class="sd-row"><span class="sd-label">Mesa</span><span class="sd-value">${o.table_number}</span></div>` : ''}
+        <div class="sd-row"><span class="sd-label">Cliente</span><span class="sd-value">${esc(o.customer_name || '—')}</span></div>
+        ${o.customer_phone ? `<div class="sd-row"><span class="sd-label">Telefone</span><span class="sd-value">${esc(o.customer_phone)}</span></div>` : ''}
+        <div class="sd-row"><span class="sd-label">Data</span><span class="sd-value">${date}</span></div>
+        <div class="sd-row"><span class="sd-label">Status</span><span class="sd-value"><span class="oc-badge ${stClassMap[o.status] || ''}" style="font-size:.72rem">${ORDER_STATUS_LABELS[o.status] || o.status}</span></span></div>
+      </div>
+      <div class="sd-box">
+        <div class="sd-box-title"><i class="fas fa-users"></i> Rastreio</div>
+        <div class="sd-row"><span class="sd-label">Criado por</span><span class="sd-value">${esc(creator)}</span></div>
+        <div class="sd-row"><span class="sd-label">Atendido por</span><span class="sd-value">${esc(handler)}</span></div>
+        <div class="sd-row"><span class="sd-label">Pagamento</span><span class="sd-value">${esc(getPaymentLabel(o))}</span></div>
+        <div class="sd-row"><span class="sd-label">Status pag.</span><span class="sd-value"><span class="oc-ps-badge ${getOrderPayStatusCls(o)}">${getOrderPayStatusText(o)}</span></span></div>
+        ${isPaid ? `<div class="sd-row"><span class="sd-label">Pago em</span><span class="sd-value">${paidDate}</span></div>` : ''}
+        <div class="sd-row"><span class="sd-label">Confirmado por</span><span class="sd-value">${esc(payer)}</span></div>
+        <div class="sd-row"><span class="sd-label">Comanda</span><span class="sd-value">${printedAt ? `Impressa ${printedAt}` : 'Não impressa'}</span></div>
+        ${o.cancel_reason ? `<div class="sd-row"><span class="sd-label">Cancelamento</span><span class="sd-value" style="color:var(--danger)">${esc(o.cancel_reason)}</span></div>` : ''}
+      </div>
+    </div>
+  </div>`;
+
+  html += `<div class="od-panel" id="od-panel-itens" style="display:none">
+    <table class="sd-items-table">
+      <thead><tr><th>Qtd</th><th>Produto</th><th>Opções</th><th>Obs</th><th>Unitário</th><th>Total</th></tr></thead>
+      <tbody>${items.map(i => {
+        const opts = (i.options || []).map(og => `${og.groupTitle}: ${(og.items || []).map(oi => oi.name).join(', ')}`).join(' · ');
+        const unit = i.finalUnitPrice || i.unitPrice || i.price || 0;
+        const total = i.total || (unit * (i.qty || 1));
+        return `<tr><td>${i.qty||1}</td><td><strong>${esc(i.name||'—')}</strong></td><td class="sd-opts-cell">${opts || '—'}</td><td class="sd-opts-cell">${i.notes ? esc(i.notes) : '—'}</td><td>R$ ${fmt(unit)}</td><td>R$ ${fmt(total)}</td></tr>`;
+      }).join('')}</tbody>
+    </table>
+    ${o.notes ? `<p class="sd-obs" style="margin-top:12px"><strong>Obs do pedido:</strong> ${esc(o.notes)}</p>` : ''}
+  </div>`;
+
+  html += `<div class="od-panel" id="od-panel-financeiro" style="display:none">
+    <div class="sd-box">
+      <div class="sd-row"><span class="sd-label">Subtotal</span><span class="sd-value">R$ ${fmt(o.subtotal||0)}</span></div>
+      <div class="sd-row"><span class="sd-label">Taxa de entrega</span><span class="sd-value">${Number(o.delivery_fee||0) > 0 ? `R$ ${fmt(o.delivery_fee)}` : 'Grátis'}</span></div>
+      ${o.troco ? `<div class="sd-row"><span class="sd-label">Troco para</span><span class="sd-value">R$ ${esc(String(o.troco))}</span></div>` : ''}
+      <div class="sd-row sd-row-total"><span class="sd-label">Total</span><span class="sd-value">R$ ${fmt(o.total||0)}</span></div>
+      <div class="sd-row"><span class="sd-label">Forma de pagamento</span><span class="sd-value">${esc(getPaymentLabel(o))}</span></div>
+      <div class="sd-row"><span class="sd-label">Status pagamento</span><span class="sd-value"><span class="oc-ps-badge ${getOrderPayStatusCls(o)}">${getOrderPayStatusText(o)}</span></span></div>
+      ${isPaid ? `<div class="sd-row"><span class="sd-label">Pago em</span><span class="sd-value">${paidDate}</span></div>` : ''}
+      <div class="sd-row"><span class="sd-label">Confirmado por</span><span class="sd-value">${esc(payer)}</span></div>
+    </div>
+  </div>`;
+
+  if ((!isBalcao && loc) || isBalcao) {
+    html += `<div class="od-panel" id="od-panel-local" style="display:none"><div class="sd-box">`;
+    if (isBalcao) {
+      html += `<div class="sd-row"><span class="sd-label">Mesa</span><span class="sd-value">${o.table_number || '—'}</span></div>
+        <div class="sd-row"><span class="sd-label">Criado por</span><span class="sd-value">${esc(creator)}</span></div>
+        <div class="sd-row"><span class="sd-label">Horário</span><span class="sd-value">${date}</span></div>`;
+    } else {
+      html += `${addrTxt ? `<div class="sd-row"><span class="sd-label">Endereço</span><span class="sd-value">${esc(addrTxt)}</span></div>` : ''}
+        <div class="sd-row"><span class="sd-label">Taxa de entrega</span><span class="sd-value">${Number(o.delivery_fee||0) > 0 ? `R$ ${fmt(o.delivery_fee)}` : 'Grátis'}</span></div>`;
+      if (loc?.mapsLink) html += `<div style="margin-top:10px"><a class="btn-oc-map" href="${esc(loc.mapsLink)}" target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i> Ver localização</a></div>`;
+      if (loc?.routeLink) html += `<div style="margin-top:6px"><a class="btn-oc-route" href="${esc(loc.routeLink)}" target="_blank" rel="noopener"><i class="fas fa-route"></i> Abrir rota</a></div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  html += `<div class="od-panel" id="od-panel-historico" style="display:none">`;
+  if (logs.length) {
+    html += `<table class="rpt-table"><thead><tr><th>Data/hora</th><th>Conta</th><th>Ação</th><th>Motivo</th></tr></thead><tbody>`;
+    logs.forEach(l => {
+      const d = new Date(l.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const actor = l.actor_name || l.actor_email?.split('@')[0] || 'Sistema';
+      const act = ACTION_LABELS[l.action] || l.action;
+      const meta = l.metadata || {};
+      const detail = meta.new_status ? ` → ${ORDER_STATUS_LABELS[meta.new_status] || meta.new_status}` : (meta.payment_method ? ` (${PAY_METHOD_LABELS[meta.payment_method] || meta.payment_method})` : '');
+      html += `<tr><td>${d}</td><td><strong>${esc(actor)}</strong></td><td>${esc(act)}${detail}</td><td>${l.reason ? esc(l.reason) : '—'}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<p class="empty-msg">Nenhuma atividade registrada para este pedido.</p>`;
+  }
+  html += `</div>`;
+
+  elid('order-detail-body').innerHTML = html;
+  elid('order-detail-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+const stClassMap = { novo:'st-novo', em_preparo:'st-preparo', saiu_para_entrega:'st-entrega', finalizado:'st-finalizado', cancelado:'st-cancelado' };
+
+function showOrderDetailTab(tab) {
+  document.querySelectorAll('.od-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.od-panel').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.od-tab').forEach(b => { if (b.textContent.toLowerCase().includes(tab.slice(0, 4))) b.classList.add('active'); });
+  const panel = elid(`od-panel-${tab}`);
+  if (panel) panel.style.display = '';
+}
+
+function closeOrderDetail() {
+  elid('order-detail-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function closeOrderDetailOutside(e) {
+  if (e.target === elid('order-detail-overlay')) closeOrderDetail();
 }
 
 function copyOrderText(orderId) {
@@ -4041,6 +4144,10 @@ window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
 window.pdvConfirmOptions              = pdvConfirmOptions;
 window.pdvToggleOption                = pdvToggleOption;
 window.pdvOptQty                      = pdvOptQty;
+window.openOrderDetailModal           = openOrderDetailModal;
+window.showOrderDetailTab             = showOrderDetailTab;
+window.closeOrderDetail               = closeOrderDetail;
+window.closeOrderDetailOutside        = closeOrderDetailOutside;
 window.openSaleDetail                 = openSaleDetail;
 window.closeSaleDetail                = closeSaleDetail;
 window.closeSaleDetailOutside         = closeSaleDetailOutside;

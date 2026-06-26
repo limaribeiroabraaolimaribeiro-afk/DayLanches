@@ -3000,6 +3000,157 @@ body.is-balcao .dash-header { display: none !important; }
   .pdv-cart-actions { padding: 14px 16px; }
 }
 
+/* ═══════════════════════ PEDIDOS — CARD MELHORADO ═══════════════════════ */
+.oc-origin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: .7rem;
+  font-weight: 600;
+  background: #F0F7FF;
+  color: #1D4ED8;
+}
+.oc-items-preview {
+  padding: 10px 18px;
+  border-top: 1px solid #f0f0f0;
+  font-size: .82rem;
+}
+.oc-item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  color: var(--text-med);
+}
+.oc-item-row span:last-child {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.oc-item-more {
+  font-size: .78rem;
+  color: var(--primary);
+  font-weight: 600;
+  padding-top: 4px;
+}
+.oc-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 18px;
+  border-top: 1px solid #f0f0f0;
+  font-size: .82rem;
+}
+.oc-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.oc-summary-label {
+  font-size: .68rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.oc-summary-total span:last-child {
+  font-weight: 800;
+  color: var(--primary);
+  font-size: .95rem;
+}
+.oc-extra-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 18px;
+  border-top: 1px solid #f0f0f0;
+}
+.oc-info-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: .72rem;
+  font-weight: 500;
+  background: #f3f4f6;
+  color: var(--text-med);
+}
+.oc-info-tag i { font-size: .68rem; }
+.oc-info-printed { background: #F0FDF4; color: #16a34a; }
+.oc-info-noprint { background: #FFF7ED; color: #EA580C; }
+.oc-info-cancel { background: #FEF2F2; color: #DC2626; }
+
+.btn-oc-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-light);
+  transition: background .15s;
+}
+.btn-oc-detail:hover { background: #FFE4CC; }
+
+.btn-oc-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: .78rem;
+  font-weight: 600;
+  color: #DC2626;
+  background: #FEF2F2;
+  transition: background .15s;
+}
+.btn-oc-cancel:hover { background: #FEE2E2; }
+
+/* Order Detail Modal */
+.order-detail-modal {
+  max-width: 780px;
+  width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.order-detail-body-wrap {
+  padding: 0 24px 24px;
+}
+
+.od-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+}
+.od-tab {
+  padding: 10px 16px;
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.od-tab:hover { color: var(--text); }
+.od-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.od-panel { min-height: 100px; }
+
+@media (max-width: 600px) {
+  .order-detail-modal { max-width: 100vw; border-radius: 0; }
+  .od-tab { padding: 8px 10px; font-size: .76rem; }
+  .oc-summary-row { gap: 10px; }
+}
+
 /* ═══════════════════════ RELATÓRIOS ═══════════════════════ */
 .rpt-page { padding: 0; }
 
