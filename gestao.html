@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="gestao.css?v=20">
+  <link rel="stylesheet" href="gestao.css?v=21">
 </head>
 <body>
 
@@ -98,6 +98,7 @@
       <li><button class="nav-item" onclick="showSection('pedidos')"><i class="fas fa-receipt"></i> Pedidos</button></li>
       <li><button class="nav-item" onclick="showSection('vendas')"><i class="fas fa-chart-bar"></i> Vendas</button></li>
       <li><button class="nav-item" onclick="showSection('balcao')"><i class="fas fa-cash-register"></i> Balcão</button></li>
+      <li><button class="nav-item" onclick="showSection('relatorios')"><i class="fas fa-chart-pie"></i> Relatórios</button></li>
       <li><button class="nav-item" onclick="showSection('config')"><i class="fas fa-sliders"></i> Configurações</button></li>
       <li><button class="nav-item" onclick="showSection('acessos')"><i class="fas fa-user"></i> Acessos</button></li>
     </ul>
@@ -305,6 +306,92 @@
             </div>
           </div>
         </aside>
+
+      </div>
+    </section>
+
+    <!-- SECTION: Relatórios -->
+    <section id="section-relatorios" class="dash-section">
+      <div class="rpt-page">
+
+        <!-- Filtros -->
+        <div class="rpt-filters">
+          <div class="rpt-filter-row">
+            <button class="filter-btn active" data-rpt="today" onclick="setReportFilter('today')">Hoje</button>
+            <button class="filter-btn" data-rpt="yesterday" onclick="setReportFilter('yesterday')">Ontem</button>
+            <button class="filter-btn" data-rpt="week" onclick="setReportFilter('week')">Esta semana</button>
+            <button class="filter-btn" data-rpt="month" onclick="setReportFilter('month')">Este mês</button>
+            <button class="filter-btn" data-rpt="year" onclick="setReportFilter('year')">Este ano</button>
+          </div>
+          <div class="rpt-filter-custom">
+            <div class="form-group">
+              <label class="form-label">Data inicial</label>
+              <input type="date" id="rpt-date-start" class="form-input" onchange="setReportFilter('range')">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Data final</label>
+              <input type="date" id="rpt-date-end" class="form-input" onchange="setReportFilter('range')">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Funcionário</label>
+              <select id="rpt-employee" class="form-input" onchange="renderReports()">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pagamento</label>
+              <select id="rpt-payment" class="form-input" onchange="renderReports()">
+                <option value="">Todos</option>
+                <option value="dinheiro">Dinheiro</option>
+                <option value="pix_loja">Pix</option>
+                <option value="cartao_maquininha">Cartão</option>
+                <option value="online">Online</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="rpt-status" class="form-input" onchange="renderReports()">
+                <option value="">Todos</option>
+                <option value="pago">Pagos</option>
+                <option value="pendente">Pendentes</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Origem</label>
+              <select id="rpt-origin" class="form-input" onchange="renderReports()">
+                <option value="">Todas</option>
+                <option value="online">Online</option>
+                <option value="balcao">Balcão</option>
+              </select>
+            </div>
+          </div>
+          <div class="rpt-actions-row">
+            <button class="btn-secondary" onclick="renderReports()"><i class="fas fa-sync"></i> Atualizar</button>
+            <button class="btn-secondary" onclick="exportReportCSV('financeiro')"><i class="fas fa-file-csv"></i> Exportar CSV</button>
+            <button class="btn-secondary" onclick="printReport()"><i class="fas fa-print"></i> Imprimir</button>
+          </div>
+        </div>
+
+        <!-- Cards de resumo -->
+        <div class="rpt-cards" id="rpt-cards"></div>
+
+        <!-- Abas dos relatórios -->
+        <div class="rpt-tabs">
+          <button class="rpt-tab active" onclick="showReportTab('financeiro')">Financeiro</button>
+          <button class="rpt-tab" onclick="showReportTab('entregas')">Entregas</button>
+          <button class="rpt-tab" onclick="showReportTab('produtos')">Produtos</button>
+          <button class="rpt-tab" onclick="showReportTab('funcionarios')">Funcionários</button>
+          <button class="rpt-tab" onclick="showReportTab('cancelados')">Cancelados</button>
+          <button class="rpt-tab" onclick="showReportTab('atividades')">Atividades</button>
+        </div>
+
+        <!-- Conteúdo de cada aba -->
+        <div class="rpt-tab-content" id="rpt-tab-financeiro"></div>
+        <div class="rpt-tab-content" id="rpt-tab-entregas" style="display:none"></div>
+        <div class="rpt-tab-content" id="rpt-tab-produtos" style="display:none"></div>
+        <div class="rpt-tab-content" id="rpt-tab-funcionarios" style="display:none"></div>
+        <div class="rpt-tab-content" id="rpt-tab-cancelados" style="display:none"></div>
+        <div class="rpt-tab-content" id="rpt-tab-atividades" style="display:none"></div>
 
       </div>
     </section>
@@ -688,6 +775,33 @@
   </div>
 </div>
 
+<!-- ===================== MODAL: CANCELAR PEDIDO COM MOTIVO ===================== -->
+<div id="cancel-reason-overlay" class="gestao-modal-overlay" style="display:none" onclick="_cancelReasonBgClick(event)">
+  <div class="gestao-modal" role="dialog" aria-modal="true" aria-labelledby="cancel-reason-title">
+    <div class="gestao-modal-header">
+      <span class="gestao-modal-brand">
+        <span class="logo-day">Day</span><span class="logo-lanches">Lanches</span>
+      </span>
+      <div class="gestao-modal-icon" style="background:#FEF2F2">
+        <i class="fas fa-ban" style="color:#EF4444"></i>
+      </div>
+    </div>
+    <div class="gestao-modal-body">
+      <h2 class="gestao-modal-title" id="cancel-reason-title">Cancelar pedido</h2>
+      <p class="gestao-modal-message">Informe o motivo do cancelamento. Essa informação ficará registrada.</p>
+      <div class="form-group" style="margin-top:16px">
+        <label class="form-label">Motivo</label>
+        <textarea id="cancel-reason-input" class="form-textarea" rows="3" placeholder="Ex: Cliente desistiu, produto em falta..."></textarea>
+      </div>
+      <div id="cancel-reason-error" class="form-error" style="display:none;margin-top:8px"></div>
+    </div>
+    <div class="gestao-modal-actions">
+      <button type="button" class="gestao-modal-btn gestao-modal-btn-cancel" onclick="cancelReasonModalClose()">Voltar</button>
+      <button type="button" class="gestao-modal-btn gestao-modal-btn-danger" onclick="cancelReasonModalConfirm()">Confirmar cancelamento</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="g-toast" class="g-toast"></div>
 
@@ -695,7 +809,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=30"></script>
+<script src="gestao.js?v=31"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

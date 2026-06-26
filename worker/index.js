@@ -383,6 +383,24 @@ async function handlePrintAgentMarkPrinted(request, env) {
       return json({ error: 'Erro ao atualizar pedido' }, 500);
     }
 
+    /* Registrar no audit_logs */
+    try {
+      const orders = await sbGet(env, 'orders', `id=eq.${order_id}&select=order_number`);
+      const orderNum = orders?.[0]?.order_number || order_id;
+      await fetch(`${env.SUPABASE_URL}/rest/v1/audit_logs`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          actor_name: 'Print Agent',
+          action: 'auto_print_order',
+          entity_type: 'order',
+          entity_id: order_id,
+          entity_label: `#${orderNum}`,
+          metadata: {},
+        }),
+      });
+    } catch (_) { /* não bloqueia o fluxo */ }
+
     return json({ success: true });
   } catch (err) {
     console.error('[DayLanches] Erro ao marcar impresso:', err);

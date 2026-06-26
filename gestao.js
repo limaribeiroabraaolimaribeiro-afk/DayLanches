@@ -163,15 +163,16 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(b => {
     if (b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.add('active');
   });
-  const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', config:'Configurações', acessos:'Acessos' };
+  const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', relatorios:'Relatórios', config:'Configurações', acessos:'Acessos' };
   elid('dash-title').textContent = titles[name] || name;
   document.body.classList.toggle('is-balcao', name === 'balcao');
   gs.section = name;
-  if (name === 'vendas')  renderSales();
-  if (name === 'config')  loadConfig();
-  if (name === 'acessos') renderUserInfo();
-  if (name === 'pedidos') loadOrders();
-  if (name === 'balcao')  pdvInit();
+  if (name === 'vendas')      renderSales();
+  if (name === 'config')      loadConfig();
+  if (name === 'acessos')     renderUserInfo();
+  if (name === 'pedidos')     loadOrders();
+  if (name === 'balcao')      pdvInit();
+  if (name === 'relatorios')  initReports();
   closeSidebar();
 }
 
@@ -765,12 +766,19 @@ async function handleSaveProduct(e) {
     let savedProductId = existingId;
     if (existingId) {
       ({ error: err } = await getSb().from('products').update(data).eq('id', existingId));
-      if (!err) showToast('Produto salvo com sucesso.', 'success');
+      if (!err) {
+        showToast('Produto salvo com sucesso.', 'success');
+        logAuditAction('edit_product', 'product', existingId, name, null, { price, category: cat });
+      }
     } else {
       data.created_at = now;
       const { data: inserted, error: insertErr } = await getSb().from('products').insert(data).select('id').single();
       err = insertErr;
-      if (!err) { savedProductId = inserted?.id; showToast('Produto salvo com sucesso.', 'success'); }
+      if (!err) {
+        savedProductId = inserted?.id;
+        showToast('Produto salvo com sucesso.', 'success');
+        logAuditAction('create_product', 'product', savedProductId, name, null, { price, category: cat });
+      }
     }
     if (err) throw err;
     if (savedProductId) await saveOptionGroups(savedProductId);
@@ -801,6 +809,7 @@ async function confirmDeleteProduct(id, name) {
   const { error } = await getSb().from('products').delete().eq('id', id);
   if (error) { showToast('Não foi possível excluir o produto. Tente novamente.', 'error'); return; }
   showToast('Produto excluído com sucesso.', 'success');
+  logAuditAction('delete_product', 'product', id, name);
   loadProducts();
 }
 
@@ -962,15 +971,28 @@ function toggleOrderDetails(orderId) {
 }
 
 async function confirmCancelOrder(id) {
-  const confirmed = await showConfirmModal({
-    title: 'Cancelar pedido?',
-    message: 'Tem certeza que deseja cancelar este pedido?<br>Essa ação não pode ser desfeita.',
-    confirmText: 'Cancelar pedido',
-    cancelText: 'Voltar',
-    danger: true,
-  });
-  if (!confirmed) return;
-  updateOrderStatus(id, 'cancelado');
+  const reason = await openCancelReasonModal(id);
+  if (!reason) return;
+
+  const actor = getCurrentActor();
+  const now = new Date().toISOString();
+  const o = gs.orders.find(x => x.id === id);
+  const num = o?.order_number || id?.slice(-8).toUpperCase() || '';
+
+  const { error } = await getSb().from('orders').update({
+    status: 'cancelado',
+    cancelled_at: now,
+    cancelled_by_user_id: actor.id,
+    cancelled_by_email: actor.email,
+    cancel_reason: reason,
+    updated_at: now,
+  }).eq('id', id);
+
+  if (error) { toast('Erro ao cancelar pedido.', true); return; }
+  toast('Pedido cancelado.');
+  logAuditAction('cancel_order', 'order', id, `#${num}`, reason);
+  await loadOrders();
+  if (pdv.initialized) pdvRenderMesas();
 }
 
 function buildCallCustomerMessage(o) {
@@ -1214,6 +1236,9 @@ async function updateOrderStatus(id, status) {
   const { error } = await getSb().from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { toast('Erro ao atualizar status.', true); return; }
   toast('Status atualizado!');
+  const o = gs.orders.find(x => x.id === id);
+  const num = o?.order_number || id?.slice(-8).toUpperCase() || '';
+  logAuditAction('change_status', 'order', id, `#${num}`, null, { new_status: status });
   await loadOrders();
   if (pdv.initialized) pdvRenderMesas();
 }
@@ -1257,11 +1282,14 @@ async function confirmMarkAsPaid(id) {
   const method = await openPayMethodModal();
   if (!method) return;
 
+  const actor = getCurrentActor();
   const now = new Date().toISOString();
   const { error } = await getSb().from('orders').update({
     payment_status: 'pago',
     payment_method: method,
     paid_at: now,
+    paid_by_user_id: actor.id,
+    paid_by_email: actor.email,
     updated_at: now,
   }).eq('id', id);
 
@@ -1271,7 +1299,10 @@ async function confirmMarkAsPaid(id) {
     return;
   }
 
+  const o = gs.orders.find(x => x.id === id);
+  const num = o?.order_number || id?.slice(-8).toUpperCase() || '';
   toast('Pagamento confirmado.');
+  logAuditAction('mark_paid', 'order', id, `#${num}`, null, { payment_method: method });
   await loadOrders();
   if (pdv.initialized) pdvRenderMesas();
 }
@@ -1452,6 +1483,9 @@ function printOrderReceipt(orderId) {
   const o = gs.orders.find(x => x.id === orderId);
   if (!o) return false;
   if (!openReceiptWindow([o])) return false;
+  const wasPrinted = o.printed_at || gs.printedOrderIds.has(o.id);
+  const num = o.order_number || o.id?.slice(-8).toUpperCase() || '';
+  logAuditAction(wasPrinted ? 'reprint_receipt' : 'print_receipt', 'order', o.id, `#${num}`);
   markOrderPrinted(o);
   return true;
 }
@@ -2148,6 +2182,7 @@ async function handleSaveConfig(e) {
   const { error } = await getSb().from('store_settings').upsert(data);
   if (error) { toast('Erro ao salvar: ' + error.message, true); return; }
   toast('Configurações salvas!');
+  logAuditAction('save_config', 'config', 'store', 'Configurações da loja');
   await loadConfig();
 }
 
@@ -2214,6 +2249,7 @@ function useStoreLocation() {
       toast('Localização da loja salva com sucesso.');
       renderStoreLocationStatus('✅ Localização atualizada com sucesso', 'success');
       setBtn('<i class="fas fa-check"></i> Localização salva', false);
+      logAuditAction('save_location', 'config', 'store', 'Localização da loja');
     },
     (err) => {
       if (err.code === err.PERMISSION_DENIED) {
@@ -2348,6 +2384,7 @@ async function submitChangePassword() {
   setv('pwd-confirm', '');
   closeChangePasswordModal();
   toast('Senha atualizada com sucesso.');
+  logAuditAction('change_password', 'user', gs.currentUser?.id, gs.currentUser?.email);
 }
 
 /* ── Copiar dados de acesso ── */
@@ -2467,6 +2504,658 @@ function togglePwd(inputId, btn) {
   const isText = inp.type === 'text';
   inp.type = isText ? 'password' : 'text';
   if (btn) btn.querySelector('i').className = `fas fa-${isText ? 'eye' : 'eye-slash'}`;
+}
+
+/* ══════════════════════════════════════
+   AUDIT LOG
+══════════════════════════════════════ */
+async function logAuditAction(action, entityType, entityId, entityLabel, reason, metadata) {
+  try {
+    const sb = getSb();
+    const { data: { user } } = await sb.auth.getUser();
+    const row = {
+      actor_user_id: user?.id || null,
+      actor_email:   user?.email || null,
+      actor_name:    user?.user_metadata?.name || user?.email?.split('@')[0] || null,
+      action,
+      entity_type:   entityType,
+      entity_id:     entityId || null,
+      entity_label:  entityLabel || null,
+      reason:        reason || null,
+      metadata:      metadata || {},
+    };
+    await sb.from('audit_logs').insert(row);
+  } catch (e) {
+    console.warn('[Audit] Falha ao registrar ação:', e);
+  }
+}
+
+function getCurrentActor() {
+  const u = gs.currentUser;
+  if (!u) return { id: null, email: null, name: null };
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.user_metadata?.name || u.email?.split('@')[0] || null,
+  };
+}
+
+/* ══════════════════════════════════════
+   CANCEL REASON MODAL
+══════════════════════════════════════ */
+let _cancelReasonResolve = null;
+let _cancelReasonOrderId = null;
+
+function openCancelReasonModal(orderId) {
+  return new Promise(resolve => {
+    _cancelReasonResolve = resolve;
+    _cancelReasonOrderId = orderId;
+    elid('cancel-reason-input').value = '';
+    hide('cancel-reason-error');
+    elid('cancel-reason-overlay').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => elid('cancel-reason-input')?.focus(), 60);
+  });
+}
+
+function cancelReasonModalClose() {
+  elid('cancel-reason-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  if (_cancelReasonResolve) _cancelReasonResolve(null);
+  _cancelReasonResolve = null;
+}
+
+function cancelReasonModalConfirm() {
+  const reason = (elid('cancel-reason-input')?.value || '').trim();
+  if (!reason) {
+    show('cancel-reason-error', 'Informe o motivo do cancelamento.');
+    return;
+  }
+  elid('cancel-reason-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  if (_cancelReasonResolve) _cancelReasonResolve(reason);
+  _cancelReasonResolve = null;
+}
+
+function _cancelReasonBgClick(e) {
+  if (e.target === elid('cancel-reason-overlay')) cancelReasonModalClose();
+}
+
+/* ══════════════════════════════════════
+   REPORTS — State & Filters
+══════════════════════════════════════ */
+const rpt = {
+  filter: { type: 'today', start: '', end: '' },
+  tab: 'financeiro',
+  auditLogs: [],
+  initialized: false,
+};
+
+function setReportFilter(type) {
+  rpt.filter.type = type;
+  if (type === 'range') {
+    rpt.filter.start = elid('rpt-date-start')?.value || '';
+    rpt.filter.end   = elid('rpt-date-end')?.value || '';
+  }
+  document.querySelectorAll('[data-rpt]').forEach(b => b.classList.toggle('active', b.dataset.rpt === type));
+  renderReports();
+}
+
+function getReportDateRange() {
+  const f = rpt.filter;
+  const now = new Date();
+  switch (f.type) {
+    case 'today':     return [startOfDay(now), endOfDay(now)];
+    case 'yesterday': { const y = new Date(now); y.setDate(y.getDate() - 1); return [startOfDay(y), endOfDay(y)]; }
+    case 'week':      { const d = new Date(now); const dow = (d.getDay() + 6) % 7; const mon = new Date(d); mon.setDate(d.getDate() - dow); return [startOfDay(mon), endOfDay(now)]; }
+    case 'month':     return [new Date(now.getFullYear(), now.getMonth(), 1), endOfDay(now)];
+    case 'year':      return [new Date(now.getFullYear(), 0, 1), endOfDay(now)];
+    case 'range': {
+      if (!f.start || !f.end) return [startOfDay(now), endOfDay(now)];
+      return [startOfDay(new Date(f.start + 'T00:00:00')), endOfDay(new Date(f.end + 'T00:00:00'))];
+    }
+    default: return [startOfDay(now), endOfDay(now)];
+  }
+}
+
+function getReportPeriodLabel() {
+  const f = rpt.filter;
+  const labels = { today:'Hoje', yesterday:'Ontem', week:'Esta semana', month:'Este mês', year:'Este ano' };
+  if (labels[f.type]) return labels[f.type];
+  if (f.type === 'range' && f.start && f.end) return `${formatDateBR(f.start)} a ${formatDateBR(f.end)}`;
+  return 'Período selecionado';
+}
+
+function getFilteredReportOrders() {
+  const [start, end] = getReportDateRange();
+  const payFilter    = elid('rpt-payment')?.value || '';
+  const statusFilter = elid('rpt-status')?.value || '';
+  const originFilter = elid('rpt-origin')?.value || '';
+  const empFilter    = elid('rpt-employee')?.value || '';
+
+  return gs.orders.filter(o => {
+    if (!o.created_at) return false;
+    const d = new Date(o.created_at);
+    if (d < start || d > end) return false;
+
+    if (payFilter) {
+      if (payFilter === 'online') {
+        if (!isOnlinePayment(o)) return false;
+      } else if (o.payment_method !== payFilter) return false;
+    }
+    if (statusFilter === 'pago' && !isPaidOrder(o)) return false;
+    if (statusFilter === 'pendente' && isPaidOrder(o)) return false;
+    if (originFilter === 'online' && (o.order_source === 'balcao' || o.delivery_type === 'balcao')) return false;
+    if (originFilter === 'balcao' && o.order_source !== 'balcao' && o.delivery_type !== 'balcao') return false;
+    if (empFilter && o.created_by_email !== empFilter && o.paid_by_email !== empFilter && o.handled_by_email !== empFilter) return false;
+    return true;
+  });
+}
+
+async function initReports() {
+  if (!rpt.initialized) {
+    rpt.initialized = true;
+    populateEmployeeFilter();
+  }
+  await loadAuditLogs();
+  renderReports();
+}
+
+function populateEmployeeFilter() {
+  const sel = elid('rpt-employee');
+  if (!sel) return;
+  const emails = new Set();
+  gs.orders.forEach(o => {
+    if (o.created_by_email) emails.add(o.created_by_email);
+    if (o.paid_by_email) emails.add(o.paid_by_email);
+  });
+  sel.innerHTML = '<option value="">Todos</option>';
+  [...emails].sort().forEach(e => {
+    sel.innerHTML += `<option value="${esc(e)}">${esc(e)}</option>`;
+  });
+}
+
+async function loadAuditLogs() {
+  try {
+    const [start, end] = getReportDateRange();
+    const { data, error } = await getSb()
+      .from('audit_logs')
+      .select('*')
+      .gte('created_at', start.toISOString())
+      .lte('created_at', end.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    rpt.auditLogs = data || [];
+  } catch (e) {
+    console.warn('[Relatórios] Erro ao carregar logs de auditoria:', e);
+    rpt.auditLogs = [];
+  }
+}
+
+function showReportTab(tab) {
+  rpt.tab = tab;
+  document.querySelectorAll('.rpt-tab').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(tab.slice(0, 4))));
+  document.querySelectorAll('.rpt-tab-content').forEach(el => el.style.display = 'none');
+  const target = elid(`rpt-tab-${tab}`);
+  if (target) target.style.display = '';
+  renderReportTab(tab);
+}
+
+/* ══════════════════════════════════════
+   REPORTS — Render
+══════════════════════════════════════ */
+function renderReports() {
+  const orders = getFilteredReportOrders();
+  const nonCancelled = orders.filter(o => o.status !== 'cancelado');
+  const paid = nonCancelled.filter(o => isPaidOrder(o));
+  const pending = nonCancelled.filter(o => !isPaidOrder(o));
+
+  const totalSold    = paid.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalOrders  = nonCancelled.length;
+  const paidCount    = paid.length;
+  const pendCount    = pending.length;
+  const ticketAvg    = paidCount ? totalSold / paidCount : 0;
+  const totalFee     = paid.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+  const totalCash    = paid.filter(o => o.payment_method === 'dinheiro').reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalPix     = paid.filter(o => o.payment_method === 'pix_loja').reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalCard    = paid.filter(o => o.payment_method === 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalOnline  = paid.filter(o => isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+
+  const productMap = {};
+  paid.forEach(o => {
+    const items = Array.isArray(o.items) ? o.items : [];
+    items.forEach(i => {
+      const name = i.name || i.product_name || i.title || 'Sem nome';
+      if (!productMap[name]) productMap[name] = { qty: 0, revenue: 0, orders: 0 };
+      productMap[name].qty += Number(i.qty || i.quantity || 1);
+      productMap[name].revenue += Number(i.total || (i.price || 0) * (i.qty || 1));
+      productMap[name].orders++;
+    });
+  });
+  const topProduct = Object.entries(productMap).sort((a, b) => b[1].qty - a[1].qty)[0];
+
+  const employeeMap = {};
+  nonCancelled.forEach(o => {
+    const email = o.created_by_email || o.handled_by_email || 'Sistema';
+    if (!employeeMap[email]) employeeMap[email] = 0;
+    employeeMap[email]++;
+  });
+  const topEmployee = Object.entries(employeeMap).sort((a, b) => b[1] - a[1])[0];
+
+  const cards = [
+    { icon: 'fa-hand-holding-dollar', val: `R$ ${fmt(totalSold)}`, label: 'Total vendido' },
+    { icon: 'fa-receipt', val: totalOrders, label: 'Total de pedidos' },
+    { icon: 'fa-circle-check', val: paidCount, label: 'Pedidos pagos' },
+    { icon: 'fa-clock', val: pendCount, label: 'Pedidos pendentes' },
+    { icon: 'fa-chart-line', val: `R$ ${fmt(ticketAvg)}`, label: 'Ticket médio' },
+    { icon: 'fa-truck', val: `R$ ${fmt(totalFee)}`, label: 'Taxas de entrega' },
+    { icon: 'fa-money-bill-wave', val: `R$ ${fmt(totalCash)}`, label: 'Total em dinheiro' },
+    { icon: 'fa-qrcode', val: `R$ ${fmt(totalPix)}`, label: 'Total em Pix' },
+    { icon: 'fa-credit-card', val: `R$ ${fmt(totalCard)}`, label: 'Total em cartão' },
+    { icon: 'fa-globe', val: `R$ ${fmt(totalOnline)}`, label: 'Total online' },
+    { icon: 'fa-star', val: topProduct ? topProduct[0] : '—', label: 'Mais vendido' },
+    { icon: 'fa-user', val: topEmployee ? topEmployee[0].split('@')[0] : '—', label: 'Mais atendimentos' },
+  ];
+
+  elid('rpt-cards').innerHTML = cards.map(c => `
+    <div class="rpt-card">
+      <div class="rpt-card-icon"><i class="fas ${c.icon}"></i></div>
+      <div class="rpt-card-val">${c.val}</div>
+      <div class="rpt-card-label">${c.label}</div>
+    </div>`).join('');
+
+  renderReportTab(rpt.tab);
+}
+
+function renderReportTab(tab) {
+  switch (tab) {
+    case 'financeiro':    renderRptFinanceiro(); break;
+    case 'entregas':      renderRptEntregas(); break;
+    case 'produtos':      renderRptProdutos(); break;
+    case 'funcionarios':  renderRptFuncionarios(); break;
+    case 'cancelados':    renderRptCancelados(); break;
+    case 'atividades':    renderRptAtividades(); break;
+  }
+}
+
+/* ── Tab: Financeiro ── */
+function renderRptFinanceiro() {
+  const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado');
+  const el = elid('rpt-tab-financeiro');
+  if (!el) return;
+
+  if (!orders.length) { el.innerHTML = '<p class="empty-msg">Nenhum pedido no período.</p>'; return; }
+
+  const rows = orders.map(o => {
+    const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+    const paid = isPaidOrder(o);
+    return `<tr>
+      <td>${date}</td>
+      <td>#${esc(num)}</td>
+      <td>${esc(o.customer_name || '—')}</td>
+      <td>${esc(getPaymentLabel(o))}</td>
+      <td><span class="rpt-pill ${paid ? 'rpt-pill-paid' : 'rpt-pill-pending'}">${paid ? 'Pago' : 'Pendente'}</span></td>
+      <td>R$ ${fmt(o.total || 0)}</td>
+      <td>${esc(o.created_by_email?.split('@')[0] || 'Sistema')}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('financeiro')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <table class="rpt-table">
+      <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Pagamento</th><th>Status</th><th>Total</th><th>Feito por</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ── Tab: Entregas ── */
+function renderRptEntregas() {
+  const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado');
+  const el = elid('rpt-tab-entregas');
+  if (!el) return;
+
+  const rows = orders.map(o => {
+    const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+    const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+    const deliveryLabel = isBalcao ? 'Balcão' : (o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega');
+    const fee = Number(o.delivery_fee || 0);
+    const paid = isPaidOrder(o);
+    return `<tr>
+      <td>${date}</td>
+      <td>#${esc(num)}</td>
+      <td>${esc(o.customer_name || '—')}</td>
+      <td>${esc(o.customer_phone || '—')}</td>
+      <td>${deliveryLabel}</td>
+      <td>R$ ${fmt(fee)}</td>
+      <td>R$ ${fmt(o.total || 0)}</td>
+      <td><span class="rpt-pill ${paid ? 'rpt-pill-paid' : 'rpt-pill-pending'}">${paid ? 'Pago' : 'Pendente'}</span></td>
+    </tr>`;
+  }).join('');
+
+  const totalFee = orders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+  const avgFee = orders.length ? totalFee / orders.length : 0;
+  const deliveries = orders.filter(o => o.delivery_type !== 'pickup' && o.order_source !== 'balcao' && o.delivery_type !== 'balcao').length;
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('entregas')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <h3>Taxas de entrega por cliente</h3>
+    <table class="rpt-table">
+      <thead><tr><th>Data</th><th>Pedido</th><th>Cliente</th><th>Telefone</th><th>Tipo</th><th>Taxa entrega</th><th>Total</th><th>Pagamento</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="rpt-summary-box">
+      <div class="rpt-summary-item">Total em taxas: <strong>R$ ${fmt(totalFee)}</strong></div>
+      <div class="rpt-summary-item">Média por pedido: <strong>R$ ${fmt(avgFee)}</strong></div>
+      <div class="rpt-summary-item">Entregas: <strong>${deliveries}</strong></div>
+    </div>`;
+}
+
+/* ── Tab: Produtos ── */
+function renderRptProdutos() {
+  const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado' && isPaidOrder(o));
+  const el = elid('rpt-tab-produtos');
+  if (!el) return;
+
+  const productMap = {};
+  orders.forEach(o => {
+    const items = Array.isArray(o.items) ? o.items : [];
+    items.forEach(i => {
+      const name = i.name || i.product_name || i.title || 'Sem nome';
+      if (!productMap[name]) productMap[name] = { qty: 0, revenue: 0, orders: 0 };
+      productMap[name].qty += Number(i.qty || i.quantity || 1);
+      productMap[name].revenue += Number(i.total || (i.price || 0) * (i.qty || 1));
+      productMap[name].orders++;
+    });
+  });
+
+  const sorted = Object.entries(productMap).sort((a, b) => b[1].qty - a[1].qty);
+  const topProducts = sorted.slice(0, 20);
+  const bottomProducts = sorted.slice(-10).reverse();
+
+  const soldNames = new Set(Object.keys(productMap));
+  const unsold = gs.products.filter(p => p.active !== false && !soldNames.has(p.name));
+
+  let html = '<div class="rpt-tab-export"><button class="btn-secondary" onclick="exportReportCSV(\'produtos\')"><i class="fas fa-file-csv"></i> CSV</button></div>';
+
+  html += '<div class="rpt-product-section"><h4><i class="fas fa-fire"></i> Produtos mais vendidos</h4>';
+  if (topProducts.length) {
+    html += '<table class="rpt-table"><thead><tr><th>Produto</th><th>Qtd vendida</th><th>Faturamento</th><th>Pedidos</th><th>Ticket médio</th></tr></thead><tbody>';
+    topProducts.forEach(([name, d]) => {
+      html += `<tr><td><strong>${esc(name)}</strong></td><td>${d.qty}</td><td>R$ ${fmt(d.revenue)}</td><td>${d.orders}</td><td>R$ ${fmt(d.orders ? d.revenue / d.orders : 0)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else html += '<p class="empty-msg">Nenhum produto vendido no período.</p>';
+  html += '</div>';
+
+  html += '<div class="rpt-product-section"><h4><i class="fas fa-arrow-down"></i> Produtos menos vendidos</h4>';
+  if (bottomProducts.length) {
+    html += '<table class="rpt-table"><thead><tr><th>Produto</th><th>Qtd vendida</th><th>Faturamento</th></tr></thead><tbody>';
+    bottomProducts.forEach(([name, d]) => {
+      html += `<tr><td>${esc(name)}</td><td>${d.qty}</td><td>R$ ${fmt(d.revenue)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else html += '<p class="empty-msg">Sem dados.</p>';
+  html += '</div>';
+
+  html += '<div class="rpt-product-section"><h4><i class="fas fa-ban"></i> Produtos que não venderam no período</h4>';
+  if (unsold.length) {
+    html += '<table class="rpt-table"><thead><tr><th>Produto</th><th>Categoria</th><th>Preço</th><th>Status</th></tr></thead><tbody>';
+    unsold.forEach(p => {
+      html += `<tr><td>${esc(p.name)}</td><td>${esc(p.category || p.cat || '—')}</td><td>R$ ${fmt(p.price || 0)}</td><td>${p.active !== false ? 'Ativo' : 'Inativo'}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  } else html += '<p class="empty-msg">Todos os produtos foram vendidos no período.</p>';
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+/* ── Tab: Funcionários ── */
+function renderRptFuncionarios() {
+  const orders = getFilteredReportOrders();
+  const el = elid('rpt-tab-funcionarios');
+  if (!el) return;
+
+  const empMap = {};
+  orders.forEach(o => {
+    const email = o.created_by_email || o.handled_by_email || null;
+    const isOnline = o.order_source !== 'balcao' && o.delivery_type !== 'balcao' && !email;
+    const key = isOnline ? 'Sistema / Cliente online' : (email || 'Sem registro');
+
+    if (!empMap[key]) empMap[key] = {
+      created: 0, clients: new Set(), paid: 0, pending: 0, cancelled: 0,
+      printed: 0, totalSold: 0, cash: 0, pix: 0, card: 0, lastAction: null,
+    };
+    const e = empMap[key];
+    e.created++;
+    if (o.customer_name) e.clients.add(o.customer_name);
+    if (o.status === 'cancelado') e.cancelled++;
+    else if (isPaidOrder(o)) {
+      e.paid++;
+      e.totalSold += Number(o.total || 0);
+      if (o.payment_method === 'dinheiro') e.cash += Number(o.total || 0);
+      else if (o.payment_method === 'pix_loja') e.pix += Number(o.total || 0);
+      else if (o.payment_method === 'cartao_maquininha') e.card += Number(o.total || 0);
+    } else e.pending++;
+    if (o.printed_at) e.printed++;
+    const d = new Date(o.created_at);
+    if (!e.lastAction || d > e.lastAction) e.lastAction = d;
+  });
+
+  const rows = Object.entries(empMap).sort((a, b) => b[1].totalSold - a[1].totalSold);
+
+  if (!rows.length) { el.innerHTML = '<p class="empty-msg">Nenhum dado no período.</p>'; return; }
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('funcionarios')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <h3>Relatório por funcionário</h3>
+    <table class="rpt-table">
+      <thead><tr><th>Funcionário</th><th>Pedidos</th><th>Clientes</th><th>Pagos</th><th>Pendentes</th><th>Cancelados</th><th>Comandas</th><th>Total vendido</th><th>Dinheiro</th><th>Pix</th><th>Cartão</th><th>Última ação</th></tr></thead>
+      <tbody>${rows.map(([name, d]) => `<tr>
+        <td><strong>${esc(name.includes('@') ? name.split('@')[0] : name)}</strong></td>
+        <td>${d.created}</td>
+        <td>${d.clients.size}</td>
+        <td>${d.paid}</td>
+        <td>${d.pending}</td>
+        <td>${d.cancelled}</td>
+        <td>${d.printed}</td>
+        <td>R$ ${fmt(d.totalSold)}</td>
+        <td>R$ ${fmt(d.cash)}</td>
+        <td>R$ ${fmt(d.pix)}</td>
+        <td>R$ ${fmt(d.card)}</td>
+        <td>${d.lastAction ? d.lastAction.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+/* ── Tab: Cancelados ── */
+function renderRptCancelados() {
+  const orders = getFilteredReportOrders().filter(o => o.status === 'cancelado');
+  const el = elid('rpt-tab-cancelados');
+  if (!el) return;
+
+  if (!orders.length) { el.innerHTML = '<p class="empty-msg">Nenhum pedido cancelado no período.</p>'; return; }
+
+  const rows = orders.map(o => {
+    const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+    const cancelDate = o.cancelled_at ? new Date(o.cancelled_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+    return `<tr>
+      <td>${date}</td>
+      <td>#${esc(num)}</td>
+      <td>${esc(o.customer_name || '—')}</td>
+      <td>R$ ${fmt(o.total || 0)}</td>
+      <td>${esc(o.cancelled_by_email?.split('@')[0] || 'Sem registro')}</td>
+      <td>${esc(o.cancel_reason || 'Não informado')}</td>
+      <td>${cancelDate}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('cancelados')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <h3>Pedidos cancelados / excluídos</h3>
+    <table class="rpt-table">
+      <thead><tr><th>Data pedido</th><th>Pedido</th><th>Cliente</th><th>Total</th><th>Quem cancelou</th><th>Motivo</th><th>Horário</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ── Tab: Atividades ── */
+function renderRptAtividades() {
+  const el = elid('rpt-tab-atividades');
+  if (!el) return;
+
+  if (!rpt.auditLogs.length) { el.innerHTML = '<p class="empty-msg">Nenhuma atividade registrada no período.</p>'; return; }
+
+  const ACTION_LABELS = {
+    create_order: 'criou o pedido',
+    cancel_order: 'cancelou o pedido',
+    mark_paid: 'marcou como pago o pedido',
+    change_status: 'alterou o status do pedido',
+    print_receipt: 'imprimiu a comanda do pedido',
+    reprint_receipt: 'reimprimiu a comanda do pedido',
+    auto_print_order: 'imprimiu automaticamente a comanda do pedido',
+    create_product: 'criou o produto',
+    edit_product: 'editou o produto',
+    delete_product: 'excluiu o produto',
+    toggle_product: 'alterou o status do produto',
+    save_config: 'alterou as configurações',
+    save_location: 'alterou a localização da loja',
+    export_report: 'exportou relatório',
+    print_report: 'imprimiu relatório',
+    change_password: 'alterou a senha',
+  };
+
+  const rows = rpt.auditLogs.map(log => {
+    const date = new Date(log.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const actor = log.actor_name || log.actor_email?.split('@')[0] || 'Sistema';
+    const actionText = ACTION_LABELS[log.action] || log.action;
+    const label = log.entity_label || log.entity_id || '';
+    return `<tr>
+      <td>${date}</td>
+      <td><span class="rpt-activity-actor">${esc(actor)}</span></td>
+      <td><span class="rpt-activity-action">${esc(actionText)}</span> ${label ? `<strong>${esc(label)}</strong>` : ''}</td>
+      <td>${log.reason ? `<span class="rpt-activity-reason">${esc(log.reason)}</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="rpt-tab-export">
+      <button class="btn-secondary" onclick="exportReportCSV('atividades')"><i class="fas fa-file-csv"></i> CSV</button>
+    </div>
+    <h3>Histórico de atividades</h3>
+    <table class="rpt-table">
+      <thead><tr><th>Data/hora</th><th>Conta</th><th>Ação</th><th>Motivo</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ══════════════════════════════════════
+   REPORTS — Export
+══════════════════════════════════════ */
+function exportReportCSV(type) {
+  let header, rows;
+  const period = getReportPeriodLabel();
+
+  if (type === 'financeiro') {
+    const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado');
+    if (!orders.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Data','Pedido','Cliente','Pagamento','Status','Total','Feito por'];
+    rows = orders.map(o => [
+      o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '',
+      o.order_number || '', o.customer_name || '', getPaymentLabel(o),
+      isPaidOrder(o) ? 'Pago' : 'Pendente', fmt(o.total || 0),
+      o.created_by_email?.split('@')[0] || 'Sistema',
+    ]);
+  } else if (type === 'entregas') {
+    const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado');
+    if (!orders.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Data','Pedido','Cliente','Telefone','Tipo','Taxa entrega','Total','Pagamento'];
+    rows = orders.map(o => {
+      const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+      return [
+        o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '',
+        o.order_number || '', o.customer_name || '', o.customer_phone || '',
+        isBalcao ? 'Balcão' : (o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega'),
+        fmt(o.delivery_fee || 0), fmt(o.total || 0), isPaidOrder(o) ? 'Pago' : 'Pendente',
+      ];
+    });
+  } else if (type === 'produtos') {
+    const orders = getFilteredReportOrders().filter(o => o.status !== 'cancelado' && isPaidOrder(o));
+    const productMap = {};
+    orders.forEach(o => {
+      (Array.isArray(o.items) ? o.items : []).forEach(i => {
+        const name = i.name || 'Sem nome';
+        if (!productMap[name]) productMap[name] = { qty: 0, revenue: 0 };
+        productMap[name].qty += Number(i.qty || 1);
+        productMap[name].revenue += Number(i.total || 0);
+      });
+    });
+    const sorted = Object.entries(productMap).sort((a, b) => b[1].qty - a[1].qty);
+    if (!sorted.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Produto','Qtd vendida','Faturamento'];
+    rows = sorted.map(([name, d]) => [name, d.qty, fmt(d.revenue)]);
+  } else if (type === 'funcionarios') {
+    header = ['Funcionario','Pedidos','Pagos','Pendentes','Cancelados','Total vendido'];
+    const orders = getFilteredReportOrders();
+    const empMap = {};
+    orders.forEach(o => {
+      const key = o.created_by_email || o.handled_by_email || 'Sistema';
+      if (!empMap[key]) empMap[key] = { created: 0, paid: 0, pending: 0, cancelled: 0, totalSold: 0 };
+      const e = empMap[key];
+      e.created++;
+      if (o.status === 'cancelado') e.cancelled++;
+      else if (isPaidOrder(o)) { e.paid++; e.totalSold += Number(o.total || 0); }
+      else e.pending++;
+    });
+    rows = Object.entries(empMap).map(([k, d]) => [k.split('@')[0], d.created, d.paid, d.pending, d.cancelled, fmt(d.totalSold)]);
+    if (!rows.length) { toast('Nenhum dado para exportar.', true); return; }
+  } else if (type === 'cancelados') {
+    const orders = getFilteredReportOrders().filter(o => o.status === 'cancelado');
+    if (!orders.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Data','Pedido','Cliente','Total','Quem cancelou','Motivo'];
+    rows = orders.map(o => [
+      o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '',
+      o.order_number || '', o.customer_name || '', fmt(o.total || 0),
+      o.cancelled_by_email?.split('@')[0] || 'Sem registro', o.cancel_reason || 'Não informado',
+    ]);
+  } else if (type === 'atividades') {
+    if (!rpt.auditLogs.length) { toast('Nenhum dado para exportar.', true); return; }
+    header = ['Data','Conta','Acao','Item','Motivo'];
+    rows = rpt.auditLogs.map(l => [
+      new Date(l.created_at).toLocaleString('pt-BR'),
+      l.actor_name || l.actor_email || 'Sistema',
+      l.action, l.entity_label || '', l.reason || '',
+    ]);
+  } else return;
+
+  const csv = [header.join(','), ...rows.map(r => r.map(csvEscape).join(','))].join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `relatorio-${type}-day-lanches-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  logAuditAction('export_report', 'report', null, `${type} — ${period}`);
+}
+
+function printReport() {
+  logAuditAction('print_report', 'report', null, getReportPeriodLabel());
+  window.print();
 }
 
 /* ══════════════════════════════════════
@@ -3024,6 +3713,7 @@ async function pdvSave() {
     options: c.options || [],
   }));
 
+  const actor = getCurrentActor();
   const orderData = {
     order_number: orderNumber,
     customer_name: customerName,
@@ -3038,6 +3728,10 @@ async function pdvSave() {
     notes: notes || null,
     order_source: 'balcao',
     table_number: pdv.tableNumber,
+    created_by_user_id: actor.id,
+    created_by_email: actor.email,
+    handled_by_user_id: actor.id,
+    handled_by_email: actor.email,
   };
 
   console.log('[PDV] Payload pedido presencial:', orderData);
@@ -3067,6 +3761,8 @@ async function pdvSave() {
     gs.seenOrderIds.add(data.id);
     saveSeenOrderIds();
     updateOrderFilterCounts();
+
+    logAuditAction('create_order', 'order', data.id, `#${orderNumber}`, null, { table: pdv.tableNumber, total: subtotal });
 
     pdv.cart = [];
     pdv.tableNumber = null;
@@ -3203,3 +3899,11 @@ window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
 window.pdvConfirmOptions              = pdvConfirmOptions;
 window.pdvToggleOption                = pdvToggleOption;
 window.pdvOptQty                      = pdvOptQty;
+window.setReportFilter                = setReportFilter;
+window.showReportTab                  = showReportTab;
+window.renderReports                  = renderReports;
+window.exportReportCSV                = exportReportCSV;
+window.printReport                    = printReport;
+window.cancelReasonModalClose         = cancelReasonModalClose;
+window.cancelReasonModalConfirm       = cancelReasonModalConfirm;
+window._cancelReasonBgClick           = _cancelReasonBgClick;

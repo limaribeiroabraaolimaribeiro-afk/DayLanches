@@ -2859,3 +2859,224 @@ body.is-balcao .dash-header { display: none !important; }
   .pdv-cart-body { padding: 14px 16px; }
   .pdv-cart-actions { padding: 14px 16px; }
 }
+
+/* ═══════════════════════ RELATÓRIOS ═══════════════════════ */
+.rpt-page { padding: 0; }
+
+.rpt-filters {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+}
+.rpt-filter-row {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;
+}
+.rpt-filter-custom {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.rpt-actions-row {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+
+/* Cards de resumo */
+.rpt-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.rpt-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.rpt-card-icon {
+  font-size: 1.4rem;
+  color: var(--primary);
+  margin-bottom: 6px;
+}
+.rpt-card-val {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+.rpt-card-label {
+  font-size: .72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+/* Abas */
+.rpt-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+}
+.rpt-tab {
+  padding: 10px 18px;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.rpt-tab:hover { color: var(--text); }
+.rpt-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* Conteúdo das abas */
+.rpt-tab-content {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  min-height: 200px;
+}
+.rpt-tab-content h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: var(--text);
+}
+
+/* Tabelas de relatórios */
+.rpt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+.rpt-table th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: var(--text-med);
+  text-transform: uppercase;
+  font-size: .7rem;
+  letter-spacing: .04em;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.rpt-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  color: var(--text);
+  vertical-align: middle;
+}
+.rpt-table tbody tr:hover { background: #fafafa; }
+.rpt-table .rpt-total-row td {
+  font-weight: 700;
+  border-top: 2px solid var(--border);
+  background: #f9fafb;
+}
+
+.rpt-summary-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 14px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+.rpt-summary-item {
+  font-size: .82rem;
+}
+.rpt-summary-item strong {
+  color: var(--primary);
+}
+
+/* Produtos ranking */
+.rpt-product-section {
+  margin-bottom: 24px;
+}
+.rpt-product-section h4 {
+  font-size: .9rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.rpt-product-section h4 i {
+  color: var(--primary);
+  margin-right: 6px;
+}
+
+/* Atividades */
+.rpt-activity-text {
+  font-size: .82rem;
+  line-height: 1.5;
+}
+.rpt-activity-actor {
+  font-weight: 600;
+  color: var(--primary);
+}
+.rpt-activity-action {
+  color: var(--text-med);
+}
+.rpt-activity-reason {
+  font-size: .78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Export button row inside tabs */
+.rpt-tab-export {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+/* Status pills */
+.rpt-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: .72rem;
+  font-weight: 600;
+}
+.rpt-pill-paid { background: var(--success-bg); color: #16a34a; }
+.rpt-pill-pending { background: #FFF7ED; color: #EA580C; }
+.rpt-pill-cancelled { background: var(--danger-bg); color: #DC2626; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .rpt-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .rpt-filter-custom {
+    grid-template-columns: 1fr 1fr;
+  }
+  .rpt-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+@media (max-width: 480px) {
+  .rpt-cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .rpt-card { padding: 12px 10px; }
+  .rpt-card-val { font-size: 1.05rem; }
+  .rpt-filter-custom { grid-template-columns: 1fr; }
+  .rpt-tabs { gap: 0; }
+  .rpt-tab { padding: 8px 12px; font-size: .78rem; }
+}
