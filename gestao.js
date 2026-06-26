@@ -165,6 +165,7 @@ function showSection(name) {
   });
   const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', config:'Configurações', acessos:'Acessos' };
   elid('dash-title').textContent = titles[name] || name;
+  document.body.classList.toggle('is-balcao', name === 'balcao');
   gs.section = name;
   if (name === 'vendas')  renderSales();
   if (name === 'config')  loadConfig();
@@ -995,7 +996,7 @@ function orderCard(o) {
     saiu_para_entrega:'st-entrega',
     finalizado:'st-finalizado', cancelado:'st-cancelado',
   };
-  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha' };
+  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha', a_definir:'A definir' };
 
   /* Após webhook: resolve label a partir do capture_method da InfinitePay */
   function resolvePayLabel(order) {
@@ -1161,7 +1162,7 @@ function copyOrderText(orderId) {
   const o = gs.orders.find(x => x.id === orderId);
   if (!o) return;
   const items = Array.isArray(o.items) ? o.items : [];
-  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha' };
+  const payLabels = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha', a_definir:'A definir' };
   /* Após webhook usa capture_method */
   const payDisplay = (() => {
     if (o.payment_status === 'pago' && o.capture_method) {
@@ -1217,19 +1218,49 @@ async function updateOrderStatus(id, status) {
   if (pdv.initialized) pdvRenderMesas();
 }
 
-async function confirmMarkAsPaid(id) {
-  const confirmed = await showConfirmModal({
-    title: 'Confirmar pagamento',
-    message: 'Confirmar pagamento deste pedido?',
-    confirmText: 'Confirmar pagamento',
-    cancelText: 'Cancelar',
-    danger: false,
+let _payModalResolve = null;
+let _payModalMethod  = '';
+
+function openPayMethodModal() {
+  return new Promise(resolve => {
+    _payModalResolve = resolve;
+    _payModalMethod  = '';
+    const ov = elid('pay-method-overlay');
+    ov.style.display = 'flex';
+    document.querySelectorAll('.pay-modal-btn').forEach(b => b.classList.remove('active'));
+    const confirmBtn = elid('pay-modal-confirm');
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.classList.add('disabled'); }
   });
-  if (!confirmed) return;
+}
+
+function selectPayModalMethod(method) {
+  _payModalMethod = method;
+  document.querySelectorAll('.pay-modal-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === method));
+  const confirmBtn = elid('pay-modal-confirm');
+  if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.classList.remove('disabled'); }
+}
+
+function confirmPayModal() {
+  if (!_payModalMethod) return;
+  elid('pay-method-overlay').style.display = 'none';
+  if (_payModalResolve) _payModalResolve(_payModalMethod);
+  _payModalResolve = null;
+}
+
+function cancelPayModal() {
+  elid('pay-method-overlay').style.display = 'none';
+  if (_payModalResolve) _payModalResolve(null);
+  _payModalResolve = null;
+}
+
+async function confirmMarkAsPaid(id) {
+  const method = await openPayMethodModal();
+  if (!method) return;
 
   const now = new Date().toISOString();
   const { error } = await getSb().from('orders').update({
     payment_status: 'pago',
+    payment_method: method,
     paid_at: now,
     updated_at: now,
   }).eq('id', id);
@@ -1631,7 +1662,7 @@ function isPaidOrder(order) {
 }
 
 /* Rótulo de forma de pagamento (compartilhado entre pedidos, entregas e vendas) */
-const PAY_METHOD_LABELS = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha' };
+const PAY_METHOD_LABELS = { pix:'PIX', pix_online:'PIX', card:'Cartão', card_online:'Cartão', cash:'Dinheiro', online:'Online', dinheiro:'Dinheiro', pix_loja:'Pix na loja', cartao_maquininha:'Cartão maquininha', a_definir:'A definir' };
 function getPaymentLabel(o) {
   if (o.payment_status === 'pago' && o.capture_method) {
     const cm = String(o.capture_method).toLowerCase();
@@ -2459,7 +2490,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (session?.user) {
       gs.currentUser = session.user;
       showView('dashboard');
-      elid('user-display').textContent = session.user.user_metadata?.name || session.user.email.split('@')[0];
+      const _uName = session.user.user_metadata?.name || session.user.email.split('@')[0];
+      elid('user-display').textContent = _uName;
+      var _pu = elid('pdv-user-display'); if (_pu) _pu.textContent = _uName;
       loadProducts();
       loadOrders().then(() => {
         gs.orders.forEach(o => gs.seenOrderIds.add(o.id));
@@ -2593,7 +2626,6 @@ function applyProductTemplate(type) {
 ══════════════════════════════════════ */
 const pdv = {
   cart: [],
-  payMethod: '',
   tableNumber: null,
   catFilter: '',
   initialized: false,
@@ -2952,11 +2984,6 @@ function pdvRemoveItem(index) {
   pdvRenderCart();
 }
 
-function pdvSelectPay(method) {
-  pdv.payMethod = method;
-  document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === method));
-}
-
 async function pdvClearCart() {
   if (pdv.cart.length) {
     const confirmed = await showConfirmModal({
@@ -2969,18 +2996,15 @@ async function pdvClearCart() {
     if (!confirmed) return;
   }
   pdv.cart = [];
-  pdv.payMethod = '';
   pdv.tableNumber = null;
   elid('pdv-customer-name').value = '';
   elid('pdv-notes').value = '';
-  document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
   pdvRenderMesas();
   pdvRenderCart();
 }
 
 async function pdvSave() {
   if (!pdv.cart.length) { toast('Adicione pelo menos um produto.', true); return; }
-  if (!pdv.payMethod) { toast('Escolha a forma de pagamento.', true); return; }
   if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }
 
   const btn = elid('pdv-btn-save');
@@ -3005,7 +3029,7 @@ async function pdvSave() {
     customer_name: customerName,
     customer_phone: null,
     delivery_type: 'balcao',
-    payment_method: pdv.payMethod,
+    payment_method: 'a_definir',
     payment_status: 'pendente',
     paid_at: null,
     status: 'novo',
@@ -3045,11 +3069,9 @@ async function pdvSave() {
     updateOrderFilterCounts();
 
     pdv.cart = [];
-    pdv.payMethod = '';
     pdv.tableNumber = null;
     elid('pdv-customer-name').value = '';
     elid('pdv-notes').value = '';
-    document.querySelectorAll('.pdv-pay-btn').forEach(b => b.classList.remove('active'));
     pdvRenderMesas();
     pdvRenderCart();
 
@@ -3157,6 +3179,9 @@ window.copyOrderText                  = copyOrderText;
 window.toggleOrderDetails             = toggleOrderDetails;
 window.confirmCancelOrder             = confirmCancelOrder;
 window.confirmMarkAsPaid              = confirmMarkAsPaid;
+window.selectPayModalMethod           = selectPayModalMethod;
+window.confirmPayModal                = confirmPayModal;
+window.cancelPayModal                 = cancelPayModal;
 window.renderOrders                   = renderOrders;
 window.refreshOrders                  = refreshOrders;
 window.showToast                      = showToast;
@@ -3170,7 +3195,6 @@ window.pdvFilterCat                   = pdvFilterCat;
 window.pdvAddProduct                  = pdvAddProduct;
 window.pdvChangeQty                   = pdvChangeQty;
 window.pdvRemoveItem                  = pdvRemoveItem;
-window.pdvSelectPay                   = pdvSelectPay;
 window.pdvClearCart                    = pdvClearCart;
 window.pdvSave                        = pdvSave;
 window.pdvSelectMesa                  = pdvSelectMesa;

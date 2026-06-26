@@ -224,25 +224,38 @@
 
     <!-- SECTION: Balcão (PDV presencial) -->
     <section id="section-balcao" class="dash-section pdv-section">
-      <div class="pdv-layout">
+      <div class="pdv-page">
 
-        <!-- ESQUERDA: Produtos (rola independente) -->
-        <div class="pdv-products-column">
-          <div class="pdv-search-row">
-            <div class="pdv-search-wrap">
-              <i class="fas fa-search pdv-search-icon"></i>
-              <input type="text" id="pdv-search" class="pdv-search-input" placeholder="Buscar produto..." oninput="pdvFilterProducts()">
-            </div>
+        <!-- ESQUERDA -->
+        <div class="pdv-left">
+          <div class="pdv-left-header">
+            <button class="btn-icon btn-menu" onclick="openSidebar()"><i class="fas fa-bars"></i></button>
+            <span class="pdv-left-title">Balcão</span>
+            <button class="btn-sound" id="btn-sound" onclick="toggleOrderSound()" title="Ativar som de pedidos">
+              <i class="fas fa-bell-slash"></i><span class="btn-sound-label">Ativar som</span>
+            </button>
+            <button class="btn-sound btn-test-sound" id="btn-test-sound" onclick="testOrderSound()" title="Testar som">
+              <i class="fas fa-volume-high"></i><span class="btn-sound-label">Testar som</span>
+            </button>
+            <span class="dash-user pdv-user"><i class="fas fa-user-circle"></i> <span id="pdv-user-display">—</span></span>
           </div>
-          <div class="pdv-cat-row" id="pdv-cat-row"></div>
-          <div class="pdv-grid" id="pdv-grid">
-            <p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando produtos...</p>
+          <div class="pdv-products-scroll">
+            <div class="pdv-search-row">
+              <div class="pdv-search-wrap">
+                <i class="fas fa-search pdv-search-icon"></i>
+                <input type="text" id="pdv-search" class="pdv-search-input" placeholder="Buscar produto..." oninput="pdvFilterProducts()">
+              </div>
+            </div>
+            <div class="pdv-cat-row" id="pdv-cat-row"></div>
+            <div class="pdv-grid" id="pdv-grid">
+              <p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando produtos...</p>
+            </div>
           </div>
         </div>
 
-        <!-- DIREITA: Carrinho fixo -->
-        <aside class="pdv-cart-column">
-          <div class="pdv-cart" id="pdv-cart">
+        <!-- DIREITA -->
+        <aside class="pdv-right">
+          <div class="pdv-cart pdv-cart-card" id="pdv-cart">
             <div class="pdv-cart-header">
               <h2 class="pdv-cart-title"><i class="fas fa-cash-register"></i> Novo pedido no balcão</h2>
             </div>
@@ -279,14 +292,6 @@
                 <div class="pdv-mesa-grid" id="pdv-mesa-grid"></div>
               </div>
 
-              <div class="pdv-section-block">
-                <label class="pdv-section-label">Pagamento</label>
-                <div class="pdv-pay-grid" id="pdv-pay-options">
-                  <button type="button" class="pdv-pay-btn" data-pay="dinheiro" onclick="pdvSelectPay('dinheiro')"><i class="fas fa-money-bill-wave"></i><span>Dinheiro</span></button>
-                  <button type="button" class="pdv-pay-btn" data-pay="pix_loja" onclick="pdvSelectPay('pix_loja')"><i class="fas fa-qrcode"></i><span>Pix</span></button>
-                  <button type="button" class="pdv-pay-btn" data-pay="cartao_maquininha" onclick="pdvSelectPay('cartao_maquininha')"><i class="fas fa-credit-card"></i><span>Cartão</span></button>
-                </div>
-              </div>
 
             </div>
 
@@ -652,6 +657,33 @@
       <button class="btn-pdv-primary pdv-opt-add-btn" id="pdv-opt-add-btn" onclick="pdvConfirmOptions()">
         <i class="fas fa-cart-plus"></i> <span id="pdv-opt-add-label">Adicionar — R$ 0,00</span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: FORMA DE PAGAMENTO ===================== -->
+<div id="pay-method-overlay" class="gestao-modal-overlay" style="display:none">
+  <div class="gestao-modal" role="dialog" aria-modal="true">
+    <div class="gestao-modal-header">
+      <span class="gestao-modal-brand">
+        <span class="logo-day">Day</span><span class="logo-lanches">Lanches</span>
+      </span>
+      <div class="gestao-modal-icon">
+        <i class="fas fa-hand-holding-dollar"></i>
+      </div>
+    </div>
+    <div class="gestao-modal-body">
+      <h2 class="gestao-modal-title">Confirmar pagamento</h2>
+      <p class="gestao-modal-message">Selecione a forma de pagamento usada pelo cliente.</p>
+      <div class="pay-modal-grid">
+        <button type="button" class="pay-modal-btn" data-pay="dinheiro" onclick="selectPayModalMethod('dinheiro')"><i class="fas fa-money-bill-wave"></i><span>Dinheiro</span></button>
+        <button type="button" class="pay-modal-btn" data-pay="pix_loja" onclick="selectPayModalMethod('pix_loja')"><i class="fas fa-qrcode"></i><span>Pix</span></button>
+        <button type="button" class="pay-modal-btn" data-pay="cartao_maquininha" onclick="selectPayModalMethod('cartao_maquininha')"><i class="fas fa-credit-card"></i><span>Cartão</span></button>
+      </div>
+    </div>
+    <div class="gestao-modal-actions">
+      <button type="button" class="gestao-modal-btn gestao-modal-btn-cancel" onclick="cancelPayModal()">Cancelar</button>
+      <button type="button" class="gestao-modal-btn gestao-modal-btn-primary disabled" id="pay-modal-confirm" disabled onclick="confirmPayModal()">Confirmar pagamento</button>
     </div>
   </div>
 </div>
