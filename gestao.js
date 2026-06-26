@@ -4075,7 +4075,6 @@ async function estoqueMovimento(itemId, tipo) {
   });
   if (movErr) { toast('Erro ao registrar movimentação.', true); return; }
 
-  await getSb().rpc('', {}).catch(() => {});
   const { data: item } = await getSb().from('inventory_items').select('current_quantity,name').eq('id', itemId).single();
   if (item) {
     const newQty = Number(item.current_quantity || 0) + sign;
