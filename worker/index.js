@@ -10,6 +10,10 @@
      GET  /print-agent/health        → health check do Print Agent
      GET  /print-agent/pending-orders → pedidos pendentes de impressão
      POST /print-agent/mark-printed  → marca pedido como impresso
+     POST /order-status-notification → envia WhatsApp ao cliente
+     GET  /whatsapp/status           → status da instância WhatsApp
+     GET  /whatsapp/qrcode           → QR Code para conectar WhatsApp
+     POST /whatsapp/test-message     → envia mensagem de teste
    ───────────────────────────────────────────────────────── */
 
 const CORS = {
@@ -97,6 +101,19 @@ export default {
 
     if (pathname === '/order-status-notification' && request.method === 'POST') {
       return handleOrderStatusNotification(request, env);
+    }
+
+    /* ── WhatsApp management routes ── */
+    if (pathname === '/whatsapp/status' && request.method === 'GET') {
+      return handleWhatsAppStatus(env);
+    }
+
+    if (pathname === '/whatsapp/qrcode' && request.method === 'GET') {
+      return handleWhatsAppQRCode(env);
+    }
+
+    if (pathname === '/whatsapp/test-message' && request.method === 'POST') {
+      return handleWhatsAppTestMessage(request, env);
     }
 
     return json({ error: 'Not found' }, 404);
@@ -419,8 +436,8 @@ const NOTIFICATION_MESSAGES = {
   em_preparo: (name, num, link) => `Olá, ${name}! 👋\n\nSeu pedido ${num} está em preparação.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
   saiu_para_entrega: (name, num, link) => `Olá, ${name}! 🛵\n\nSeu pedido ${num} saiu para entrega.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
   pronto: (name, num, link) => `Olá, ${name}! ✅\n\nSeu pedido ${num} está pronto para retirada.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
-  finalizado: (name, num, link) => `Olá, ${name}! ✅\n\nSeu pedido ${num} foi finalizado.\n\nObrigado pela preferência!\n\nDay Lanches`,
-  cancelado: (name, num, link, reason) => `Olá, ${name}.\n\nSeu pedido ${num} foi cancelado.\n${reason ? `Motivo: ${reason}\n` : ''}\nDay Lanches`,
+  finalizado: (name, num, link) => `Olá, ${name}! ✅\n\nSeu pedido ${num} foi finalizado.\n\nDay Lanches`,
+  cancelado: (name, num, link, reason) => `Olá, ${name}.\n\nSeu pedido ${num} foi cancelado.\n${reason ? `\nMotivo:\n${reason}\n` : ''}\nDay Lanches`,
 };
 
 const NOTIFIED_FIELD = {
@@ -520,4 +537,92 @@ async function handleOrderStatusNotification(request, env) {
     console.error('[DayLanches] Erro notificação:', err);
     return json({ error: 'Erro interno' }, 500);
   }
+}
+
+/* ══════════════════════════════════════════════════════════
+   GET /whatsapp/status — verifica se a Evolution API está configurada e conectada
+══════════════════════════════════════════════════════════ */
+async function handleWhatsAppStatus(env) {
+  const configured = !!(env.EVOLUTION_API_URL && env.EVOLUTION_API_KEY && env.EVOLUTION_INSTANCE);
+  if (!configured) {
+    return json({ configured: false, instance: null, state: 'not_configured' });
+  }
+
+  try {
+    const res = await fetch(`${env.EVOLUTION_API_URL}/instance/connectionState/${env.EVOLUTION_INSTANCE}`, {
+      headers: { apikey: env.EVOLUTION_API_KEY },
+    });
+    if (!res.ok) {
+      return json({ configured: true, instance: env.EVOLUTION_INSTANCE, state: 'unknown', error: `HTTP ${res.status}` });
+    }
+    const data = await res.json();
+    const state = data.instance?.state || data.state || 'unknown';
+    return json({ configured: true, instance: env.EVOLUTION_INSTANCE, state });
+  } catch (err) {
+    console.error('[DayLanches] WhatsApp status erro:', err);
+    return json({ configured: true, instance: env.EVOLUTION_INSTANCE, state: 'error', error: err.message });
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   GET /whatsapp/qrcode — gera QR Code para conectar instância
+══════════════════════════════════════════════════════════ */
+async function handleWhatsAppQRCode(env) {
+  if (!env.EVOLUTION_API_URL || !env.EVOLUTION_API_KEY || !env.EVOLUTION_INSTANCE) {
+    return json({ error: 'Evolution API não configurada' }, 400);
+  }
+
+  try {
+    const res = await fetch(`${env.EVOLUTION_API_URL}/instance/connect/${env.EVOLUTION_INSTANCE}`, {
+      headers: { apikey: env.EVOLUTION_API_KEY },
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return json({ error: 'Falha ao gerar QR Code', status: res.status, detail }, 502);
+    }
+    const data = await res.json();
+    return json({
+      qrcode: data.base64 || data.qrcode?.base64 || null,
+      pairingCode: data.pairingCode || data.code || null,
+      instance: env.EVOLUTION_INSTANCE,
+    });
+  } catch (err) {
+    console.error('[DayLanches] QR Code erro:', err);
+    return json({ error: 'Erro ao conectar instância' }, 500);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   POST /whatsapp/test-message — envia mensagem de teste
+══════════════════════════════════════════════════════════ */
+async function handleWhatsAppTestMessage(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+
+  const { phone } = body;
+  if (!phone) return json({ error: 'phone obrigatório' }, 400);
+
+  const normalized = normalizePhone(phone);
+  if (!normalized) return json({ error: 'Telefone inválido' }, 400);
+
+  const message = 'Teste de notificação automática Day Lanches.\n\nSe você recebeu esta mensagem, o WhatsApp automático está conectado corretamente. ✅';
+  const result = await sendWhatsAppMessage(normalized, message, env);
+
+  try {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/audit_logs`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        actor_name: 'Gestão',
+        action: result.sent ? 'whatsapp_test_sent' : 'whatsapp_test_failed',
+        entity_type: 'whatsapp',
+        entity_id: normalized,
+        entity_label: 'Teste WhatsApp',
+        source: 'worker',
+        metadata: { phone: normalized, sent: result.sent, reason: result.reason || null },
+      }),
+    });
+  } catch (_) {}
+
+  return json({ ok: true, sent: result.sent, reason: result.reason || null });
 }

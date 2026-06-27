@@ -1,0 +1,108 @@
+version: "3.8"
+
+services:
+  # ── Evolution API ──
+  evolution-api:
+    image: atendai/evolution-api:v2.2.3
+    container_name: evolution-api
+    restart: unless-stopped
+    depends_on:
+      - evolution-postgres
+      - evolution-redis
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_URL=https://${DOMAIN}
+
+      # Banco de dados
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@evolution-postgres:5432/${POSTGRES_DB}
+
+      # Redis
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD}@evolution-redis:6379/0
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_LOCAL_ENABLED=false
+
+      # Autenticação
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+
+      # Instância
+      - DEL_INSTANCE=false
+      - DEL_TEMP_INSTANCES=false
+
+      # Logs
+      - LOG_LEVEL=WARN
+      - LOG_COLOR=true
+
+      # Webhook global (desativado — cada instância configura o seu)
+      - WEBHOOK_GLOBAL_ENABLED=false
+
+      # QR Code
+      - QRCODE_LIMIT=6
+
+      # Fuso horário
+      - TZ=${TZ}
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    networks:
+      - evolution-net
+    expose:
+      - "8080"
+
+  # ── PostgreSQL ──
+  evolution-postgres:
+    image: postgres:16-alpine
+    container_name: evolution-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TZ=${TZ}
+    volumes:
+      - evolution_pgdata:/var/lib/postgresql/data
+    networks:
+      - evolution-net
+    # Sem ports: — não expõe para internet
+
+  # ── Redis ──
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: evolution-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - evolution_redis:/data
+    networks:
+      - evolution-net
+    # Sem ports: — não expõe para internet
+
+  # ── Caddy (HTTPS automático) ──
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - evolution-net
+
+volumes:
+  evolution_pgdata:
+  evolution_redis:
+  evolution_instances:
+  evolution_store:
+  caddy_data:
+  caddy_config:
+
+networks:
+  evolution-net:
+    driver: bridge

@@ -1,0 +1,13 @@
+# Caddy — HTTPS automático para Evolution API
+#
+# Pré-requisitos:
+#   1. DNS tipo A apontando para o IP desta VPS
+#   2. Portas 80 e 443 liberadas no firewall
+#   3. Caddy gera e renova certificado SSL automaticamente (Let's Encrypt)
+#
+# Se usar Cloudflare com proxy (nuvem laranja) e o QR Code não carregar,
+# teste com DNS Only (nuvem cinza). WebSocket pode ter problemas com proxy.
+
+{$DOMAIN} {
+	reverse_proxy evolution-api:8080
+}

@@ -168,7 +168,7 @@ function showSection(name) {
   document.body.classList.toggle('is-balcao', name === 'balcao');
   gs.section = name;
   if (name === 'vendas')      renderSales();
-  if (name === 'config')      loadConfig();
+  if (name === 'config')      { loadConfig(); waCheckStatus(); }
   if (name === 'acessos')     renderUserInfo();
   if (name === 'pedidos')     loadOrders();
   if (name === 'balcao')      pdvInit();
@@ -2404,6 +2404,115 @@ async function handleSaveConfig(e) {
   if (cfg.instagram !== data.instagram) { meta.before.instagram = cfg.instagram || ''; meta.after.instagram = data.instagram; }
   logAuditAction('save_config', 'config', 'store', 'Configurações da loja', null, meta);
   await loadConfig();
+}
+
+/* ── WhatsApp Automático ── */
+
+async function waCheckStatus() {
+  const badge = elid('wa-status-badge');
+  const instEl = elid('wa-instance-name');
+  const connEl = elid('wa-connection-state');
+  if (badge) { badge.textContent = 'Verificando...'; badge.className = 'wa-badge wa-badge-unknown'; }
+  try {
+    const res = await fetch(`${WORKER_URL}/whatsapp/status`);
+    const data = await res.json();
+    if (instEl) instEl.textContent = data.instance || '—';
+    if (!data.configured) {
+      if (badge) { badge.textContent = 'Não configurado'; badge.className = 'wa-badge wa-badge-not-configured'; }
+      if (connEl) connEl.textContent = 'Secrets não definidos no Worker';
+      return;
+    }
+    const state = (data.state || '').toLowerCase();
+    if (state === 'open' || state === 'connected') {
+      if (badge) { badge.textContent = 'Conectado'; badge.className = 'wa-badge wa-badge-connected'; }
+      if (connEl) connEl.textContent = 'WhatsApp conectado e pronto';
+    } else if (state === 'close' || state === 'disconnected') {
+      if (badge) { badge.textContent = 'Desconectado'; badge.className = 'wa-badge wa-badge-disconnected'; }
+      if (connEl) connEl.textContent = 'Gere um QR Code para reconectar';
+    } else {
+      if (badge) { badge.textContent = state || 'Desconhecido'; badge.className = 'wa-badge wa-badge-unknown'; }
+      if (connEl) connEl.textContent = data.error || 'Verifique a Evolution API';
+    }
+  } catch (err) {
+    if (badge) { badge.textContent = 'Erro'; badge.className = 'wa-badge wa-badge-disconnected'; }
+    if (connEl) connEl.textContent = 'Falha ao consultar Worker';
+  }
+}
+
+async function waGenerateQR() {
+  const area = elid('wa-qrcode-area');
+  const imgContainer = elid('wa-qrcode-img');
+  const pairingEl = elid('wa-pairing-code');
+  if (!area || !imgContainer) return;
+  area.style.display = 'block';
+  imgContainer.innerHTML = '<span style="color:var(--text-secondary);font-size:.85rem">Gerando QR Code...</span>';
+  if (pairingEl) pairingEl.style.display = 'none';
+  try {
+    const res = await fetch(`${WORKER_URL}/whatsapp/qrcode`);
+    const data = await res.json();
+    if (data.error) {
+      imgContainer.innerHTML = `<span style="color:#dc2626;font-size:.85rem">${data.error}</span>`;
+      return;
+    }
+    if (data.qrcode) {
+      const src = data.qrcode.startsWith('data:') ? data.qrcode : `data:image/png;base64,${data.qrcode}`;
+      imgContainer.innerHTML = `<img src="${src}" alt="QR Code WhatsApp">`;
+    } else {
+      imgContainer.innerHTML = '<span style="color:var(--text-secondary);font-size:.85rem">QR Code não disponível. A instância pode já estar conectada.</span>';
+    }
+    if (data.pairingCode && pairingEl) {
+      pairingEl.textContent = `Código de pareamento: ${data.pairingCode}`;
+      pairingEl.style.display = 'block';
+    }
+  } catch (err) {
+    imgContainer.innerHTML = '<span style="color:#dc2626;font-size:.85rem">Erro ao gerar QR Code</span>';
+  }
+}
+
+function waOpenTestModal() {
+  const ov = elid('wa-test-overlay');
+  if (ov) ov.style.display = 'flex';
+  const input = elid('wa-test-phone');
+  if (input) { input.value = ''; input.focus(); }
+}
+
+function waCloseTestModal() {
+  const ov = elid('wa-test-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
+function waTestBgClick(e) {
+  if (e.target === e.currentTarget) waCloseTestModal();
+}
+
+async function waSendTest() {
+  const phone = getv('wa-test-phone');
+  if (!phone || phone.replace(/\D/g, '').length < 10) {
+    toast('Informe um telefone válido.', true);
+    return;
+  }
+  const btn = elid('wa-test-send-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...'; }
+  try {
+    const res = await fetch(`${WORKER_URL}/whatsapp/test-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phone.replace(/\D/g, '') }),
+    });
+    const data = await res.json();
+    if (data.sent) {
+      toast('Mensagem de teste enviada!');
+      waCloseTestModal();
+    } else if (data.reason === 'not_configured') {
+      toast('Evolution API não configurada no Worker.', true);
+    } else {
+      toast('Falha ao enviar: ' + (data.reason || data.error || 'erro desconhecido'), true);
+    }
+  } catch (err) {
+    toast('Erro ao enviar mensagem de teste.', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar teste'; }
+  }
 }
 
 /* ── Localização da loja ── */

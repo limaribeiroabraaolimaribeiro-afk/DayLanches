@@ -1105,6 +1105,37 @@ a { text-decoration: none; color: inherit; }
 }
 .acc-status-badge i { font-size: .6rem; }
 
+/* ═══════════════════ WhatsApp Automático ═══════════════════ */
+.wa-status-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.wa-status-row { display: flex; align-items: center; gap: 8px; font-size: .88rem; }
+.wa-status-label { font-weight: 600; color: var(--text-secondary); min-width: 90px; }
+.wa-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .78rem; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px; width: fit-content;
+}
+.wa-badge::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%;
+}
+.wa-badge-connected { color: #16a34a; background: #f0fdf4; }
+.wa-badge-connected::before { background: #16a34a; }
+.wa-badge-disconnected { color: #dc2626; background: #fef2f2; }
+.wa-badge-disconnected::before { background: #dc2626; }
+.wa-badge-not-configured { color: #9ca3af; background: #f3f4f6; }
+.wa-badge-not-configured::before { background: #9ca3af; }
+.wa-badge-unknown { color: #d97706; background: #fffbeb; }
+.wa-badge-unknown::before { background: #d97706; }
+.wa-qrcode-container {
+  display: flex; justify-content: center; align-items: center;
+  padding: 16px; background: #fff; border: 1px solid var(--border);
+  border-radius: 12px; margin: 8px 0;
+}
+.wa-qrcode-container img { max-width: 260px; width: 100%; height: auto; border-radius: 4px; }
+.wa-pairing-code {
+  text-align: center; font-size: .9rem; font-weight: 600;
+  color: var(--text-secondary); margin-top: 8px;
+}
+
 .acc-actions { justify-content: flex-start; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 480px) { .acc-actions .btn-primary, .acc-actions .btn-secondary { width: 100%; } }
 

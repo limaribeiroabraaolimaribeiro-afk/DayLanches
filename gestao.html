@@ -477,6 +477,40 @@
           </form>
         </div>
 
+        <!-- Card: WhatsApp Automático -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title"><i class="fab fa-whatsapp" style="color:#25d366;margin-right:6px"></i>WhatsApp Automático</h2>
+            <p class="g-card-desc">Envia mensagens automáticas ao cliente quando o status do pedido muda.</p>
+          </div>
+          <div id="wa-auto-panel">
+            <div class="wa-status-grid">
+              <div class="wa-status-row">
+                <span class="wa-status-label">Status:</span>
+                <span id="wa-status-badge" class="wa-badge wa-badge-unknown">Verificando...</span>
+              </div>
+              <div class="wa-status-row">
+                <span class="wa-status-label">Instância:</span>
+                <span id="wa-instance-name">—</span>
+              </div>
+              <div class="wa-status-row">
+                <span class="wa-status-label">Conexão:</span>
+                <span id="wa-connection-state">—</span>
+              </div>
+            </div>
+            <div id="wa-qrcode-area" style="display:none">
+              <p class="g-card-desc" style="margin:12px 0 8px">Escaneie o QR Code com o WhatsApp da loja:</p>
+              <div id="wa-qrcode-img" class="wa-qrcode-container"></div>
+              <p id="wa-pairing-code" class="wa-pairing-code" style="display:none"></p>
+            </div>
+            <div class="g-card-actions" style="flex-wrap:wrap;gap:8px">
+              <button type="button" class="btn-secondary" onclick="waCheckStatus()"><i class="fas fa-sync-alt"></i> Verificar status</button>
+              <button type="button" class="btn-secondary" onclick="waGenerateQR()"><i class="fas fa-qrcode"></i> Gerar QR Code</button>
+              <button type="button" class="btn-secondary" onclick="waOpenTestModal()"><i class="fas fa-paper-plane"></i> Testar mensagem</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Card: Pagamento -->
         <div class="g-card">
           <div class="g-card-head">
@@ -948,6 +982,34 @@
     <div class="gestao-modal-actions">
       <button type="button" class="gestao-modal-btn gestao-modal-btn-cancel" onclick="cancelReasonModalClose()">Voltar</button>
       <button type="button" class="gestao-modal-btn gestao-modal-btn-danger" onclick="cancelReasonModalConfirm()">Confirmar cancelamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: TESTE WHATSAPP ===================== -->
+<div id="wa-test-overlay" class="gestao-modal-overlay" style="display:none" onclick="waTestBgClick(event)">
+  <div class="gestao-modal" role="dialog" aria-modal="true" aria-labelledby="wa-test-title">
+    <div class="gestao-modal-header">
+      <span class="gestao-modal-brand">
+        <span class="logo-day">Day</span><span class="logo-lanches">Lanches</span>
+      </span>
+      <div class="gestao-modal-icon" style="background:#ECFDF5">
+        <i class="fab fa-whatsapp" style="color:#25d366"></i>
+      </div>
+    </div>
+    <div class="gestao-modal-body">
+      <h2 class="gestao-modal-title" id="wa-test-title">Testar mensagem WhatsApp</h2>
+      <p class="gestao-modal-message">Envie uma mensagem de teste para confirmar que o WhatsApp automático está funcionando.</p>
+      <div class="form-group" style="margin-top:16px">
+        <label class="form-label">Telefone de destino</label>
+        <input type="text" id="wa-test-phone" class="form-input" placeholder="(00) 00000-0000" inputmode="numeric">
+      </div>
+    </div>
+    <div class="gestao-modal-actions">
+      <button class="gestao-modal-btn gestao-modal-btn-secondary" onclick="waCloseTestModal()">Cancelar</button>
+      <button class="gestao-modal-btn gestao-modal-btn-primary" id="wa-test-send-btn" onclick="waSendTest()">
+        <i class="fas fa-paper-plane"></i> Enviar teste
+      </button>
     </div>
   </div>
 </div>

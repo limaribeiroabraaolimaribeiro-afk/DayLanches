@@ -1,3 +1,9 @@
 worker/.wrangler/
 print-agent/node_modules/
 print-agent/dist/
+
+# Evolution API
+infra/evolution/.env
+infra/evolution/backups/
+infra/evolution/data/
+infra/evolution/*.log
