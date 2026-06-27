@@ -994,6 +994,12 @@ async function confirmCancelOrder(id) {
   if (error) { toast('Erro ao cancelar pedido.', true); return; }
   toast('Pedido cancelado.');
   logAuditAction('cancel_order', 'order', id, `#${num}`, reason);
+  try {
+    await fetch(`${WORKER_URL}/order-status-notification`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: id, new_status: 'cancelado', cancel_reason: reason }),
+    });
+  } catch (_) {}
   await loadOrders();
   if (pdv.initialized) pdvRenderMesas();
 }
@@ -1358,6 +1364,22 @@ async function updateOrderStatus(id, status) {
   toast('Status atualizado!');
   const num = o?.order_number || id?.slice(-8).toUpperCase() || '';
   logAuditAction('change_status', 'order', id, `#${num}`, null, { before: { status: oldStatus }, after: { status }, source: 'gestao' });
+
+  if (['em_preparo', 'saiu_para_entrega', 'finalizado'].includes(status)) {
+    try {
+      const res = await fetch(`${WORKER_URL}/order-status-notification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: id, new_status: status }),
+      });
+      const result = await res.json();
+      if (result.sent) toast('Notificação enviada ao cliente.');
+      else if (result.reason === 'not_configured') { /* silencioso */ }
+      else if (result.reason === 'no_phone') { /* sem telefone */ }
+      else if (result.reason === 'already_notified') { /* já notificado */ }
+    } catch (_) { /* não bloqueia */ }
+  }
+
   await loadOrders();
   if (pdv.initialized) pdvRenderMesas();
 }
@@ -2790,9 +2812,11 @@ const _FRIENDLY_ACTIONS = {
   update_user_role:       'Cargo do usuário alterado',
   deactivate_user:        'Conta desativada',
   activate_user:          'Conta ativada',
-  apply_discount:         'Desconto aplicado',
-  refund_payment:         'Pagamento estornado',
-  apply_courtesy:         'Cortesia aplicada',
+  apply_discount:              'Desconto aplicado',
+  refund_payment:              'Pagamento estornado',
+  apply_courtesy:              'Cortesia aplicada',
+  order_notification_sent:     'Notificação enviada ao cliente',
+  order_notification_failed:   'Falha ao enviar notificação',
 };
 
 const _STATUS_LABELS_PT = { novo:'Novo', em_preparo:'Em preparo', saiu_para_entrega:'Saiu para entrega', finalizado:'Finalizado', cancelado:'Cancelado' };

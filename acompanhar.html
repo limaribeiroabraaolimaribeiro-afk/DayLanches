@@ -246,22 +246,42 @@
       }
     }
 
+    let _trackingToken = null;
+    let _lastStatus = null;
+
+    async function loadTracking() {
+      if (!_trackingToken) return;
+      try {
+        const res  = await fetch(`${WORKER_URL}/order-tracking?token=${encodeURIComponent(_trackingToken)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao carregar pedido');
+        if (data.status !== _lastStatus) {
+          _lastStatus = data.status;
+          renderOrder(data);
+        }
+      } catch (err) {
+        console.warn('Erro ao atualizar:', err);
+      }
+    }
+
     /* Init */
     (async function init() {
       const params = new URLSearchParams(window.location.search);
-      const token  = params.get('token');
+      _trackingToken = params.get('token');
 
-      if (!token) {
+      if (!_trackingToken) {
         document.getElementById('app-content').innerHTML =
           '<p class="error-txt"><i class="fas fa-exclamation-circle"></i> Link inválido. Verifique o link recebido.</p>';
         return;
       }
 
       try {
-        const res  = await fetch(`${WORKER_URL}/order-tracking?token=${encodeURIComponent(token)}`);
+        const res  = await fetch(`${WORKER_URL}/order-tracking?token=${encodeURIComponent(_trackingToken)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro ao carregar pedido');
+        _lastStatus = data.status;
         renderOrder(data);
+        setInterval(loadTracking, 10000);
       } catch (err) {
         document.getElementById('app-content').innerHTML =
           `<p class="error-txt"><i class="fas fa-exclamation-circle"></i> ${err.message}</p>`;

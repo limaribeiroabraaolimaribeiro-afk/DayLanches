@@ -95,6 +95,10 @@ export default {
       return handlePrintAgentMarkPrinted(request, env);
     }
 
+    if (pathname === '/order-status-notification' && request.method === 'POST') {
+      return handleOrderStatusNotification(request, env);
+    }
+
     return json({ error: 'Not found' }, 404);
   },
 };
@@ -404,6 +408,116 @@ async function handlePrintAgentMarkPrinted(request, env) {
     return json({ success: true });
   } catch (err) {
     console.error('[DayLanches] Erro ao marcar impresso:', err);
+    return json({ error: 'Erro interno' }, 500);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   POST /order-status-notification — envia WhatsApp ao cliente
+══════════════════════════════════════════════════════════ */
+const NOTIFICATION_MESSAGES = {
+  em_preparo: (name, num, link) => `Olá, ${name}! 👋\n\nSeu pedido ${num} está em preparação.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
+  saiu_para_entrega: (name, num, link) => `Olá, ${name}! 🛵\n\nSeu pedido ${num} saiu para entrega.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
+  pronto: (name, num, link) => `Olá, ${name}! ✅\n\nSeu pedido ${num} está pronto para retirada.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
+  finalizado: (name, num, link) => `Olá, ${name}! ✅\n\nSeu pedido ${num} foi finalizado.\n\nObrigado pela preferência!\n\nDay Lanches`,
+  cancelado: (name, num, link, reason) => `Olá, ${name}.\n\nSeu pedido ${num} foi cancelado.\n${reason ? `Motivo: ${reason}\n` : ''}\nDay Lanches`,
+};
+
+const NOTIFIED_FIELD = {
+  em_preparo: 'notified_preparing_at',
+  saiu_para_entrega: 'notified_out_for_delivery_at',
+  pronto: 'notified_ready_at',
+  cancelado: 'notified_cancelled_at',
+};
+
+function normalizePhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('55') && digits.length >= 12) return digits;
+  if (digits.length >= 10) return '55' + digits;
+  return null;
+}
+
+async function sendWhatsAppMessage(phone, message, env) {
+  if (!env.EVOLUTION_API_URL || !env.EVOLUTION_API_KEY || !env.EVOLUTION_INSTANCE) {
+    console.warn('[DayLanches] Evolution API não configurada');
+    return { sent: false, reason: 'not_configured' };
+  }
+  try {
+    const res = await fetch(`${env.EVOLUTION_API_URL}/message/sendText/${env.EVOLUTION_INSTANCE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: env.EVOLUTION_API_KEY },
+      body: JSON.stringify({ number: phone, text: message }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.error('[DayLanches] Evolution API erro:', res.status, detail);
+      return { sent: false, reason: 'api_error', status: res.status };
+    }
+    return { sent: true };
+  } catch (err) {
+    console.error('[DayLanches] Evolution API falha:', err);
+    return { sent: false, reason: 'fetch_error' };
+  }
+}
+
+async function handleOrderStatusNotification(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+
+  const { order_id, new_status, cancel_reason } = body;
+  if (!order_id || !new_status) return json({ error: 'order_id e new_status obrigatórios' }, 400);
+
+  const msgBuilder = NOTIFICATION_MESSAGES[new_status];
+  if (!msgBuilder) return json({ ok: true, sent: false, reason: 'status_without_notification' });
+
+  const notifiedField = NOTIFIED_FIELD[new_status];
+
+  try {
+    const orders = await sbGet(env, 'orders',
+      `id=eq.${order_id}&select=order_number,customer_name,customer_phone,tracking_token,${notifiedField || 'id'},cancel_reason`);
+    if (!orders?.length) return json({ error: 'Pedido não encontrado' }, 404);
+    const order = orders[0];
+
+    if (notifiedField && order[notifiedField]) {
+      return json({ ok: true, sent: false, reason: 'already_notified' });
+    }
+
+    const phone = normalizePhone(order.customer_phone);
+    if (!phone) return json({ ok: true, sent: false, reason: 'no_phone' });
+
+    const num = order.order_number || order_id.slice(0, 8);
+    const name = order.customer_name || 'cliente';
+    const siteUrl = env.SITE_URL || 'https://www.daylanches.com.br';
+    const link = order.tracking_token ? `${siteUrl}/acompanhar.html?token=${order.tracking_token}` : siteUrl;
+    const reason = cancel_reason || order.cancel_reason || '';
+
+    const message = msgBuilder(name, `#${num}`, link, reason);
+    const result = await sendWhatsAppMessage(phone, message, env);
+
+    if (notifiedField) {
+      await sbPatch(env, 'orders', `id=eq.${order_id}`, { [notifiedField]: new Date().toISOString() });
+    }
+
+    try {
+      await fetch(`${env.SUPABASE_URL}/rest/v1/audit_logs`, {
+        method: 'POST',
+        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          actor_name: 'Sistema',
+          action: result.sent ? 'order_notification_sent' : 'order_notification_failed',
+          entity_type: 'order',
+          entity_id: order_id,
+          entity_label: `#${num}`,
+          source: 'worker',
+          metadata: { status: new_status, phone, channel: 'whatsapp_qr', provider: 'evolution_api', sent: result.sent, reason: result.reason || null },
+        }),
+      });
+    } catch (_) {}
+
+    return json({ ok: true, sent: result.sent, reason: result.reason || null });
+  } catch (err) {
+    console.error('[DayLanches] Erro notificação:', err);
     return json({ error: 'Erro interno' }, 500);
   }
 }
