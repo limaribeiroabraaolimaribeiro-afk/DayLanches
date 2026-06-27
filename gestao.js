@@ -3805,12 +3805,21 @@ function printReport() {
   const activeTab = tabNames[rpt.tab] || rpt.tab;
 
   const cardsEl = elid('rpt-cards');
-  const cardsHtml = cardsEl ? cardsEl.innerHTML : '';
+  const cardItems = cardsEl ? cardsEl.querySelectorAll('.rpt-card') : [];
+  let summaryRows = '';
+  cardItems.forEach(card => {
+    const val = card.querySelector('.rpt-card-val')?.textContent || '';
+    const label = card.querySelector('.rpt-card-label')?.textContent || '';
+    if (label) summaryRows += `<tr><td class="ps-label">${esc(label)}</td><td class="ps-val">${esc(val)}</td></tr>`;
+  });
 
   const tabEl = elid(`rpt-tab-${rpt.tab}`);
   const tabHtml = tabEl ? tabEl.innerHTML : '';
-
-  const cleanTabHtml = tabHtml.replace(/<div class="rpt-tab-export">[\s\S]*?<\/div>/g, '');
+  const cleanTabHtml = tabHtml
+    .replace(/<div class="rpt-tab-export">[\s\S]*?<\/div>/g, '')
+    .replace(/<button[^>]*>[\s\S]*?<\/button>/g, '')
+    .replace(/<a[^>]*class="rpt-link"[^>]*>/g, '<span style="font-weight:600">')
+    .replace(/<\/a>/g, '</span>');
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -3818,61 +3827,64 @@ function printReport() {
 <meta charset="UTF-8">
 <title>Day Lanches — Relatório Gerencial</title>
 <style>
-  @page { size: A4 portrait; margin: 18mm 15mm; }
+  @page { size: A4 portrait; margin: 16mm 14mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 11px; line-height: 1.5; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 11px; line-height: 1.45; background: #fff; }
 
-  .print-header { text-align: center; border-bottom: 3px solid #FF6B00; padding-bottom: 14px; margin-bottom: 16px; }
-  .print-brand { font-size: 22px; font-weight: 900; letter-spacing: .04em; }
-  .print-brand-day { color: #1a1a1a; font-style: italic; }
-  .print-brand-lanches { color: #FF6B00; }
-  .print-title { font-size: 14px; font-weight: 700; color: #333; margin-top: 4px; }
-  .print-meta { font-size: 10px; color: #666; margin-top: 6px; line-height: 1.7; }
-  .print-meta strong { color: #333; }
+  .pr-header { border-bottom: 2px solid #FF6B00; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .pr-brand { font-size: 18px; font-weight: 900; }
+  .pr-brand-day { color: #1a1a1a; font-style: italic; }
+  .pr-brand-lanches { color: #FF6B00; }
+  .pr-header-right { text-align: right; font-size: 9px; color: #666; line-height: 1.6; }
+  .pr-header-right strong { color: #333; }
 
-  .print-section-title { font-size: 12px; font-weight: 700; color: #1a1a1a; margin: 18px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+  .pr-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 2px; }
+  .pr-subtitle { font-size: 10px; color: #666; margin-bottom: 12px; }
 
-  .rpt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-bottom: 16px; }
-  .rpt-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 6px; text-align: center; }
-  .rpt-card-icon { display: none; }
-  .rpt-card-val { font-size: 13px; font-weight: 800; color: #1a1a1a; }
-  .rpt-card-label { font-size: 8px; color: #666; margin-top: 1px; }
+  .pr-section { font-size: 11px; font-weight: 700; color: #1a1a1a; margin: 14px 0 6px; padding: 3px 6px; background: #f0f0f0; border-left: 3px solid #FF6B00; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 10px; page-break-inside: auto; }
-  th { background: #f5f5f5; font-weight: 600; text-transform: uppercase; font-size: 8.5px; letter-spacing: .03em; color: #555; padding: 6px 5px; text-align: left; border-bottom: 2px solid #ddd; }
-  td { padding: 5px 5px; border-bottom: 1px solid #eee; vertical-align: top; }
-  tr { page-break-inside: avoid; }
+  .ps-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+  .ps-table th { background: #f5f5f5; font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #555; padding: 5px 8px; text-align: left; border: 1px solid #ddd; }
+  .ps-table td { padding: 4px 8px; border: 1px solid #e5e5e5; font-size: 10.5px; vertical-align: top; }
+  .ps-table tr:nth-child(even) td { background: #fafafa; }
+  .ps-table tr { page-break-inside: avoid; }
+  .ps-table thead { display: table-header-group; }
+  .ps-label { font-weight: 600; color: #333; width: 55%; }
+  .ps-val { text-align: right; font-weight: 700; color: #1a1a1a; }
 
-  .rpt-pill { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 8.5px; font-weight: 600; }
-  .rpt-pill-paid { background: #F0FDF4; color: #16a34a; }
-  .rpt-pill-pending { background: #FFF7ED; color: #EA580C; }
-  .rpt-pill-cancelled { background: #FEF2F2; color: #DC2626; }
+  .rpt-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .rpt-table th { background: #f5f5f5; font-weight: 700; font-size: 8.5px; text-transform: uppercase; letter-spacing: .03em; color: #555; padding: 5px 6px; text-align: left; border: 1px solid #ddd; }
+  .rpt-table td { padding: 4px 6px; border: 1px solid #e5e5e5; font-size: 10px; vertical-align: top; }
+  .rpt-table tr:nth-child(even) td { background: #fafafa; }
+  .rpt-table tr { page-break-inside: avoid; }
+  .rpt-table thead { display: table-header-group; }
 
-  .rpt-summary-box { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 10px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; margin-bottom: 12px; font-size: 10px; }
-  .rpt-summary-item strong { color: #FF6B00; }
+  .rpt-pill { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 8.5px; font-weight: 600; border: 1px solid; }
+  .rpt-pill-paid { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+  .rpt-pill-pending { background: #fff7ed; color: #ea580c; border-color: #fed7aa; }
+  .rpt-pill-cancelled { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 
-  .rpt-product-section { margin-bottom: 14px; }
-  .rpt-product-section h4 { font-size: 11px; font-weight: 700; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
+  .rpt-summary-box { padding: 6px 8px; background: #f9fafb; border: 1px solid #e5e5e5; margin-bottom: 10px; font-size: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .rpt-summary-item strong { color: #1a1a1a; }
+  .rpt-product-section { margin-bottom: 12px; }
+  .rpt-product-section h4 { font-size: 10.5px; font-weight: 700; margin-bottom: 4px; }
   .rpt-product-section h4 i { display: none; }
+  h3 { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
 
-  .rpt-activity-actor { font-weight: 600; color: #FF6B00; }
+  .rpt-activity-actor { font-weight: 600; }
   .rpt-activity-action { color: #333; }
   .rpt-activity-reason { font-size: 9px; color: #888; font-style: italic; }
   .rpt-revision-change { font-size: 9px; line-height: 1.5; }
   .rpt-rev-field { font-weight: 600; }
-  .rpt-rev-before { color: #DC2626; text-decoration: line-through; }
+  .rpt-rev-before { color: #dc2626; text-decoration: line-through; }
   .rpt-rev-after { color: #16a34a; font-weight: 600; }
-
-  .rpt-link { color: #1a1a1a; text-decoration: none; font-weight: 600; }
-  .rpt-visao-hint { font-size: 10px; color: #666; padding: 10px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
-  .rpt-visao-hint i { display: none; }
+  .rpt-visao-hint { display: none; }
   .sd-opts-cell { font-size: 9px; color: #888; }
-  .btn-sale-detail, .btn-secondary, .btn-primary { display: none !important; }
-  h3 { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
-  .empty-msg { font-size: 10px; color: #999; }
+  .empty-msg { font-size: 10px; color: #999; padding: 8px 0; }
+  .btn-sale-detail, .btn-secondary, .btn-primary, .rpt-link { font-weight: 600; color: #1a1a1a; text-decoration: none; cursor: default; }
 
-  .print-footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #ddd; text-align: center; font-size: 9px; color: #999; }
-  .print-btn { display: block; margin: 20px auto; padding: 10px 28px; font-size: 13px; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; }
+  .pr-footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #ccc; display: flex; justify-content: space-between; font-size: 8.5px; color: #999; }
+  .pr-print-btn { display: block; margin: 16px auto; padding: 10px 32px; font-size: 13px; border-radius: 6px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; }
   @media print {
     .no-print { display: none !important; }
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -3880,27 +3892,36 @@ function printReport() {
 </style>
 </head>
 <body>
-  <div class="print-header">
-    <div class="print-brand"><span class="print-brand-day">Day</span><span class="print-brand-lanches">Lanches</span></div>
-    <div class="print-title">Relatório Gerencial — ${esc(activeTab)}</div>
-    <div class="print-meta">
-      <strong>Período:</strong> ${esc(period)} &nbsp;·&nbsp;
+
+  <div class="pr-header">
+    <div>
+      <div class="pr-brand"><span class="pr-brand-day">Day</span><span class="pr-brand-lanches">Lanches</span></div>
+      <div class="pr-title">Relatório Gerencial</div>
+    </div>
+    <div class="pr-header-right">
+      <strong>Aba:</strong> ${esc(activeTab)}<br>
+      <strong>Período:</strong> ${esc(period)}<br>
       <strong>Emitido em:</strong> ${esc(now)}<br>
-      <strong>Funcionário:</strong> ${esc(empFilter)} &nbsp;·&nbsp;
-      <strong>Pagamento:</strong> ${esc(payFilter)} &nbsp;·&nbsp;
-      <strong>Status:</strong> ${esc(statusFilter)} &nbsp;·&nbsp;
-      <strong>Origem:</strong> ${esc(originFilter)}
+      ${empFilter !== 'Todos' ? `<strong>Funcionário:</strong> ${esc(empFilter)}<br>` : ''}
+      ${payFilter !== 'Todos' ? `<strong>Pagamento:</strong> ${esc(payFilter)}<br>` : ''}
+      ${statusFilter !== 'Todos' ? `<strong>Status:</strong> ${esc(statusFilter)}<br>` : ''}
+      ${originFilter !== 'Todas' ? `<strong>Origem:</strong> ${esc(originFilter)}<br>` : ''}
     </div>
   </div>
 
-  <div class="print-section-title">Resumo do período</div>
-  ${cardsHtml}
+  <div class="pr-section">Resumo do período</div>
+  <table class="ps-table">
+    <thead><tr><th>Indicador</th><th style="text-align:right">Valor</th></tr></thead>
+    <tbody>${summaryRows}</tbody>
+  </table>
 
-  <div class="print-section-title">${esc(activeTab)}</div>
-  ${cleanTabHtml}
+  ${rpt.tab !== 'visao' ? `<div class="pr-section">${esc(activeTab)}</div>${cleanTabHtml}` : ''}
 
-  <div class="print-footer">Relatório emitido pelo sistema Day Lanches</div>
-  <button class="print-btn no-print" onclick="window.print()">Imprimir</button>
+  <div class="pr-footer">
+    <span>Relatório emitido pelo sistema Day Lanches</span>
+    <span>${esc(now)}</span>
+  </div>
+  <button class="pr-print-btn no-print" onclick="window.print()">Imprimir / Salvar PDF</button>
 </body>
 </html>`;
 
