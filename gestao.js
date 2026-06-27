@@ -3793,7 +3793,121 @@ function exportReportCSV(type) {
 
 function printReport() {
   logAuditAction('print_report', 'report', null, getReportPeriodLabel());
-  window.print();
+
+  const period = getReportPeriodLabel();
+  const now = new Date().toLocaleString('pt-BR');
+  const empFilter = elid('rpt-employee')?.selectedOptions?.[0]?.text || 'Todos';
+  const payFilter = elid('rpt-payment')?.selectedOptions?.[0]?.text || 'Todos';
+  const statusFilter = elid('rpt-status')?.selectedOptions?.[0]?.text || 'Todos';
+  const originFilter = elid('rpt-origin')?.selectedOptions?.[0]?.text || 'Todas';
+
+  const tabNames = { visao:'Visão geral', financeiro:'Financeiro', clientes:'Clientes', entregas:'Entregas e taxas', produtos:'Produtos', funcionarios:'Funcionários', cancelados:'Cancelados', atividades:'Atividades', revisoes:'Revisões', impressoes:'Impressões' };
+  const activeTab = tabNames[rpt.tab] || rpt.tab;
+
+  const cardsEl = elid('rpt-cards');
+  const cardsHtml = cardsEl ? cardsEl.innerHTML : '';
+
+  const tabEl = elid(`rpt-tab-${rpt.tab}`);
+  const tabHtml = tabEl ? tabEl.innerHTML : '';
+
+  const cleanTabHtml = tabHtml.replace(/<div class="rpt-tab-export">[\s\S]*?<\/div>/g, '');
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Day Lanches — Relatório Gerencial</title>
+<style>
+  @page { size: A4 portrait; margin: 18mm 15mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; font-size: 11px; line-height: 1.5; }
+
+  .print-header { text-align: center; border-bottom: 3px solid #FF6B00; padding-bottom: 14px; margin-bottom: 16px; }
+  .print-brand { font-size: 22px; font-weight: 900; letter-spacing: .04em; }
+  .print-brand-day { color: #1a1a1a; font-style: italic; }
+  .print-brand-lanches { color: #FF6B00; }
+  .print-title { font-size: 14px; font-weight: 700; color: #333; margin-top: 4px; }
+  .print-meta { font-size: 10px; color: #666; margin-top: 6px; line-height: 1.7; }
+  .print-meta strong { color: #333; }
+
+  .print-section-title { font-size: 12px; font-weight: 700; color: #1a1a1a; margin: 18px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+
+  .rpt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-bottom: 16px; }
+  .rpt-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 6px; text-align: center; }
+  .rpt-card-icon { display: none; }
+  .rpt-card-val { font-size: 13px; font-weight: 800; color: #1a1a1a; }
+  .rpt-card-label { font-size: 8px; color: #666; margin-top: 1px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 10px; page-break-inside: auto; }
+  th { background: #f5f5f5; font-weight: 600; text-transform: uppercase; font-size: 8.5px; letter-spacing: .03em; color: #555; padding: 6px 5px; text-align: left; border-bottom: 2px solid #ddd; }
+  td { padding: 5px 5px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+
+  .rpt-pill { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 8.5px; font-weight: 600; }
+  .rpt-pill-paid { background: #F0FDF4; color: #16a34a; }
+  .rpt-pill-pending { background: #FFF7ED; color: #EA580C; }
+  .rpt-pill-cancelled { background: #FEF2F2; color: #DC2626; }
+
+  .rpt-summary-box { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 10px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; margin-bottom: 12px; font-size: 10px; }
+  .rpt-summary-item strong { color: #FF6B00; }
+
+  .rpt-product-section { margin-bottom: 14px; }
+  .rpt-product-section h4 { font-size: 11px; font-weight: 700; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
+  .rpt-product-section h4 i { display: none; }
+
+  .rpt-activity-actor { font-weight: 600; color: #FF6B00; }
+  .rpt-activity-action { color: #333; }
+  .rpt-activity-reason { font-size: 9px; color: #888; font-style: italic; }
+  .rpt-revision-change { font-size: 9px; line-height: 1.5; }
+  .rpt-rev-field { font-weight: 600; }
+  .rpt-rev-before { color: #DC2626; text-decoration: line-through; }
+  .rpt-rev-after { color: #16a34a; font-weight: 600; }
+
+  .rpt-link { color: #1a1a1a; text-decoration: none; font-weight: 600; }
+  .rpt-visao-hint { font-size: 10px; color: #666; padding: 10px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
+  .rpt-visao-hint i { display: none; }
+  .sd-opts-cell { font-size: 9px; color: #888; }
+  .btn-sale-detail, .btn-secondary, .btn-primary { display: none !important; }
+  h3 { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+  .empty-msg { font-size: 10px; color: #999; }
+
+  .print-footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid #ddd; text-align: center; font-size: 9px; color: #999; }
+  .print-btn { display: block; margin: 20px auto; padding: 10px 28px; font-size: 13px; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; }
+  @media print {
+    .no-print { display: none !important; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-header">
+    <div class="print-brand"><span class="print-brand-day">Day</span><span class="print-brand-lanches">Lanches</span></div>
+    <div class="print-title">Relatório Gerencial — ${esc(activeTab)}</div>
+    <div class="print-meta">
+      <strong>Período:</strong> ${esc(period)} &nbsp;·&nbsp;
+      <strong>Emitido em:</strong> ${esc(now)}<br>
+      <strong>Funcionário:</strong> ${esc(empFilter)} &nbsp;·&nbsp;
+      <strong>Pagamento:</strong> ${esc(payFilter)} &nbsp;·&nbsp;
+      <strong>Status:</strong> ${esc(statusFilter)} &nbsp;·&nbsp;
+      <strong>Origem:</strong> ${esc(originFilter)}
+    </div>
+  </div>
+
+  <div class="print-section-title">Resumo do período</div>
+  ${cardsHtml}
+
+  <div class="print-section-title">${esc(activeTab)}</div>
+  ${cleanTabHtml}
+
+  <div class="print-footer">Relatório emitido pelo sistema Day Lanches</div>
+  <button class="print-btn no-print" onclick="window.print()">Imprimir</button>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.', true); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 /* ══════════════════════════════════════
