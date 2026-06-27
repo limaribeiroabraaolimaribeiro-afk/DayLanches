@@ -1635,171 +1635,100 @@ async function markOrderPrinted(o) {
 }
 
 function buildReceiptHtml(orders) {
-  const logoUrl = new URL('assets/icons/day-lanches-gestao-192.png', window.location.href).href;
-  const blocks = orders.map(o => buildReceiptBlock(o, logoUrl)).join('');
+  const blocks = orders.map(o => buildReceiptBlock(o)).join('');
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Day Lanches — Comanda do pedido</title>
+<title>Day Lanches — Comanda</title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #1a1a1a; background: #fff; margin: 0; padding: 6mm; }
-
-  .receipt {
-    width: 80mm; max-width: 100%; margin: 0 auto 16px;
-    font-size: 15px;
-    border: 1px solid #ddd; border-radius: 10px;
-    overflow: hidden;
-  }
-  .receipt-body { padding: 0 6mm 6mm; }
-
-  .receipt-header {
-    text-align: center; padding: 10px 6mm 12px;
-    background: #1a1a1a; color: #fff;
-    border-bottom: 4px solid #FF6B00;
-  }
-  .receipt-logo { width: 60px; height: 60px; object-fit: contain; margin-bottom: 6px; border-radius: 10px; background: #fff; padding: 4px; }
-  .receipt-brand { font-size: 1.5rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; margin: 0; color: #fff; }
-  .receipt-subtitle { font-size: .72rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: #FF6B00; margin: 3px 0 0; }
-
-  .receipt-section { border-top: 1px dashed #ddd; padding-top: 10px; margin-top: 10px; }
-  .receipt-section:first-of-type { border-top: none; padding-top: 12px; margin-top: 0; }
-  .receipt-section p { margin: 3px 0; }
-
-  .receipt-row { display: flex; justify-content: space-between; gap: 8px; }
-  .receipt-row > div { flex: 1; }
-
-  .receipt-label { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #999; }
-  .receipt-value { font-size: .95rem; font-weight: 700; color: #1a1a1a; }
-
-  .receipt-tag {
-    text-align: center; font-size: 1.05rem; font-weight: 900;
-    letter-spacing: .15em; text-transform: uppercase;
-    background: #FF6B00; color: #fff;
-    border-radius: 6px; padding: 8px; margin: 0;
-  }
-
-  .receipt-seal {
-    text-align: center; font-size: .9rem; font-weight: 900;
-    letter-spacing: .1em; text-transform: uppercase;
-    border-radius: 6px; padding: 6px; margin: 8px 0 0;
-  }
-  .receipt-seal.is-paid    { background: #16a34a; color: #fff; }
-  .receipt-seal.is-pending { background: #DC2626; color: #fff; }
-
-  .receipt-total-box {
-    text-align: center; background: #1a1a1a; color: #fff;
-    border-radius: 8px; padding: 10px; margin-top: 4px;
-  }
-  .receipt-total-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; color: #FF6B00; }
-  .receipt-total-value { font-size: 1.7rem; font-weight: 900; color: #fff; margin-top: 2px; }
-
-  .receipt-items { font-size: .92rem; line-height: 1.45; }
-  .receipt-item-row { font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid #f0f0f0; }
-  .receipt-item-row:first-child { margin-top: 0; padding-top: 0; border-top: none; }
-  .receipt-opt { margin-left: 12px; font-size: .85em; color: #555; }
-
-  .receipt-footer { text-align: center; }
-  .receipt-tagline { font-size: .72rem; font-weight: 800; color: #FF6B00; letter-spacing: .04em; text-transform: uppercase; margin: 0; }
-
-  .print-btn { display: block; margin: 16px auto; padding: 10px 24px; font-size: 1rem; border-radius: 8px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; }
-
-  .receipt-page { page-break-after: always; }
-  .receipt-page:last-child { page-break-after: auto; }
-
-  @media print {
-    body { background: #fff; padding: 0; }
-    .receipt { border: 1px solid #ccc; }
-    .receipt-header { background: #1a1a1a !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt-tag { background: #FF6B00 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt-seal.is-paid { background: #16a34a !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt-seal.is-pending { background: #DC2626 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .receipt-total-box { background: #1a1a1a !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .no-print { display: none !important; }
-  }
+  @page { size: 80mm auto; margin: 3mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #000; background: #fff; width: 74mm; max-width: 100%; margin: 0 auto; padding: 2mm; line-height: 1.4; }
+  .rc { margin-bottom: 10mm; page-break-after: always; }
+  .rc:last-child { page-break-after: auto; }
+  .rc-hd { text-align: center; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 4px; }
+  .rc-brand { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
+  .rc-sub { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; }
+  .rc-sep { border: none; border-top: 1px dashed #000; margin: 5px 0; }
+  .rc-row { display: flex; justify-content: space-between; gap: 4px; font-size: 11px; }
+  .rc-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #555; letter-spacing: .04em; }
+  .rc-val { font-weight: 700; }
+  .rc-type { text-align: center; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; padding: 3px 0; border: 2px solid #000; margin: 4px 0; }
+  .rc-mesa { text-align: center; font-size: 15px; font-weight: 900; padding: 2px 0; }
+  .rc-status { text-align: center; font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 3px 0; border: 1px solid #000; margin: 3px 0; }
+  .rc-item { display: flex; justify-content: space-between; padding: 2px 0; font-weight: 700; font-size: 12px; }
+  .rc-item + .rc-item { border-top: 1px dotted #ccc; }
+  .rc-opt { margin-left: 10px; font-size: 10px; color: #333; font-weight: 400; }
+  .rc-total { display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; padding: 4px 0; }
+  .rc-ft { text-align: center; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #555; margin-top: 4px; }
+  .rc-print { display: block; margin: 10px auto; padding: 8px 20px; font-size: 13px; border: none; background: #FF6B00; color: #fff; cursor: pointer; font-weight: 700; border-radius: 4px; }
+  @media print { .no-print { display: none !important; } }
 </style>
 </head>
 <body>
   ${blocks}
-  <button class="print-btn no-print" onclick="window.print()"><i></i>Imprimir</button>
+  <button class="rc-print no-print" onclick="window.print()">Imprimir</button>
 </body>
 </html>`;
 }
 
-function buildReceiptBlock(o, logoUrl) {
-  const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
+function buildReceiptBlock(o) {
+  const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items || '[]') : []);
-  const loc   = o.location && typeof o.location === 'object' ? o.location : null;
-  const psInfo = getPaymentStatusLabel(o);
+  const loc = o.location && typeof o.location === 'object' ? o.location : null;
   const dateTime = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
   const isPaid = isPaidOrder(o);
-  const isBalcaoReceipt = o.order_source === 'balcao' || o.delivery_type === 'balcao';
-  const hasMesa = isBalcaoReceipt && o.table_number;
-  const deliveryTag = isBalcaoReceipt ? 'PEDIDO PRESENCIAL' : (o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA');
-
-  const itemsHtml = items.length
-    ? items.map(i => {
-        const opts = (i.options||[]).map(og => `<div class="receipt-opt">${esc(og.groupTitle)}: ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</div>`).join('');
-        const itemNote = i.notes ? `<div class="receipt-opt">Obs: ${esc(i.notes)}</div>` : '';
-        return `<div class="receipt-item-row">${i.qty}x ${esc(i.name)}</div>${opts}${itemNote}`;
-      }).join('')
-    : '<div>—</div>';
-
+  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const hasMesa = isBalcao && o.table_number;
+  const typeLabel = isBalcao ? 'BALCÃO' : (o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA');
+  const fee = Number(o.delivery_fee || 0);
   const addressText = o.customer_address_text || loc?.address || '';
-  const locHtml = addressText
-    ? `<p class="receipt-value">${esc(addressText).replace(/\n/g, '<br>')}</p>`
-    : `<p class="receipt-value">Localização aproximada enviada pelo cliente.<br>Consultar mapa na Gestão.</p>`;
 
-  return `
-  <div class="receipt receipt-page">
-    <div class="receipt-header">
-      <img class="receipt-logo" src="${esc(logoUrl)}" alt="Day Lanches">
-      <p class="receipt-brand">Day Lanches</p>
-      <p class="receipt-subtitle">Comanda do pedido</p>
-    </div>
-    <div class="receipt-body">
-    <div class="receipt-section">
-      <div class="receipt-row">
-        <div><span class="receipt-label">Pedido</span><br><span class="receipt-value">#${esc(num)}</span></div>
-        <div><span class="receipt-label">Data/Hora</span><br><span class="receipt-value">${dateTime}</span></div>
-      </div>
-    </div>
-    <div class="receipt-section">
-      <p><span class="receipt-label">Cliente</span><br><span class="receipt-value">${esc(o.customer_name || '—')}</span></p>
-      ${!isBalcaoReceipt ? `<p><span class="receipt-label">Telefone/WhatsApp</span><br><span class="receipt-value">${esc(o.customer_phone || '—')}</span></p>` : ''}
-    </div>
-    <div class="receipt-section">
-      <p class="receipt-tag">${deliveryTag}</p>
-      ${hasMesa ? `<p class="receipt-tag" style="margin-top:8px;background:#1D4ED8;font-size:1.3rem">MESA ${o.table_number}</p>` : ''}
-    </div>
-    <div class="receipt-section">
-      <div class="receipt-row">
-        <div><span class="receipt-label">Pagamento</span><br><span class="receipt-value">${esc(getPaymentLabel(o))}</span></div>
-        <div><span class="receipt-label">Status</span><br><span class="receipt-value">${psInfo ? esc(psInfo.text) : '—'}</span></div>
-      </div>
-      <p class="receipt-seal ${isPaid ? 'is-paid' : 'is-pending'}">${isPaid ? 'Pago' : 'Pagamento pendente'}</p>
-    </div>
-    <div class="receipt-section">
-      <div class="receipt-total-box">
-        <p class="receipt-total-label">Total do pedido</p>
-        <p class="receipt-total-value">R$ ${fmt(o.total || 0)}</p>
-      </div>
-    </div>
-    <div class="receipt-section receipt-items">
-      <p class="receipt-label">Itens</p>
-      ${itemsHtml}
-    </div>
-    ${o.notes ? `<div class="receipt-section"><p class="receipt-label">Observação do cliente</p><p class="receipt-value">${esc(o.notes)}</p></div>` : ''}
-    ${(o.delivery_type !== 'pickup' && !isBalcaoReceipt) ? `<div class="receipt-section">
-      <p class="receipt-label">Localização/Entrega</p>
-      ${locHtml}
-    </div>` : ''}
-    <div class="receipt-section receipt-footer">
-      <p class="receipt-tagline">Day Lanches — sabor que marca</p>
-    </div>
-    </div>
+  const itemsHtml = items.map(i => {
+    const t = i.total || (i.finalUnitPrice || i.unitPrice || 0) * (i.qty || 1) || 0;
+    const opts = (i.options || []).map(og => `<div class="rc-opt">· ${esc(og.groupTitle)}: ${(og.items || []).map(oi => esc(oi.name)).join(', ')}</div>`).join('');
+    const note = i.notes ? `<div class="rc-opt">Obs: ${esc(i.notes)}</div>` : '';
+    return `<div class="rc-item"><span>${i.qty || 1}x ${esc(i.name)}</span><span>R$ ${fmt(t)}</span></div>${opts}${note}`;
+  }).join('');
+
+  let html = `<div class="rc">
+  <div class="rc-hd">
+    <div class="rc-brand">Day Lanches</div>
+    <div class="rc-sub">Comanda do pedido</div>
+  </div>
+  <div class="rc-row"><span>Pedido: <strong>#${esc(num)}</strong></span><span>${dateTime}</span></div>
+  <hr class="rc-sep">
+  <div class="rc-type">${typeLabel}${hasMesa ? ` — MESA ${o.table_number}` : ''}</div>`;
+
+  if (hasMesa && !typeLabel.includes('MESA')) {
+    html += `<div class="rc-mesa">MESA ${o.table_number}</div>`;
+  }
+
+  html += `<hr class="rc-sep">
+  <div><span class="rc-lbl">Cliente</span><br><span class="rc-val">${esc(o.customer_name || '—')}</span></div>`;
+  if (!isBalcao && o.customer_phone) html += `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(o.customer_phone)}</span></div>`;
+  if (!isBalcao && addressText) html += `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>`;
+
+  html += `<hr class="rc-sep">
+  <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(getPaymentLabel(o))}</span></div>
+  <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>`;
+
+  html += `<hr class="rc-sep">
+  <div class="rc-lbl">Itens</div>
+  ${itemsHtml || '<div>—</div>'}`;
+
+  if (o.notes) html += `<div style="margin-top:3px"><span class="rc-lbl">Obs</span><br><span style="font-size:11px">${esc(o.notes)}</span></div>`;
+
+  html += `<hr class="rc-sep">
+  <div class="rc-row" style="font-size:11px"><span>Subtotal</span><span>R$ ${fmt(o.subtotal || 0)}</span></div>`;
+  if (fee > 0) html += `<div class="rc-row" style="font-size:11px"><span>Entrega</span><span>R$ ${fmt(fee)}</span></div>`;
+  html += `<div class="rc-total"><span>TOTAL</span><span>R$ ${fmt(o.total || 0)}</span></div>`;
+
+  html += `<hr class="rc-sep">
+  <div class="rc-ft">Day Lanches — sabor que marca</div>
   </div>`;
+  return html;
 }
 
 /* ══════════════════════════════════════
