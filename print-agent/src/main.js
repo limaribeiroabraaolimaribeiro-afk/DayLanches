@@ -16,11 +16,7 @@ const store = new Store({
 
 let mainWindow = null;
 let printWindow = null;
-
-const autoLauncher = new AutoLaunch({
-  name: 'Day Lanches Print Agent',
-  path: app.getPath('exe'),
-});
+let autoLauncher = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -42,6 +38,11 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  autoLauncher = new AutoLaunch({
+    name: 'Day Lanches Print Agent',
+    path: app.getPath('exe'),
+  });
+
   createWindow();
 
   app.on('activate', () => {
@@ -69,7 +70,7 @@ ipcMain.handle('save-config', (_event, config) => {
 ipcMain.handle('get-printers', async () => {
   const win = mainWindow || BrowserWindow.getAllWindows()[0];
   if (!win) return [];
-  const printers = win.webContents.getPrinters();
+  const printers = await win.webContents.getPrintersAsync();
   return printers.map(p => ({
     name: p.name,
     displayName: p.displayName || p.name,
