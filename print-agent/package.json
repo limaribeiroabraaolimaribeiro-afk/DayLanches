@@ -1,7 +1,7 @@
 {
-  "name": "day-lanches-print-agent",
-  "version": "1.0.0",
-  "description": "Day Lanches Print Agent — Impressão automática de comandas",
+  "name": "day-lanches-agent",
+  "version": "2.0.0",
+  "description": "Day Lanches Agent — Impressao e WhatsApp automatico",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron .",
@@ -15,12 +15,15 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
     "auto-launch": "^5.0.6",
-    "electron-store": "7.0.0"
+    "electron-store": "7.0.0",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
   },
   "build": {
-    "appId": "com.daylanches.printagent",
-    "productName": "Day Lanches Print Agent",
+    "appId": "com.daylanches.agent",
+    "productName": "Day Lanches Agent",
     "directories": {
       "output": "dist"
     },
@@ -33,7 +36,10 @@
       "allowToChangeInstallationDirectory": false,
       "installerIcon": "../assets/icons/day-lanches-gestao-512.png",
       "uninstallerIcon": "../assets/icons/day-lanches-gestao-512.png",
-      "shortcutName": "Day Lanches Print Agent"
-    }
+      "shortcutName": "Day Lanches Agent"
+    },
+    "asarUnpack": [
+      "node_modules/@whiskeysockets/**"
+    ]
   }
 }

@@ -2,18 +2,21 @@
 /* ─────────────────────────────────────────────────────────
    Day Lanches — Cloudflare Worker
    Rotas:
-     POST /create-payment            → cria checkout InfinitePay
-     POST /infinitepay/webhook       → confirma pagamento
-     GET  /order-tracking?token=     → dados públicos do pedido (página acompanhar)
-     GET  /reverse-geocode?lat=&lon= → converte coordenadas em endereço
-     GET  /health                    → health check
-     GET  /print-agent/health        → health check do Print Agent
-     GET  /print-agent/pending-orders → pedidos pendentes de impressão
-     POST /print-agent/mark-printed  → marca pedido como impresso
-     POST /order-status-notification → envia WhatsApp ao cliente
-     GET  /whatsapp/status           → status da instância WhatsApp
-     GET  /whatsapp/qrcode           → QR Code para conectar WhatsApp
-     POST /whatsapp/test-message     → envia mensagem de teste
+     POST /create-payment                      → cria checkout InfinitePay
+     POST /infinitepay/webhook                 → confirma pagamento
+     GET  /order-tracking?token=               → dados públicos do pedido
+     GET  /reverse-geocode?lat=&lon=           → converte coordenadas em endereço
+     GET  /health                              → health check
+     GET  /print-agent/health                  → health check do Print Agent
+     GET  /print-agent/pending-orders          → pedidos pendentes de impressão
+     POST /print-agent/mark-printed            → marca pedido como impresso
+     POST /order-status-notification           → cria notificação WhatsApp
+     GET  /whatsapp/status                     → status da instância WhatsApp
+     GET  /whatsapp/qrcode                     → QR Code para conectar WhatsApp
+     POST /whatsapp/test-message               → envia mensagem de teste
+     GET  /local-agent/pending-notifications   → notificações pendentes
+     POST /local-agent/mark-notification-sent  → marca notificação enviada
+     POST /local-agent/mark-notification-failed → marca falha no envio
    ───────────────────────────────────────────────────────── */
 
 const CORS = {
@@ -50,6 +53,15 @@ async function sbPatch(env, table, params, body) {
   return fetch(url, {
     method: 'PATCH',
     headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+    body: JSON.stringify(body),
+  });
+}
+
+async function sbPost(env, table, body) {
+  const url = `${env.SUPABASE_URL}/rest/v1/${table}`;
+  return fetch(url, {
+    method: 'POST',
+    headers: { ...sbHeaders(env), Prefer: 'return=representation' },
     body: JSON.stringify(body),
   });
 }
@@ -114,6 +126,19 @@ export default {
 
     if (pathname === '/whatsapp/test-message' && request.method === 'POST') {
       return handleWhatsAppTestMessage(request, env);
+    }
+
+    /* ── Local Agent routes (polling de notificações) ── */
+    if (pathname === '/local-agent/pending-notifications' && request.method === 'GET') {
+      return handleLocalAgentPending(request, env);
+    }
+
+    if (pathname === '/local-agent/mark-notification-sent' && request.method === 'POST') {
+      return handleLocalAgentMarkSent(request, env);
+    }
+
+    if (pathname === '/local-agent/mark-notification-failed' && request.method === 'POST') {
+      return handleLocalAgentMarkFailed(request, env);
     }
 
     return json({ error: 'Not found' }, 404);
@@ -510,9 +535,41 @@ async function handleOrderStatusNotification(request, env) {
     const reason = cancel_reason || order.cancel_reason || '';
 
     const message = msgBuilder(name, `#${num}`, link, reason);
-    const result = await sendWhatsAppMessage(phone, message, env);
 
-    if (notifiedField) {
+    /* Criar registro na tabela order_notifications */
+    const notifRecord = {
+      order_id,
+      order_number: num,
+      customer_name: name,
+      customer_phone: phone,
+      status: new_status,
+      message,
+      tracking_link: link,
+      channel: 'whatsapp_local',
+      status_send: 'pendente',
+    };
+
+    try {
+      await sbPost(env, 'order_notifications', notifRecord);
+    } catch (_) {
+      console.error('[DayLanches] Erro ao criar order_notification');
+    }
+
+    /* Se Evolution API configurada (modo VPS), envia direto e marca */
+    const hasEvolution = !!(env.EVOLUTION_API_URL && env.EVOLUTION_API_KEY && env.EVOLUTION_INSTANCE);
+    let result = { sent: false, reason: 'queued_for_local_agent' };
+
+    if (hasEvolution) {
+      result = await sendWhatsAppMessage(phone, message, env);
+
+      if (result.sent) {
+        await sbPatch(env, 'order_notifications',
+          `order_id=eq.${order_id}&status=eq.${new_status}&status_send=eq.pendente`,
+          { status_send: 'enviado', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      }
+    }
+
+    if (notifiedField && result.sent) {
       await sbPatch(env, 'orders', `id=eq.${order_id}`, { [notifiedField]: new Date().toISOString() });
     }
 
@@ -522,12 +579,12 @@ async function handleOrderStatusNotification(request, env) {
         headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
         body: JSON.stringify({
           actor_name: 'Sistema',
-          action: result.sent ? 'order_notification_sent' : 'order_notification_failed',
+          action: result.sent ? 'order_notification_sent' : 'order_notification_queued',
           entity_type: 'order',
           entity_id: order_id,
           entity_label: `#${num}`,
           source: 'worker',
-          metadata: { status: new_status, phone, channel: 'whatsapp_qr', provider: 'evolution_api', sent: result.sent, reason: result.reason || null },
+          metadata: { status: new_status, phone, channel: hasEvolution ? 'whatsapp_qr' : 'whatsapp_local', sent: result.sent, reason: result.reason || null },
         }),
       });
     } catch (_) {}
@@ -625,4 +682,95 @@ async function handleWhatsAppTestMessage(request, env) {
   } catch (_) {}
 
   return json({ ok: true, sent: result.sent, reason: result.reason || null });
+}
+
+/* ══════════════════════════════════════════════════════════
+   LOCAL AGENT — Polling de notificações para envio local
+══════════════════════════════════════════════════════════ */
+
+/* GET /local-agent/pending-notifications */
+async function handleLocalAgentPending(request, env) {
+  if (!validatePrintAgentToken(request, env)) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const params = 'select=id,order_id,order_number,customer_name,customer_phone,status,message,tracking_link,attempts,created_at'
+      + '&status_send=eq.pendente&order=created_at.asc&limit=20';
+    const notifications = await sbGet(env, 'order_notifications', params);
+    return json({ notifications: Array.isArray(notifications) ? notifications : [] });
+  } catch (err) {
+    console.error('[DayLanches] Erro ao buscar notificações pendentes:', err);
+    return json({ error: 'Erro interno' }, 500);
+  }
+}
+
+/* POST /local-agent/mark-notification-sent */
+async function handleLocalAgentMarkSent(request, env) {
+  if (!validatePrintAgentToken(request, env)) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+
+  const { notification_id } = body;
+  if (!notification_id) return json({ error: 'notification_id required' }, 400);
+
+  try {
+    const now = new Date().toISOString();
+    await sbPatch(env, 'order_notifications', `id=eq.${notification_id}`, {
+      status_send: 'enviado',
+      sent_at: now,
+      updated_at: now,
+    });
+
+    /* Atualizar notified_*_at no pedido para evitar duplicidade */
+    const notifs = await sbGet(env, 'order_notifications', `id=eq.${notification_id}&select=order_id,status`);
+    if (notifs?.length) {
+      const { order_id, status } = notifs[0];
+      const field = NOTIFIED_FIELD[status];
+      if (field) {
+        await sbPatch(env, 'orders', `id=eq.${order_id}`, { [field]: now });
+      }
+    }
+
+    return json({ success: true });
+  } catch (err) {
+    console.error('[DayLanches] Erro ao marcar notificação enviada:', err);
+    return json({ error: 'Erro interno' }, 500);
+  }
+}
+
+/* POST /local-agent/mark-notification-failed */
+async function handleLocalAgentMarkFailed(request, env) {
+  if (!validatePrintAgentToken(request, env)) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+
+  const { notification_id, error_message } = body;
+  if (!notification_id) return json({ error: 'notification_id required' }, 400);
+
+  try {
+    const notifs = await sbGet(env, 'order_notifications', `id=eq.${notification_id}&select=attempts`);
+    const currentAttempts = notifs?.[0]?.attempts || 0;
+    const newAttempts = currentAttempts + 1;
+    const now = new Date().toISOString();
+
+    await sbPatch(env, 'order_notifications', `id=eq.${notification_id}`, {
+      attempts: newAttempts,
+      failed_at: now,
+      error_message: error_message || 'Erro desconhecido',
+      status_send: newAttempts >= 3 ? 'falhou' : 'pendente',
+      updated_at: now,
+    });
+
+    return json({ success: true, attempts: newAttempts, gave_up: newAttempts >= 3 });
+  } catch (err) {
+    console.error('[DayLanches] Erro ao marcar notificação falha:', err);
+    return json({ error: 'Erro interno' }, 500);
+  }
 }

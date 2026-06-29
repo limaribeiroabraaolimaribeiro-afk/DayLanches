@@ -1,6 +1,14 @@
 worker/.wrangler/
 print-agent/node_modules/
 print-agent/dist/
+print-agent/.env
+print-agent/*.log
+print-agent/auth/
+print-agent/sessions/
+print-agent/baileys_auth/
+print-agent/whatsapp-session/
+print-agent/config.json
+print-agent/user-data/
 
 # Evolution API
 infra/evolution/.env

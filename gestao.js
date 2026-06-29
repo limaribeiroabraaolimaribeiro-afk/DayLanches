@@ -1374,6 +1374,7 @@ async function updateOrderStatus(id, status) {
       });
       const result = await res.json();
       if (result.sent) toast('Notificação enviada ao cliente.');
+      else if (result.reason === 'queued_for_local_agent') { /* agente local envia */ }
       else if (result.reason === 'not_configured') { /* silencioso */ }
       else if (result.reason === 'no_phone') { /* sem telefone */ }
       else if (result.reason === 'already_notified') { /* já notificado */ }

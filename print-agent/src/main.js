@@ -1,7 +1,11 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+'use strict';
+
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const Store = require('electron-store');
 const AutoLaunch = require('auto-launch');
+const WhatsAppService = require('./whatsapp-service');
 
 const store = new Store({
   defaults: {
@@ -11,21 +15,63 @@ const store = new Store({
     paperType: '80mm',
     autoPrintEnabled: true,
     startWithWindows: false,
+    autoMonitorEnabled: false,
   },
 });
 
 let mainWindow = null;
 let printWindow = null;
+let tray = null;
 let autoLauncher = null;
+let whatsapp = null;
+
+const isHidden = process.argv.includes('--hidden');
+
+/* ── Tray ── */
+
+function createTray() {
+  const iconPath = path.join(__dirname, '..', '..', 'assets', 'icons', 'day-lanches-gestao-512.png');
+  let icon;
+  try {
+    icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  } catch (_) {
+    icon = nativeImage.createEmpty();
+  }
+
+  tray = new Tray(icon);
+  tray.setToolTip('Day Lanches Agent');
+
+  updateTrayMenu();
+
+  tray.on('double-click', () => {
+    if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+  });
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  const template = [
+    { label: 'Abrir painel', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { type: 'separator' },
+    { label: 'Iniciar monitoramento', click: () => mainWindow?.webContents.send('tray-start-monitoring') },
+    { label: 'Parar monitoramento', click: () => mainWindow?.webContents.send('tray-stop-monitoring') },
+    { type: 'separator' },
+    { label: 'Sair', click: () => { app.isQuitting = true; app.quit(); } },
+  ];
+  tray.setContextMenu(Menu.buildFromTemplate(template));
+}
+
+/* ── Window ── */
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 720,
-    minWidth: 600,
-    minHeight: 500,
-    title: 'Day Lanches Print Agent',
+    width: 960,
+    height: 780,
+    minWidth: 700,
+    minHeight: 600,
+    title: 'Day Lanches Agent',
     icon: path.join(__dirname, '..', '..', 'assets', 'icons', 'day-lanches-gestao-512.png'),
+    show: !isHidden,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -35,23 +81,71 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.setMenuBarVisibility(false);
+
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (store.get('autoMonitorEnabled')) {
+      mainWindow.webContents.send('auto-start-monitoring');
+    }
+  });
 }
+
+/* ── WhatsApp ── */
+
+function initWhatsApp() {
+  const authDir = path.join(app.getPath('userData'), 'whatsapp-auth');
+  whatsapp = new WhatsAppService(authDir);
+
+  whatsapp.on('status', (status) => {
+    mainWindow?.webContents.send('whatsapp-status-update', status);
+  });
+
+  whatsapp.on('qr', (dataUrl) => {
+    mainWindow?.webContents.send('whatsapp-qr-update', dataUrl);
+  });
+
+  whatsapp.on('error', (msg) => {
+    mainWindow?.webContents.send('whatsapp-error', msg);
+  });
+
+  if (whatsapp.hasSession()) {
+    whatsapp.connect().catch((err) => {
+      console.error('[Main] Auto-connect WhatsApp failed:', err);
+    });
+  }
+}
+
+/* ── App lifecycle ── */
 
 app.whenReady().then(() => {
   autoLauncher = new AutoLaunch({
-    name: 'Day Lanches Print Agent',
+    name: 'Day Lanches Agent',
     path: app.getPath('exe'),
+    isHidden: true,
   });
 
   createWindow();
+  createTray();
+  initWhatsApp();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
+app.on('before-quit', () => {
+  app.isQuitting = true;
+  if (whatsapp) whatsapp.destroy();
+});
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  /* Não fechar — continua rodando na bandeja */
 });
 
 /* ── IPC: Config ── */
@@ -103,6 +197,17 @@ ipcMain.handle('get-auto-launch', async () => {
   }
 });
 
+/* ── IPC: Auto Monitor ── */
+
+ipcMain.handle('set-auto-monitor', (_event, enabled) => {
+  store.set('autoMonitorEnabled', enabled);
+  return { success: true };
+});
+
+ipcMain.handle('get-auto-monitor', () => {
+  return store.get('autoMonitorEnabled', false);
+});
+
 /* ── IPC: Print receipt ── */
 
 ipcMain.handle('print-receipt', async (_event, { html, printerName, paperType }) => {
@@ -143,7 +248,7 @@ ipcMain.handle('print-receipt', async (_event, { html, printerName, paperType })
         if (success) {
           resolve({ success: true });
         } else {
-          resolve({ success: false, error: failureReason || 'Falha na impressão' });
+          resolve({ success: false, error: failureReason || 'Falha na impressao' });
         }
       });
     });
@@ -156,4 +261,41 @@ ipcMain.handle('print-receipt', async (_event, { html, printerName, paperType })
       resolve({ success: false, error: 'Falha ao carregar HTML da comanda' });
     });
   });
+});
+
+/* ── IPC: WhatsApp ── */
+
+ipcMain.handle('whatsapp-connect', async () => {
+  try {
+    await whatsapp.connect();
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('whatsapp-disconnect', async () => {
+  try {
+    await whatsapp.disconnect();
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('whatsapp-get-status', () => {
+  return whatsapp ? whatsapp.getStatus() : 'disconnected';
+});
+
+ipcMain.handle('whatsapp-get-qr', () => {
+  return whatsapp ? whatsapp.getQR() : null;
+});
+
+ipcMain.handle('whatsapp-send-message', async (_event, { phone, message }) => {
+  try {
+    await whatsapp.sendMessage(phone, message);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });

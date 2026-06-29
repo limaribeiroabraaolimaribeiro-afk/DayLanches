@@ -1,14 +1,26 @@
-# Day Lanches Print Agent
+# Day Lanches Agent
 
-Programa instalável para Windows que imprime automaticamente a comanda quando chega qualquer pedido novo no sistema Day Lanches.
+Programa instalavel para Windows que cuida de:
+- **Impressao automatica** de comandas quando chega pedido novo
+- **WhatsApp automatico** enviando notificacao ao cliente quando o status do pedido muda
 
-## Pré-requisitos
+Funciona 100% local, sem VPS e sem mensalidade.
+
+## Modo sem VPS
+
+- O computador da loja precisa ficar ligado durante o atendimento
+- Se o computador desligar, impressao e mensagens param
+- Ao ligar de novo, o Agent abre sozinho (se configurado)
+- Se WhatsApp desconectar, precisa gerar QR de novo
+
+## Pre-requisitos
 
 - Node.js 18+ instalado
-- Impressora instalada no Windows (térmica 80mm, 58mm ou impressora comum A4)
+- Impressora instalada no Windows (termica 80mm, 58mm ou A4)
 - Computador com internet
+- WhatsApp da loja para escanear o QR Code
 
-## Instalação (desenvolvimento)
+## Instalacao (desenvolvimento)
 
 ```bash
 cd print-agent
@@ -22,8 +34,8 @@ npm run dev
 npm run build
 ```
 
-O instalador será gerado em `print-agent/dist/` com o nome:
-**Day-Lanches-Print-Agent-Setup.exe**
+O instalador sera gerado em `print-agent/dist/`:
+**Day-Lanches-Agent-Setup.exe**
 
 ## Configurar o token no Worker
 
@@ -33,62 +45,90 @@ No terminal, dentro da pasta `worker/`:
 wrangler secret put PRINT_AGENT_TOKEN
 ```
 
-Digite um token seguro quando solicitado. Depois, use esse mesmo token no Print Agent.
-
-**Nunca commite o token real no código.**
+O mesmo token e usado para impressao e notificacoes WhatsApp.
 
 ## Instalar no computador da loja
 
-1. Copie o arquivo `Day-Lanches-Print-Agent-Setup.exe` para o computador da loja
-2. Execute o instalador e siga as instruções
-3. Abra o programa **Day Lanches Print Agent**
+1. Copie o arquivo `Day-Lanches-Agent-Setup.exe` para o computador
+2. Execute o instalador
+3. Abra o programa **Day Lanches Agent**
 
-## Configurar o Print Agent
+## Configurar
 
-1. **URL do Worker**: já vem preenchida, não precisa alterar
-2. **Token de impressão**: cole o mesmo token configurado no Worker
-3. **Impressora**: selecione a impressora instalada no Windows
-4. **Tipo de papel**: escolha o tipo correto (Térmica 80mm, 58mm ou A4)
-5. Clique em **Salvar configurações**
+1. Va na aba **Configuracoes**
+2. **URL do Worker**: ja vem preenchida
+3. **Token do agente**: cole o token configurado no Worker
+4. **Impressora**: selecione a impressora do Windows
+5. **Tipo de papel**: escolha o tipo correto
+6. Clique em **Salvar configuracoes**
+
+## Conectar WhatsApp
+
+1. Va na aba **WhatsApp**
+2. Clique em **Conectar WhatsApp**
+3. Um QR Code aparece na tela
+4. No celular da loja, abra WhatsApp > Aparelhos conectados > Conectar
+5. Escaneie o QR Code
+6. Status muda para "Conectado"
+
+A sessao fica salva no computador. Nao precisa escanear toda vez.
+
+## Ativar monitoramento automatico
+
+1. Na aba **Configuracoes**, ative:
+   - **Iniciar com Windows**
+   - **Iniciar monitoramento automaticamente**
+2. Salve as configuracoes
+
+Com isso, ao ligar o computador:
+- O Agent abre sozinho e minimiza na bandeja (perto do relogio)
+- Impressao e WhatsApp ja comecam a funcionar
+
+## Bandeja do sistema
+
+O Agent fica rodando na bandeja (perto do relogio):
+- Duplo-clique: abre o painel
+- Clique direito: menu com opcoes
+- Fechar no X: minimiza para bandeja (nao fecha)
+
+Para fechar de verdade: clique direito na bandeja > Sair.
 
 ## Testar
 
-### Testar conexão
-Clique em **Testar conexão** para verificar se o Print Agent consegue se comunicar com o Worker.
-- Se mostrar "Conectado com sucesso" está tudo certo.
-- Se mostrar erro, verifique o token e a conexão com internet.
+### Testar conexao
+Clique em **Testar conexao** para verificar comunicacao com o Worker.
 
-### Testar impressão
-Clique em **Testar impressão** para enviar uma comanda de teste para a impressora.
-- Se a comanda de teste sair na impressora, está funcionando.
-- Se não sair, verifique se a impressora está ligada e selecionada corretamente.
+### Testar impressao
+Clique em **Testar impressao** para enviar comanda de teste.
 
-## Ativar impressão automática
+### Testar WhatsApp
+Na aba WhatsApp, coloque um telefone de teste e clique em **Enviar mensagem de teste**.
 
-1. Marque **Impressão automática** como ativada
-2. Clique em **Iniciar monitoramento**
-3. O Print Agent vai verificar pedidos novos a cada 5 segundos
-4. Quando chegar um pedido novo, a comanda será impressa automaticamente
+## Fluxo de notificacoes
 
-## Iniciar com Windows
+1. Gestao altera status do pedido (ex: Em preparo)
+2. Worker cria registro em `order_notifications`
+3. Agent busca notificacoes pendentes a cada 10 segundos
+4. Agent envia WhatsApp pelo conector local (Baileys)
+5. Agent marca notificacao como enviada
 
-Marque a opção **Iniciar com Windows** para que o Print Agent abra automaticamente quando o computador ligar.
+## Solucao de problemas
 
-## Solução de problemas
-
-| Problema | Solução |
+| Problema | Solucao |
 |----------|---------|
-| "Token inválido" | Verifique se o token do Print Agent é o mesmo configurado no Worker |
-| Comanda não sai | Verifique se a impressora está ligada e selecionada corretamente |
-| "Erro de conexão" | Verifique a conexão com internet |
-| Impressora não aparece na lista | A impressora precisa estar instalada no Windows |
-| Pedido antigo imprimiu | Pedidos sem `printed_at` serão impressos na primeira execução |
+| "Token invalido" | Verifique se o token e o mesmo do Worker |
+| Comanda nao sai | Verifique impressora ligada e selecionada |
+| "Erro de conexao" | Verifique internet |
+| WhatsApp desconectou | Va na aba WhatsApp e gere novo QR Code |
+| Mensagem nao enviou | Verifique se WhatsApp esta conectado |
+| Agent nao abre com Windows | Ative "Iniciar com Windows" e salve |
 
-## Observações importantes
+## Migration SQL
 
-- A impressora precisa estar instalada no Windows
-- A impressora precisa estar ligada
-- O Print Agent precisa estar aberto ou configurado para iniciar com Windows
-- O computador precisa ter internet
-- Se trocar de impressora, selecione a nova impressora no Print Agent
-- O Print Agent usa apenas o token próprio (`PRINT_AGENT_TOKEN`), nunca a chave do Supabase
+Antes de usar o WhatsApp automatico, execute no Supabase:
+
+```
+sql/add_local_agent_notifications.sql
+```
+
+Isso cria a tabela `order_notifications` necessaria para a fila de mensagens.

@@ -27,7 +27,13 @@ body {
 .header {
   background: var(--text);
   color: #fff;
-  padding: 16px 24px;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-left {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -48,7 +54,13 @@ body {
   text-transform: uppercase;
   letter-spacing: .15em;
   color: var(--primary);
-  margin-left: auto;
+}
+
+.header-right { display: flex; align-items: center; }
+.header-desc {
+  font-size: .7rem;
+  color: #999;
+  letter-spacing: .03em;
 }
 
 /* ── Status bar ── */
@@ -56,11 +68,17 @@ body {
 .status-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 24px;
+  justify-content: space-between;
+  padding: 8px 24px;
   background: var(--card);
   border-bottom: 1px solid var(--border);
   font-size: .85rem;
+}
+
+.status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .status-dot {
@@ -82,16 +100,61 @@ body {
 
 .status-text { font-weight: 600; }
 
-/* ── Main layout ── */
+.wa-indicator {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 3px 10px;
+  background: var(--bg);
+  border-radius: 12px;
+}
 
-.main {
+.wa-indicator.wa-on { color: var(--success); background: #ecfdf5; }
+.wa-indicator.wa-off { color: var(--danger); background: #fef2f2; }
+
+/* ── Tabs ── */
+
+.tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 10px 20px;
+  font-size: .85rem;
+  font-weight: 600;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ── Tab content ── */
+
+.tab-content {
+  display: none;
+  padding: 16px 24px;
   flex: 1;
+  overflow-y: auto;
+}
+
+.tab-content.active { display: block; }
+
+.main-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  padding: 16px 24px;
-  overflow-y: auto;
 }
+
+/* ── Card ── */
 
 .card {
   background: var(--card);
@@ -111,11 +174,17 @@ body {
 
 .card-full { grid-column: 1 / -1; }
 
+.card-logs {
+  margin: 0 24px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+}
+
 /* ── Form elements ── */
 
-.form-group {
-  margin-bottom: 12px;
-}
+.form-group { margin-bottom: 12px; }
 
 .form-label {
   display: block;
@@ -137,9 +206,7 @@ body {
   transition: border-color .15s;
 }
 
-.form-input:focus, .form-select:focus {
-  border-color: var(--primary);
-}
+.form-input:focus, .form-select:focus { border-color: var(--primary); }
 
 /* ── Toggle ── */
 
@@ -150,10 +217,7 @@ body {
   padding: 8px 0;
 }
 
-.toggle-label {
-  font-size: .9rem;
-  font-weight: 500;
-}
+.toggle-label { font-size: .9rem; font-weight: 500; }
 
 .toggle {
   position: relative;
@@ -190,11 +254,10 @@ body {
 
 /* ── Buttons ── */
 
-.btn-row {
+.btn-col {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 8px;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .btn {
@@ -206,6 +269,7 @@ body {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   transition: background .15s, opacity .15s;
 }
@@ -230,10 +294,66 @@ body {
   border-radius: 8px;
 }
 
+/* ── Stats ── */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-box {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+
+.stat-box-wide { grid-column: 1 / -1; }
+
+.stat-val {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.stat-label {
+  font-size: .7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* ── WhatsApp status ── */
+
+.wa-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: 6px;
+}
+
+.wa-status-label {
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.wa-status-val {
+  font-size: .85rem;
+  font-weight: 700;
+}
+
+.wa-status-val.ws-connected { color: var(--success); }
+.wa-status-val.ws-disconnected { color: var(--danger); }
+.wa-status-val.ws-connecting { color: var(--primary); }
+
 /* ── Logs ── */
 
 .logs-area {
-  max-height: 260px;
+  max-height: 220px;
   overflow-y: auto;
   font-size: .8rem;
   font-family: 'Cascadia Code', 'Consolas', monospace;
@@ -257,32 +377,3 @@ body {
 .log-success { color: #3fb950; }
 .log-warn { color: #d29922; }
 .log-error { color: #f85149; }
-
-/* ── Stats row ── */
-
-.stats-row {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.stat-box {
-  flex: 1;
-  background: var(--bg);
-  border-radius: 6px;
-  padding: 10px;
-  text-align: center;
-}
-
-.stat-val {
-  font-size: 1.2rem;
-  font-weight: 800;
-  color: var(--text);
-}
-
-.stat-label {
-  font-size: .7rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
