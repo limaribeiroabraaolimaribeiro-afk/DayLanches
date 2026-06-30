@@ -133,6 +133,10 @@ export default {
       return handleLocalAgentPending(request, env);
     }
 
+    if (pathname === '/local-agent/order-status' && request.method === 'GET') {
+      return handleLocalAgentOrderStatus(request, url, env);
+    }
+
     if (pathname === '/local-agent/mark-notification-sent' && request.method === 'POST') {
       return handleLocalAgentMarkSent(request, env);
     }
@@ -738,6 +742,29 @@ async function handleLocalAgentMarkSent(request, env) {
     return json({ success: true });
   } catch (err) {
     console.error('[DayLanches] Erro ao marcar notificação enviada:', err);
+    return json({ error: 'Erro interno' }, 500);
+  }
+}
+
+/* GET /local-agent/order-status?order_number=DL-XXXXX */
+async function handleLocalAgentOrderStatus(request, url, env) {
+  if (!validatePrintAgentToken(request, env)) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  const orderNumber = url.searchParams.get('order_number');
+  if (!orderNumber) return json({ error: 'order_number required' }, 400);
+
+  try {
+    const orders = await sbGet(env, 'orders',
+      `order_number=eq.${encodeURIComponent(orderNumber)}&select=order_number,status,created_at`);
+
+    if (!orders?.length) return json({ error: 'Pedido nao encontrado' }, 404);
+
+    const o = orders[0];
+    return json({ order_number: o.order_number, status: o.status, created_at: o.created_at });
+  } catch (err) {
+    console.error('[DayLanches] Erro ao buscar status do pedido:', err);
     return json({ error: 'Erro interno' }, 500);
   }
 }

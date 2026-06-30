@@ -6,6 +6,7 @@ const fs = require('fs');
 const Store = require('electron-store');
 const AutoLaunch = require('auto-launch');
 const WhatsAppService = require('./whatsapp-service');
+const ChatBotService  = require('./chat-bot-service');
 
 const store = new Store({
   defaults: {
@@ -16,6 +17,11 @@ const store = new Store({
     autoPrintEnabled: true,
     startWithWindows: false,
     autoMonitorEnabled: false,
+    /* chatbot */
+    botEnabled: false,
+    botBusinessHours: 'Quarta a domingo, das 17h30 às 23h',
+    botMenuExpireHours: 12,
+    botHandoffPauseHours: 4,
   },
 });
 
@@ -24,6 +30,7 @@ let printWindow = null;
 let tray = null;
 let autoLauncher = null;
 let whatsapp = null;
+let chatBot = null;
 
 const isHidden = process.argv.includes('--hidden');
 
@@ -121,6 +128,53 @@ function initWhatsApp() {
   }
 }
 
+/* ── ChatBot ── */
+
+async function fetchOrderFromWorker(orderNum) {
+  const workerUrl = store.get('workerUrl', '').replace(/\/+$/, '');
+  const token = store.get('printAgentToken', '');
+  if (!workerUrl || !token) return null;
+  try {
+    const { net } = require('electron');
+    const res = await net.fetch(
+      `${workerUrl}/local-agent/order-status?order_number=${encodeURIComponent(orderNum)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+function initChatBot() {
+  const sessionsFile = path.join(app.getPath('userData'), 'bot-sessions.json');
+
+  chatBot = new ChatBotService(
+    sessionsFile,
+    () => ({
+      botEnabled: store.get('botEnabled', false),
+      botBusinessHours: store.get('botBusinessHours', 'Quarta a domingo, das 17h30 às 23h'),
+      botMenuExpireHours: store.get('botMenuExpireHours', 12),
+      botHandoffPauseHours: store.get('botHandoffPauseHours', 4),
+    }),
+    fetchOrderFromWorker
+  );
+
+  chatBot.on('log', (msg, level) => {
+    mainWindow?.webContents.send('chatbot-log', { msg, level });
+  });
+
+  whatsapp.on('message', async (parsed) => {
+    try {
+      const reply = await chatBot.handleMessage(parsed);
+      if (reply) await whatsapp.sendMessageToJid(reply.jid, reply.text);
+    } catch (err) {
+      console.error('[Main] ChatBot reply error:', err);
+    }
+  });
+}
+
 /* ── App lifecycle ── */
 
 app.whenReady().then(() => {
@@ -133,6 +187,7 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   initWhatsApp();
+  initChatBot();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -298,4 +353,30 @@ ipcMain.handle('whatsapp-send-message', async (_event, { phone, message }) => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+/* ── IPC: ChatBot ── */
+
+ipcMain.handle('chatbot-get-config', () => ({
+  botEnabled:           store.get('botEnabled', false),
+  botBusinessHours:     store.get('botBusinessHours', 'Quarta a domingo, das 17h30 às 23h'),
+  botMenuExpireHours:   store.get('botMenuExpireHours', 12),
+  botHandoffPauseHours: store.get('botHandoffPauseHours', 4),
+}));
+
+ipcMain.handle('chatbot-set-config', (_event, config) => {
+  const allowed = ['botEnabled', 'botBusinessHours', 'botMenuExpireHours', 'botHandoffPauseHours'];
+  for (const key of allowed) {
+    if (key in config) store.set(key, config[key]);
+  }
+  return { success: true };
+});
+
+ipcMain.handle('chatbot-get-stats', () => {
+  return chatBot ? chatBot.getStats() : { total: 0, lastReceivedAt: null, sessionCount: 0 };
+});
+
+ipcMain.handle('chatbot-clear-sessions', () => {
+  if (chatBot) chatBot.clearSessions();
+  return { success: true };
 });

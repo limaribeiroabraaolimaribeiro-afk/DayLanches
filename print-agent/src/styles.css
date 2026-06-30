@@ -100,7 +100,8 @@ body {
 
 .status-text { font-weight: 600; }
 
-.wa-indicator {
+.wa-indicator,
+.bot-indicator {
   font-size: .78rem;
   font-weight: 600;
   color: var(--text-muted);
@@ -111,6 +112,8 @@ body {
 
 .wa-indicator.wa-on { color: var(--success); background: #ecfdf5; }
 .wa-indicator.wa-off { color: var(--danger); background: #fef2f2; }
+.bot-indicator.bot-on { color: var(--success); background: #ecfdf5; }
+.bot-indicator.bot-off { color: var(--text-muted); background: var(--bg); }
 
 /* ── Tabs ── */
 
@@ -371,6 +374,36 @@ body {
 }
 
 .log-line:last-child { border-bottom: none; }
+
+/* ── ChatBot card ── */
+
+.bot-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.bot-hint {
+  font-size: .8rem;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.bot-body { }
+
+.bot-stats {
+  margin: 12px 0;
+}
+
+.stat-val-sm {
+  font-size: .95rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* ── Log colors ── */
 
 .log-time { color: #888; }
 .log-info { color: #58a6ff; }

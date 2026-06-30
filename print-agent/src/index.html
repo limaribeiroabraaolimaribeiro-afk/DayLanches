@@ -27,6 +27,7 @@
     </div>
     <div class="status-group">
       <span class="wa-indicator" id="wa-indicator">WhatsApp: --</span>
+      <span class="bot-indicator" id="bot-indicator">Bot: Inativo</span>
     </div>
   </div>
 
@@ -111,6 +112,51 @@
           <input type="text" class="form-input" id="wa-test-phone" placeholder="(11) 99999-9999">
         </div>
         <button class="btn btn-secondary" id="btn-wa-test" style="width:100%; margin-top:8px">Enviar mensagem de teste</button>
+      </div>
+
+      <!-- Atendimento automatico -->
+      <div class="card card-full">
+        <div class="bot-card-header">
+          <span class="card-title" style="margin-bottom:0">Atendimento automatico por menu</span>
+          <label class="toggle">
+            <input type="checkbox" id="cfg-bot-enabled">
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+
+        <p class="bot-hint">
+          Quando ativo, o robô responde automaticamente qualquer mensagem recebida com um menu de opcoes.
+          Grupos, mensagens proprias e status sao ignorados.
+        </p>
+
+        <div class="bot-body">
+          <div class="form-group">
+            <label class="form-label">Horario de atendimento (exibido na opcao 3)</label>
+            <input type="text" class="form-input" id="cfg-bot-hours"
+              placeholder="Ex: Quarta a domingo, das 17h30 as 23h">
+          </div>
+
+          <div class="stats-grid bot-stats">
+            <div class="stat-box">
+              <div class="stat-val" id="bot-stat-total">0</div>
+              <div class="stat-label">Respostas enviadas</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-val" id="bot-stat-sessions">0</div>
+              <div class="stat-label">Sessoes ativas (24h)</div>
+            </div>
+            <div class="stat-box stat-box-wide">
+              <div class="stat-val stat-val-sm" id="bot-stat-last">--</div>
+              <div class="stat-label">Ultima mensagem recebida</div>
+            </div>
+          </div>
+
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn btn-primary" id="btn-bot-save">Salvar configuracoes do robo</button>
+            <button class="btn btn-secondary" id="btn-bot-clear">Limpar sessoes</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

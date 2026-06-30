@@ -4,6 +4,37 @@ const { EventEmitter } = require('events');
 const path = require('path');
 const fs = require('fs');
 
+/* Extrai corpo de texto de uma mensagem Baileys */
+function parseBaileysMessage(raw) {
+  const jid = raw.key?.remoteJid || '';
+  if (!jid || jid === 'status@broadcast') return null;
+
+  const isGroup  = jid.endsWith('@g.us');
+  const isFromMe = !!raw.key.fromMe;
+
+  let m = raw.message;
+  if (!m) return null;
+
+  /* Desempacotar ephemeral / viewOnce */
+  m = m.ephemeralMessage?.message
+    || m.viewOnceMessage?.message
+    || m.viewOnceMessageV2?.message
+    || m;
+
+  let body = '';
+  let type = 'unknown';
+
+  if (m.conversation)                  { body = m.conversation;              type = 'text';     }
+  else if (m.extendedTextMessage?.text){ body = m.extendedTextMessage.text;  type = 'text';     }
+  else if (m.imageMessage)             { body = m.imageMessage.caption || ''; type = 'image';   }
+  else if (m.videoMessage)             { body = m.videoMessage.caption || ''; type = 'video';   }
+  else if (m.audioMessage)             {                                       type = 'audio';   }
+  else if (m.documentMessage)          {                                       type = 'document';}
+  else if (m.stickerMessage)           {                                       type = 'sticker'; }
+
+  return { from: jid, body, type, isGroup, isFromMe };
+}
+
 class WhatsAppService extends EventEmitter {
   constructor(authDir) {
     super();
@@ -77,6 +108,15 @@ class WhatsAppService extends EventEmitter {
 
       this.sock.ev.on('creds.update', saveCreds);
 
+      /* Mensagens recebidas → emite 'message' para o chatbot */
+      this.sock.ev.on('messages.upsert', ({ messages, type }) => {
+        if (type !== 'notify') return;
+        for (const raw of messages) {
+          const parsed = parseBaileysMessage(raw);
+          if (parsed) this.emit('message', parsed);
+        }
+      });
+
       this.sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
@@ -136,6 +176,14 @@ class WhatsAppService extends EventEmitter {
     if (!digits) throw new Error('Telefone invalido');
 
     const jid = digits + '@s.whatsapp.net';
+    await this.sock.sendMessage(jid, { text });
+  }
+
+  /* Envia diretamente para um JID completo (uso interno do chatbot) */
+  async sendMessageToJid(jid, text) {
+    if (!this.sock || this.status !== 'connected') {
+      throw new Error('WhatsApp nao conectado');
+    }
     await this.sock.sendMessage(jid, { text });
   }
 

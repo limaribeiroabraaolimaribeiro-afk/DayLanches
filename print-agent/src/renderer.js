@@ -48,6 +48,15 @@ const ui = {
   btnWaDisconn: () => $('btn-wa-disconnect'),
   waTestPhone:  () => $('wa-test-phone'),
   btnWaTest:    () => $('btn-wa-test'),
+  /* ChatBot */
+  botEnabled:   () => $('cfg-bot-enabled'),
+  botHours:     () => $('cfg-bot-hours'),
+  btnBotSave:   () => $('btn-bot-save'),
+  btnBotClear:  () => $('btn-bot-clear'),
+  botIndicator: () => $('bot-indicator'),
+  botStatTotal: () => $('bot-stat-total'),
+  botStatSess:  () => $('bot-stat-sessions'),
+  botStatLast:  () => $('bot-stat-last'),
 };
 
 /* ── Logging ── */
@@ -555,12 +564,52 @@ async function testWhatsApp() {
 }
 
 /* ══════════════════════════════════════════════════════════
+   CHATBOT UI
+══════════════════════════════════════════════════════════ */
+
+async function loadBotConfig() {
+  const cfg = await window.api.chatbotGetConfig();
+  ui.botEnabled().checked = cfg.botEnabled;
+  ui.botHours().value = cfg.botBusinessHours || '';
+  updateBotIndicator(cfg.botEnabled);
+}
+
+async function saveBotConfig() {
+  await window.api.chatbotSetConfig({
+    botEnabled:       ui.botEnabled().checked,
+    botBusinessHours: ui.botHours().value.trim(),
+  });
+  updateBotIndicator(ui.botEnabled().checked);
+  log('Configuracoes do robo salvas.', 'success');
+  await refreshBotStats();
+}
+
+async function refreshBotStats() {
+  try {
+    const stats = await window.api.chatbotGetStats();
+    ui.botStatTotal().textContent = stats.total;
+    ui.botStatSess().textContent  = stats.sessionCount;
+    ui.botStatLast().textContent  = stats.lastReceivedAt
+      ? new Date(stats.lastReceivedAt).toLocaleTimeString('pt-BR')
+      : '--';
+  } catch (_) {}
+}
+
+function updateBotIndicator(enabled) {
+  const el = ui.botIndicator();
+  if (!el) return;
+  el.textContent = enabled ? 'Bot: Ativo' : 'Bot: Inativo';
+  el.className = 'bot-indicator ' + (enabled ? 'bot-on' : 'bot-off');
+}
+
+/* ══════════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════════ */
 
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
   await loadConfig();
+  await loadBotConfig();
 
   /* Buttons */
   ui.btnSave().addEventListener('click', saveConfig);
@@ -582,6 +631,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   ui.btnWaDisconn().addEventListener('click', disconnectWhatsApp);
   ui.btnWaTest().addEventListener('click', testWhatsApp);
 
+  /* Bot toggle live update */
+  ui.botEnabled().addEventListener('change', () => {
+    updateBotIndicator(ui.botEnabled().checked);
+  });
+
+  /* Bot buttons */
+  ui.btnBotSave().addEventListener('click', saveBotConfig);
+  ui.btnBotClear().addEventListener('click', async () => {
+    if (!confirm('Limpar todas as sessoes do robo? Todos os clientes receberao o menu inicial novamente.')) return;
+    await window.api.chatbotClearSessions();
+    await refreshBotStats();
+    log('Sessoes do robo limpas.', 'warn');
+  });
+
   /* WhatsApp events from main process */
   window.api.onWhatsAppStatus((status) => {
     updateWaUI(status);
@@ -597,6 +660,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.api.onWhatsAppError((msg) => {
     log(`WhatsApp erro: ${msg}`, 'error');
+  });
+
+  /* ChatBot events */
+  window.api.onChatbotLog(async ({ msg, level }) => {
+    log(`[Bot] ${msg}`, level);
+    await refreshBotStats();
   });
 
   /* Tray events */
@@ -618,5 +687,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     ui.waQrContainer().style.display = '';
   }
 
+  await refreshBotStats();
   log('Day Lanches Agent pronto.', 'info');
 });
