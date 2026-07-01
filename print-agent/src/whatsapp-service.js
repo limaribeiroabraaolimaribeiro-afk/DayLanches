@@ -43,6 +43,8 @@ class WhatsAppService extends EventEmitter {
     this.status = 'disconnected';
     this.qrDataUrl = null;
     this._reconnectTimer = null;
+    this._reconnectAttempts = 0;
+    this._maxReconnectAttempts = 5;
     this._baileys = null;
     this._qrcode = null;
   }
@@ -61,9 +63,46 @@ class WhatsAppService extends EventEmitter {
     return fs.existsSync(path.join(this.authDir, 'creds.json'));
   }
 
-  async connect() {
-    if (this.status === 'connecting' || this.status === 'connected') return;
+  /* Encerra e desconecta o socket atual, removendo seus listeners para que eventos
+     tardios (ex: 'close' disparado apos o .end()) nao disparem uma reconexao paralela */
+  _teardownSocket() {
+    if (!this.sock) return;
+    try { this.sock.ev.removeAllListeners(); } catch (_) {}
+    try { this.sock.end(undefined); } catch (_) {}
+    this.sock = null;
+  }
 
+  /* Remove a sessao local salva do Baileys (nao pode ser reaproveitada apos logout/corrupcao) */
+  async _clearSessionFiles() {
+    try {
+      if (fs.existsSync(this.authDir)) {
+        fs.rmSync(this.authDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(this.authDir, { recursive: true });
+    } catch (err) {
+      this.emit('error', 'Erro ao limpar sessao local do WhatsApp: ' + err.message);
+      throw err;
+    }
+  }
+
+  /* forceNewQR: encerra a conexao atual, apaga a sessao salva e forca um novo QR Code */
+  async connect({ forceNewQR = false } = {}) {
+    if (!forceNewQR && (this.status === 'connecting' || this.status === 'connected')) return;
+
+    clearTimeout(this._reconnectTimer);
+    this._teardownSocket();
+
+    if (forceNewQR) {
+      try {
+        await this._clearSessionFiles();
+      } catch (_) {
+        this._setStatus('disconnected');
+        return;
+      }
+      this.qrDataUrl = null;
+    }
+
+    this._reconnectAttempts = 0;
     this._setStatus('connecting');
 
     try {
@@ -126,12 +165,15 @@ class WhatsAppService extends EventEmitter {
             this._setStatus('qr_ready');
             this.emit('qr', this.qrDataUrl);
           } catch (err) {
+            this.qrDataUrl = null;
+            this._setStatus('disconnected');
             this.emit('error', 'Erro ao gerar QR Code: ' + err.message);
           }
         }
 
         if (connection === 'open') {
           this.qrDataUrl = null;
+          this._reconnectAttempts = 0;
           this._setStatus('connected');
         }
 
@@ -139,14 +181,35 @@ class WhatsAppService extends EventEmitter {
           this.sock = null;
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const loggedOut = statusCode === DisconnectReason.loggedOut;
+          const restartRequired = statusCode === DisconnectReason.restartRequired;
 
           if (loggedOut) {
+            /* Sessao invalidada pelo WhatsApp: limpa creds para permitir novo QR na proxima tentativa */
+            await this._clearSessionFiles().catch(() => {});
+            this._reconnectAttempts = 0;
             this._setStatus('disconnected');
-          } else {
+            return;
+          }
+
+          if (restartRequired) {
+            /* Parte normal do handshake apos escanear o QR: reconecta rapido, sem contar como falha */
             this._setStatus('reconnecting');
             clearTimeout(this._reconnectTimer);
-            this._reconnectTimer = setTimeout(() => this.connect(), 5000);
+            this._reconnectTimer = setTimeout(() => this.connect(), 300);
+            return;
           }
+
+          this._reconnectAttempts += 1;
+          if (this._reconnectAttempts > this._maxReconnectAttempts) {
+            this._reconnectAttempts = 0;
+            this.emit('error', 'Nao foi possivel reconectar ao WhatsApp apos varias tentativas. Clique em "Gerar novo QR Code".');
+            this._setStatus('disconnected');
+            return;
+          }
+
+          this._setStatus('reconnecting');
+          clearTimeout(this._reconnectTimer);
+          this._reconnectTimer = setTimeout(() => this.connect(), 5000);
         }
       });
     } catch (err) {
@@ -159,12 +222,24 @@ class WhatsAppService extends EventEmitter {
 
   async disconnect() {
     clearTimeout(this._reconnectTimer);
+    this._reconnectAttempts = 0;
     if (this.sock) {
       try { await this.sock.logout(); } catch (_) {}
-      this.sock = null;
     }
+    this._teardownSocket();
+    await this._clearSessionFiles().catch(() => {});
     this.qrDataUrl = null;
     this._setStatus('disconnected');
+  }
+
+  /* Gera um novo QR Code: encerra a conexao atual e apaga a sessao para forcar novo pareamento */
+  async generateNewQR() {
+    return this.connect({ forceNewQR: true });
+  }
+
+  /* Reconecta do zero: encerra Baileys, limpa sessao local e inicia nova conexao com novo QR */
+  async resetConnection() {
+    return this.connect({ forceNewQR: true });
   }
 
   async sendMessage(phone, text) {
@@ -197,10 +272,7 @@ class WhatsAppService extends EventEmitter {
 
   destroy() {
     clearTimeout(this._reconnectTimer);
-    if (this.sock) {
-      try { this.sock.end(undefined); } catch (_) {}
-      this.sock = null;
-    }
+    this._teardownSocket();
     this.removeAllListeners();
   }
 

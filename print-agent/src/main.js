@@ -322,7 +322,26 @@ ipcMain.handle('print-receipt', async (_event, { html, printerName, paperType })
 
 ipcMain.handle('whatsapp-connect', async () => {
   try {
-    await whatsapp.connect();
+    /* Clique manual: sempre forca um novo QR Code (limpa sessao travada/invalida se houver) */
+    await whatsapp.connect({ forceNewQR: true });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('whatsapp-new-qr', async () => {
+  try {
+    await whatsapp.generateNewQR();
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('whatsapp-reset', async () => {
+  try {
+    await whatsapp.resetConnection();
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };

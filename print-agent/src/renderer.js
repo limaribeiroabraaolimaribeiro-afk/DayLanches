@@ -44,7 +44,10 @@ const ui = {
   waStatusText: () => $('wa-status-text'),
   waQrContainer:() => $('wa-qr-container'),
   waQrImg:      () => $('wa-qr-img'),
+  waErrorMsg:   () => $('wa-error-msg'),
   btnWaConnect: () => $('btn-wa-connect'),
+  btnWaNewQr:   () => $('btn-wa-new-qr'),
+  btnWaReset:   () => $('btn-wa-reset'),
   btnWaDisconn: () => $('btn-wa-disconnect'),
   waTestPhone:  () => $('wa-test-phone'),
   btnWaTest:    () => $('btn-wa-test'),
@@ -463,18 +466,32 @@ function sleep(ms) {
    WHATSAPP UI
 ══════════════════════════════════════════════════════════ */
 
+function showWaError(msg) {
+  const el = ui.waErrorMsg();
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+function hideWaError() {
+  const el = ui.waErrorMsg();
+  if (!el) return;
+  el.style.display = 'none';
+}
+
 function updateWaUI(status) {
   state.waStatus = status;
 
   const indicator = ui.waIndicator();
   const statusText = ui.waStatusText();
   const btnConn = ui.btnWaConnect();
+  const btnNewQr = ui.btnWaNewQr();
   const btnDisc = ui.btnWaDisconn();
   const qrContainer = ui.waQrContainer();
 
   const labels = {
     disconnected: 'Desconectado',
-    connecting: 'Conectando...',
+    connecting: 'Gerando QR Code...',
     qr_ready: 'Aguardando QR Code',
     connected: 'Conectado',
     reconnecting: 'Reconectando...',
@@ -496,14 +513,17 @@ function updateWaUI(status) {
 
   if (status === 'connected') {
     btnConn.style.display = 'none';
+    btnNewQr.style.display = 'none';
     btnDisc.style.display = '';
     qrContainer.style.display = 'none';
   } else if (status === 'qr_ready') {
     btnConn.style.display = 'none';
+    btnNewQr.style.display = '';
     btnDisc.style.display = '';
     qrContainer.style.display = '';
   } else {
     btnConn.style.display = '';
+    btnNewQr.style.display = '';
     btnDisc.style.display = 'none';
     if (status !== 'connecting' && status !== 'reconnecting') {
       qrContainer.style.display = 'none';
@@ -514,17 +534,60 @@ function updateWaUI(status) {
 async function connectWhatsApp() {
   const btn = ui.btnWaConnect();
   btn.disabled = true;
-  btn.textContent = 'Conectando...';
+  btn.textContent = 'Gerando QR Code...';
+  hideWaError();
+  ui.waQrContainer().style.display = 'none';
   log('Conectando WhatsApp...', 'info');
 
   const result = await window.api.whatsappConnect();
 
   if (!result.success) {
     log(`Erro ao conectar WhatsApp: ${result.error}`, 'error');
+    showWaError(result.error);
   }
 
   btn.disabled = false;
   btn.textContent = 'Conectar WhatsApp';
+}
+
+async function generateNewQR() {
+  const btn = ui.btnWaNewQr();
+  btn.disabled = true;
+  btn.textContent = 'Gerando QR Code...';
+  hideWaError();
+  ui.waQrContainer().style.display = 'none';
+  log('Gerando novo QR Code...', 'info');
+
+  const result = await window.api.whatsappNewQR();
+
+  if (!result.success) {
+    log(`Erro ao gerar QR Code: ${result.error}`, 'error');
+    showWaError(result.error);
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Gerar novo QR Code';
+}
+
+async function resetWhatsApp() {
+  if (!confirm('Isso vai encerrar a conexao atual e apagar a sessao salva do WhatsApp. Deseja continuar?')) return;
+
+  const btn = ui.btnWaReset();
+  btn.disabled = true;
+  btn.textContent = 'Reconectando...';
+  hideWaError();
+  ui.waQrContainer().style.display = 'none';
+  log('Reconectando WhatsApp do zero...', 'warn');
+
+  const result = await window.api.whatsappReset();
+
+  if (!result.success) {
+    log(`Erro ao reconectar: ${result.error}`, 'error');
+    showWaError(result.error);
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Reconectar do zero';
 }
 
 async function disconnectWhatsApp() {
@@ -533,7 +596,6 @@ async function disconnectWhatsApp() {
   log('Desconectando WhatsApp...', 'info');
 
   await window.api.whatsappDisconnect();
-  log('WhatsApp desconectado.', 'warn');
 
   btn.disabled = false;
 }
@@ -628,6 +690,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   /* WhatsApp buttons */
   ui.btnWaConnect().addEventListener('click', connectWhatsApp);
+  ui.btnWaNewQr().addEventListener('click', generateNewQR);
+  ui.btnWaReset().addEventListener('click', resetWhatsApp);
   ui.btnWaDisconn().addEventListener('click', disconnectWhatsApp);
   ui.btnWaTest().addEventListener('click', testWhatsApp);
 
@@ -648,11 +712,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   /* WhatsApp events from main process */
   window.api.onWhatsAppStatus((status) => {
     updateWaUI(status);
-    if (status === 'connected') log('WhatsApp conectado.', 'success');
+    if (status === 'connected') { hideWaError(); log('WhatsApp conectado.', 'success'); }
     if (status === 'reconnecting') log('WhatsApp reconectando...', 'warn');
+    if (status === 'disconnected') log('WhatsApp desconectado.', 'warn');
   });
 
   window.api.onWhatsAppQR((dataUrl) => {
+    hideWaError();
     ui.waQrImg().src = dataUrl;
     ui.waQrContainer().style.display = '';
     log('QR Code gerado. Escaneie com o WhatsApp da loja.', 'info');
@@ -660,6 +726,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.api.onWhatsAppError((msg) => {
     log(`WhatsApp erro: ${msg}`, 'error');
+    showWaError(msg);
   });
 
   /* ChatBot events */

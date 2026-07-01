@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
 
   /* WhatsApp */
   whatsappConnect:    ()          => ipcRenderer.invoke('whatsapp-connect'),
+  whatsappNewQR:      ()          => ipcRenderer.invoke('whatsapp-new-qr'),
+  whatsappReset:      ()          => ipcRenderer.invoke('whatsapp-reset'),
   whatsappDisconnect: ()          => ipcRenderer.invoke('whatsapp-disconnect'),
   whatsappGetStatus:  ()          => ipcRenderer.invoke('whatsapp-get-status'),
   whatsappGetQR:      ()          => ipcRenderer.invoke('whatsapp-get-qr'),

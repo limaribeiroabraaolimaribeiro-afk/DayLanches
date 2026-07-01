@@ -95,8 +95,12 @@
 
         <div class="btn-col" style="margin-top:12px">
           <button class="btn btn-primary" id="btn-wa-connect" style="width:100%">Conectar WhatsApp</button>
+          <button class="btn btn-secondary" id="btn-wa-new-qr" style="width:100%; display:none">Gerar novo QR Code</button>
           <button class="btn btn-danger" id="btn-wa-disconnect" style="width:100%; display:none">Desconectar</button>
+          <button class="btn btn-secondary" id="btn-wa-reset" style="width:100%">Reconectar do zero</button>
         </div>
+
+        <div id="wa-error-msg" class="wa-error-msg" style="display:none"></div>
 
         <div id="wa-qr-container" style="display:none; margin-top:16px; text-align:center">
           <p class="form-label" style="margin-bottom:8px">Escaneie o QR Code com o WhatsApp da loja:</p>

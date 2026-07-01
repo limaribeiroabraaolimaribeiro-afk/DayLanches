@@ -353,6 +353,17 @@ body {
 .wa-status-val.ws-disconnected { color: var(--danger); }
 .wa-status-val.ws-connecting { color: var(--primary); }
 
+.wa-error-msg {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  color: var(--danger);
+  font-size: .8rem;
+  font-weight: 600;
+}
+
 /* ── Logs ── */
 
 .logs-area {
