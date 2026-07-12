@@ -29,13 +29,15 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "../assets/icons/day-lanches-gestao-512.png"
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "forceCodeSigning": false
     },
     "nsis": {
       "oneClick": true,
       "allowToChangeInstallationDirectory": false,
-      "installerIcon": "../assets/icons/day-lanches-gestao-512.png",
-      "uninstallerIcon": "../assets/icons/day-lanches-gestao-512.png",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
       "shortcutName": "Day Lanches Agent"
     },
     "asarUnpack": [
