@@ -7,14 +7,23 @@ A Evolution API envia mensagens automáticas de WhatsApp quando o status do pedi
 ## Arquitetura
 
 ```
-Cliente WhatsApp ← Evolution API ← Worker Cloudflare ← Gestão Day Lanches
-                   (VPS Docker)    (chama Evolution)    (altera status)
+                              ┌── notificação de status (saída) ──┐
+Cliente WhatsApp ←── Evolution API ←── Worker Cloudflare ←── Gestão Day Lanches
+      │             (VPS Docker)      (chama Evolution)     (altera status)
+      │
+      └── mensagem do cliente (entrada, ex: "oi") ──► webhook ──► whatsapp-agent (PM2, VPS)
+                                                                    (menu automático,
+                                                                     consulta de pedido)
 ```
 
-- **Gestão** altera o status do pedido
-- **Worker** recebe a mudança e chama a Evolution API
-- **Evolution API** envia a mensagem via WhatsApp
-- A Gestão **nunca** chama a Evolution API diretamente
+- **Gestão** altera o status do pedido → **Worker** chama a Evolution API → mensagem sai.
+- **Cliente** manda mensagem → Evolution API repassa por webhook → **whatsapp-agent**
+  (processo PM2 separado, ver [../../whatsapp-agent/README.md](../../whatsapp-agent/README.md))
+  processa o menu e responde via REST da Evolution.
+- A Gestão **nunca** chama a Evolution API diretamente.
+- Existe **uma única sessão WhatsApp** (dentro do container `evolution-api`). O
+  `whatsapp-agent` não abre conexão própria — evita dois dispositivos logados
+  no mesmo número ao mesmo tempo.
 
 ## Requisitos
 
@@ -137,7 +146,32 @@ A resposta contém o QR Code em base64. Escaneie com o WhatsApp da loja (WhatsAp
 
 > Você também pode usar o painel da Gestão Day Lanches (Configurações > WhatsApp Automático) para gerar o QR Code.
 
-## Passo 9 — Configurar o Worker
+## Passo 9 — Instalar e iniciar o WhatsApp Agent (atendimento automático)
+
+Esse é o processo PM2 que responde às mensagens dos clientes (menu, consulta de
+pedido). Veja o guia completo em
+[whatsapp-agent/README.md](../../whatsapp-agent/README.md) — resumo:
+
+```bash
+cd ~/DayLanches/whatsapp-agent
+cp .env.example .env
+nano .env   # preencha EVOLUTION_API_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE,
+            # WORKER_URL e DAYLANCHES_AGENT_TOKEN
+
+npm install --omit=dev
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+Depois, registre o webhook para a Evolution encaminhar as mensagens recebidas
+para esse agente:
+
+```bash
+cd ~/DayLanches/infra/evolution
+./scripts/set-webhook.sh
+```
+
+## Passo 10 — Configurar o Worker
 
 Com a Evolution API online, configure os secrets no Worker:
 
@@ -156,7 +190,7 @@ npx wrangler secret put EVOLUTION_INSTANCE
 npx wrangler deploy
 ```
 
-## Passo 10 — Testar no Day Lanches
+## Passo 11 — Testar no Day Lanches
 
 1. Crie um pedido com telefone válido
 2. Na Gestão, altere o status para **Em preparo**
@@ -187,6 +221,14 @@ npx wrangler deploy
 - [ ] WhatsApp escaneado e conectado
 - [ ] Mensagem de teste enviada pela Evolution
 
+### Teste do WhatsApp Agent (atendimento automático)
+
+- [ ] `pm2 list` mostra `day-lanches-agent` como `online`
+- [ ] Webhook registrado (`./scripts/set-webhook.sh` executado sem erro)
+- [ ] Enviar "oi" do celular pessoal para o WhatsApp da loja → recebe o menu
+- [ ] Responder "2" e depois um número de pedido válido → recebe o status
+- [ ] `pm2 logs day-lanches-agent` mostra `[PEDIDO] Mensagem recebida...`
+
 ### Teste do Worker
 
 - [ ] Secrets configurados (`EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`)
@@ -211,6 +253,10 @@ npx wrangler deploy
 - **Nunca commite** `.env` ou chaves de API no repositório
 - **Nunca exponha** a `EVOLUTION_API_KEY` no frontend ou na Gestão
 - **PostgreSQL e Redis** não têm portas expostas — só acessíveis internamente
+- **A porta do whatsapp-agent (padrão 3001) precisa ficar bloqueada para a internet.**
+  Ela só existe para o container Evolution alcançar o processo PM2 no host. Configure
+  o firewall (`ufw`) para liberar essa porta apenas da rede interna do Docker — veja
+  o passo de firewall em [whatsapp-agent/README.md](../../whatsapp-agent/README.md).
 - **Caddy** gera e renova certificados SSL automaticamente
 - Se a chave vazar, troque `EVOLUTION_API_KEY` no `.env` e atualize o secret do Worker
 - Se o WhatsApp desconectar, gere novo QR Code pelo painel ou API

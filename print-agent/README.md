@@ -1,12 +1,21 @@
 # Day Lanches Agent
 
-Programa instalavel para Windows que cuida de:
-- **Impressao automatica** de comandas quando chega pedido novo
-- **WhatsApp automatico** enviando notificacao ao cliente quando o status do pedido muda
+Programa instalavel para Windows que cuida da **impressao automatica** de
+comandas quando chega pedido novo — isso continua rodando 100% local, e nao
+foi alterado pela migracao do WhatsApp para a VPS.
 
-Funciona 100% local, sem VPS e sem mensalidade.
+Este Agent tambem tem um modulo de WhatsApp local (Baileys) e um robo de
+atendimento por menu, usados no "modo sem VPS" abaixo. Com a VPS em
+producao (ver [../whatsapp-agent/README.md](../whatsapp-agent/README.md) e
+[../infra/evolution/README.md](../infra/evolution/README.md)), o WhatsApp
+passa a ser responsabilidade da VPS e **a aba "Atendimento automatico por
+menu" deste Agent deve ficar desativada** para nao responder em duplicidade
+ao mesmo cliente. A impressao continua normalmente, sem nenhuma mudanca.
 
-## Modo sem VPS
+## Modo sem VPS (fallback)
+
+Se a VPS/Evolution API estiver fora do ar ou ainda nao configurada, este
+Agent pode assumir o WhatsApp completo sozinho:
 
 - O computador da loja precisa ficar ligado durante o atendimento
 - Se o computador desligar, impressao e mensagens param
