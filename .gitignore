@@ -1,7 +1,6 @@
 worker/.wrangler/
 print-agent/node_modules/
-print-agent/dist/
-print-agent/dist-build/
+print-agent/dist*/
 print-agent/.env
 print-agent/*.log
 print-agent/auth/
