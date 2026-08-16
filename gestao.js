@@ -1031,7 +1031,7 @@ function orderCard(o) {
   const date  = o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) + ' — ' + new Date(o.created_at).toLocaleDateString('pt-BR') : '—';
   const num   = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items||'[]') : []);
-  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const isBalcao = o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao';
   const originLabel = isBalcao ? 'Balcão' : (o.delivery_type === 'pickup' ? 'Retirada' : (o.delivery_type === 'delivery' || (!isBalcao && o.delivery_type !== 'pickup') ? 'Entrega' : 'Online'));
   const originIcon = isBalcao ? 'fa-cash-register' : (o.delivery_type === 'pickup' ? 'fa-store' : 'fa-motorcycle');
   const creator = o.created_by_email?.split('@')[0] || (isBalcao ? null : 'Cliente online');
@@ -1164,7 +1164,7 @@ async function openOrderDetailModal(orderId) {
   const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : [];
   const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
-  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const isBalcao = o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao';
   const originLabel = isBalcao ? 'Balcão' : (o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega');
   const loc = o.location && typeof o.location === 'object' ? o.location : null;
   const addrTxt = o.customer_address_text || loc?.address || '';
@@ -1702,9 +1702,10 @@ function buildReceiptBlock(o) {
   const loc = o.location && typeof o.location === 'object' ? o.location : null;
   const dateTime = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
   const isPaid = isPaidOrder(o);
-  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const isBalcao = o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao';
+  const isDelivery = o.delivery_type === 'delivery';
   const hasMesa = isBalcao && o.table_number;
-  const typeLabel = isBalcao ? 'BALCÃO' : (o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA');
+  const typeLabel = isDelivery ? 'DELIVERY' : (isBalcao ? 'BALCÃO' : (o.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA'));
   const fee = Number(o.delivery_fee || 0);
   const addressText = o.customer_address_text || loc?.address || '';
 
@@ -1730,23 +1731,48 @@ function buildReceiptBlock(o) {
 
   html += `<hr class="rc-sep">
   <div><span class="rc-lbl">Cliente</span><br><span class="rc-val">${esc(o.customer_name || '—')}</span></div>`;
-  if (!isBalcao && o.customer_phone) html += `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(o.customer_phone)}</span></div>`;
-  if (!isBalcao && addressText) html += `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>`;
 
-  html += `<hr class="rc-sep">
+  if (isDelivery) {
+    if (o.customer_phone) html += `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(o.customer_phone)}</span></div>`;
+    if (addressText) html += `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px;white-space:pre-line">${esc(addressText)}</span></div>`;
+    if (loc?.neighborhood) html += `<div><span class="rc-lbl">Bairro</span><br><span class="rc-val">${esc(loc.neighborhood)}</span></div>`;
+    if (loc?.complement) html += `<div><span class="rc-lbl">Complemento</span><br><span class="rc-val">${esc(loc.complement)}</span></div>`;
+    if (loc?.reference) html += `<div><span class="rc-lbl">Referência</span><br><span class="rc-val">${esc(loc.reference)}</span></div>`;
+    if (fee > 0) html += `<div><span class="rc-lbl">Taxa de entrega</span><br><span class="rc-val">R$ ${fmt(fee)}</span></div>`;
+
+    html += `<hr class="rc-sep">
   <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(getPaymentLabel(o))}</span></div>
   <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>`;
 
-  html += `<hr class="rc-sep">
+    if (o.notes) html += `<div style="margin-top:3px"><span class="rc-lbl">Observação</span><br><span style="font-size:11px">${esc(o.notes)}</span></div>`;
+
+    html += `<hr class="rc-sep">
   <div class="rc-lbl">Itens</div>
   ${itemsHtml || '<div>—</div>'}`;
 
-  if (o.notes) html += `<div style="margin-top:3px"><span class="rc-lbl">Obs</span><br><span style="font-size:11px">${esc(o.notes)}</span></div>`;
-
-  html += `<hr class="rc-sep">
+    html += `<hr class="rc-sep">
   <div class="rc-row" style="font-size:11px"><span>Subtotal</span><span>R$ ${fmt(o.subtotal || 0)}</span></div>`;
-  if (fee > 0) html += `<div class="rc-row" style="font-size:11px"><span>Entrega</span><span>R$ ${fmt(fee)}</span></div>`;
-  html += `<div class="rc-total"><span>TOTAL</span><span>R$ ${fmt(o.total || 0)}</span></div>`;
+    if (fee > 0) html += `<div class="rc-row" style="font-size:11px"><span>Taxa de entrega</span><span>R$ ${fmt(fee)}</span></div>`;
+    html += `<div class="rc-total"><span>TOTAL</span><span>R$ ${fmt(o.total || 0)}</span></div>`;
+  } else {
+    if (!isBalcao && o.customer_phone) html += `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(o.customer_phone)}</span></div>`;
+    if (!isBalcao && addressText) html += `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>`;
+
+    html += `<hr class="rc-sep">
+  <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(getPaymentLabel(o))}</span></div>
+  <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>`;
+
+    html += `<hr class="rc-sep">
+  <div class="rc-lbl">Itens</div>
+  ${itemsHtml || '<div>—</div>'}`;
+
+    if (o.notes) html += `<div style="margin-top:3px"><span class="rc-lbl">Obs</span><br><span style="font-size:11px">${esc(o.notes)}</span></div>`;
+
+    html += `<hr class="rc-sep">
+  <div class="rc-row" style="font-size:11px"><span>Subtotal</span><span>R$ ${fmt(o.subtotal || 0)}</span></div>`;
+    if (fee > 0) html += `<div class="rc-row" style="font-size:11px"><span>Entrega</span><span>R$ ${fmt(fee)}</span></div>`;
+    html += `<div class="rc-total"><span>TOTAL</span><span>R$ ${fmt(o.total || 0)}</span></div>`;
+  }
 
   html += `<hr class="rc-sep">
   <div class="rc-ft">Day Lanches — sabor que marca</div>
@@ -1924,8 +1950,8 @@ function getFilteredSalesOrdersWithFilters() {
       if (payFilter === 'online') { if (!isOnlinePayment(o) || o.payment_method === 'pix_loja' || o.payment_method === 'cartao_maquininha') return false; }
       else if (o.payment_method !== payFilter) return false;
     }
-    if (originFilter === 'online' && (o.order_source === 'balcao' || o.delivery_type === 'balcao')) return false;
-    if (originFilter === 'balcao' && o.order_source !== 'balcao' && o.delivery_type !== 'balcao') return false;
+    if (originFilter === 'online' && o.order_source === 'balcao') return false;
+    if (originFilter === 'balcao' && o.order_source !== 'balcao') return false;
     if (empFilter && o.created_by_email !== empFilter && o.paid_by_email !== empFilter && o.handled_by_email !== empFilter) return false;
     return true;
   });
@@ -1985,9 +2011,9 @@ function renderSales() {
 }
 
 function getSaleOriginLabel(o) {
-  if (o.order_source === 'balcao' || o.delivery_type === 'balcao') return 'Balcão';
-  if (o.delivery_type === 'pickup') return 'Retirada';
   if (o.delivery_type === 'delivery') return 'Entrega';
+  if (o.delivery_type === 'pickup') return 'Retirada';
+  if (o.delivery_type === 'balcao' || o.order_source === 'balcao') return 'Balcão';
   return 'Online';
 }
 
@@ -2025,7 +2051,7 @@ function openSaleDetail(orderId) {
   const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
   const items = Array.isArray(o.items) ? o.items : [];
   const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
-  const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+  const isBalcao = o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao';
   const creator = o.created_by_email?.split('@')[0] || (isBalcao ? 'Sem registro' : 'Cliente online');
   const payer   = o.paid_by_email?.split('@')[0] || 'Sem registro';
 
@@ -3068,8 +3094,8 @@ function getFilteredReportOrders() {
     }
     if (statusFilter === 'pago' && !isPaidOrder(o)) return false;
     if (statusFilter === 'pendente' && isPaidOrder(o)) return false;
-    if (originFilter === 'online' && (o.order_source === 'balcao' || o.delivery_type === 'balcao')) return false;
-    if (originFilter === 'balcao' && o.order_source !== 'balcao' && o.delivery_type !== 'balcao') return false;
+    if (originFilter === 'online' && o.order_source === 'balcao') return false;
+    if (originFilter === 'balcao' && o.order_source !== 'balcao') return false;
     if (empFilter && o.created_by_email !== empFilter && o.paid_by_email !== empFilter && o.handled_by_email !== empFilter) return false;
     return true;
   });
@@ -3182,8 +3208,8 @@ function renderReports() {
   const topPayMethod = Object.entries(payMethodCount).sort((a, b) => b[1] - a[1])[0];
 
   const onlineCount = orders.filter(o => o.order_source !== 'balcao' && o.delivery_type !== 'balcao').length;
-  const balcaoCount = orders.filter(o => o.order_source === 'balcao' || o.delivery_type === 'balcao').length;
-  const entregaCount = orders.filter(o => o.delivery_type === 'delivery' && o.order_source !== 'balcao').length;
+  const balcaoCount = orders.filter(o => o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao').length;
+  const entregaCount = orders.filter(o => o.delivery_type === 'delivery').length;
   const retiradaCount = orders.filter(o => o.delivery_type === 'pickup').length;
 
   const cards = [
@@ -3393,7 +3419,7 @@ function renderRptEntregas() {
   const rows = orders.map(o => {
     const date = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
     const num = o.order_number || o.id?.slice(-8).toUpperCase() || '—';
-    const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+    const isBalcao = o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao';
     const deliveryLabel = isBalcao ? 'Balcão' : (o.delivery_type === 'pickup' ? 'Retirada' : 'Entrega');
     const fee = Number(o.delivery_fee || 0);
     const paid = isPaidOrder(o);
@@ -3758,7 +3784,7 @@ function exportReportCSV(type) {
     if (!orders.length) { toast('Nenhum dado para exportar.', true); return; }
     header = ['Data','Pedido','Cliente','Telefone','Tipo','Taxa entrega','Total','Pagamento'];
     rows = orders.map(o => {
-      const isBalcao = o.order_source === 'balcao' || o.delivery_type === 'balcao';
+      const isBalcao = o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao';
       return [
         o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '',
         o.order_number || '', o.customer_name || '', o.customer_phone || '',
@@ -4814,6 +4840,7 @@ const pdv = {
   optQty: 1,
   optSelections: {},
   optGroups: [],
+  orderType: 'balcao',
 };
 
 function pdvInit() {
@@ -5120,13 +5147,75 @@ function pdvCloseOptionsOutside(e) {
   if (e.target === elid('pdv-options-overlay')) pdvCloseOptions();
 }
 
+function pdvSetOrderType(type) {
+  pdv.orderType = type;
+  const isDelivery = type === 'delivery';
+
+  document.querySelectorAll('#pdv-order-type-grid .pdv-status-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.orderType === type);
+  });
+
+  const mesaSection = elid('pdv-mesa-section');
+  const deliverySection = elid('pdv-delivery-section');
+  const phoneGroup = elid('pdv-phone-group');
+  if (mesaSection) mesaSection.style.display = isDelivery ? 'none' : '';
+  if (deliverySection) deliverySection.style.display = isDelivery ? '' : 'none';
+  if (phoneGroup) phoneGroup.style.display = isDelivery ? '' : 'none';
+
+  const hint = elid('pdv-customer-hint');
+  if (hint) {
+    hint.textContent = isDelivery ? 'obrigatório' : 'opcional';
+    hint.classList.toggle('pdv-required', isDelivery);
+  }
+
+  if (!isDelivery) {
+    pdv.tableNumber = null;
+    ['pdv-customer-phone', 'pdv-addr-street', 'pdv-addr-number', 'pdv-addr-neighborhood', 'pdv-delivery-fee', 'pdv-addr-complement', 'pdv-addr-reference']
+      .forEach(id => { const el = elid(id); if (el) el.value = ''; });
+    pdvRenderMesas();
+  }
+
+  pdvRenderCart();
+}
+
+function pdvFormatPhone(input) {
+  let v = input.value.replace(/\D/g, '').substring(0, 11);
+  if (v.length > 6) {
+    v = '(' + v.substring(0,2) + ') ' + v.substring(2,7) + '-' + v.substring(7);
+  } else if (v.length > 2) {
+    v = '(' + v.substring(0,2) + ') ' + v.substring(2);
+  } else if (v.length > 0) {
+    v = '(' + v;
+  }
+  input.value = v;
+}
+
+function pdvGetDeliveryFee() {
+  const raw = (elid('pdv-delivery-fee')?.value || '').replace(',', '.').trim();
+  const n = parseFloat(raw);
+  return isNaN(n) || n < 0 ? 0 : n;
+}
+
+function pdvHighlightError(input) {
+  if (!input) return;
+  input.classList.add('pdv-field-error');
+  input.focus();
+  input.addEventListener('input', function clearErr() {
+    input.classList.remove('pdv-field-error');
+    input.removeEventListener('input', clearErr);
+  }, { once: true });
+}
+
 function pdvRenderCart() {
   const wrap = elid('pdv-cart-items');
+  const isDelivery = pdv.orderType === 'delivery';
+  const feeRow = elid('pdv-fee-row');
 
   if (!pdv.cart.length) {
     wrap.innerHTML = '<p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item adicionado</p>';
     elid('pdv-subtotal').textContent = 'R$ 0,00';
     elid('pdv-total').textContent = 'R$ 0,00';
+    if (feeRow) feeRow.style.display = 'none';
     return;
   }
 
@@ -5148,8 +5237,14 @@ function pdvRenderCart() {
   }).join('');
 
   const subtotal = pdv.cart.reduce((s, c) => s + c.total, 0);
+  const fee = isDelivery ? pdvGetDeliveryFee() : 0;
+  const total = subtotal + fee;
   elid('pdv-subtotal').textContent = `R$ ${fmt(subtotal)}`;
-  elid('pdv-total').textContent = `R$ ${fmt(subtotal)}`;
+  elid('pdv-total').textContent = `R$ ${fmt(total)}`;
+  if (feeRow) {
+    feeRow.style.display = isDelivery ? '' : 'none';
+    if (isDelivery) elid('pdv-fee-display').textContent = `R$ ${fmt(fee)}`;
+  }
 }
 
 function pdvChangeQty(index, delta) {
@@ -5177,23 +5272,43 @@ async function pdvClearCart() {
     if (!confirmed) return;
   }
   pdv.cart = [];
-  pdv.tableNumber = null;
-  elid('pdv-customer-name').value = '';
-  elid('pdv-notes').value = '';
-  pdvRenderMesas();
-  pdvRenderCart();
+  ['pdv-customer-name', 'pdv-notes', 'pdv-customer-phone', 'pdv-addr-street', 'pdv-addr-number', 'pdv-addr-neighborhood', 'pdv-delivery-fee', 'pdv-addr-complement', 'pdv-addr-reference']
+    .forEach(id => { const el = elid(id); if (el) el.value = ''; });
+  pdvSetOrderType('balcao');
 }
 
 async function pdvSave() {
   if (!pdv.cart.length) { toast('Adicione pelo menos um produto.', true); return; }
-  if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }
+
+  const isDelivery = pdv.orderType === 'delivery';
+
+  const customerName  = (elid('pdv-customer-name')?.value || '').trim();
+  const customerPhone = (elid('pdv-customer-phone')?.value || '').trim();
+  const street        = (elid('pdv-addr-street')?.value || '').trim();
+  const number         = (elid('pdv-addr-number')?.value || '').trim();
+  const neighborhood   = (elid('pdv-addr-neighborhood')?.value || '').trim();
+  const complement     = (elid('pdv-addr-complement')?.value || '').trim();
+  const reference      = (elid('pdv-addr-reference')?.value || '').trim();
+  const feeRaw         = (elid('pdv-delivery-fee')?.value || '').trim();
+  const fee            = pdvGetDeliveryFee();
+  const notes = (elid('pdv-notes')?.value || '').trim();
+
+  if (isDelivery) {
+    if (!customerName)  { toast('Informe o nome do cliente.', true); pdvHighlightError(elid('pdv-customer-name')); return; }
+    if (!customerPhone) { toast('Informe o telefone do cliente.', true); pdvHighlightError(elid('pdv-customer-phone')); return; }
+    if (!street)        { toast('Informe a rua da entrega.', true); pdvHighlightError(elid('pdv-addr-street')); return; }
+    if (!number)         { toast('Informe o número da entrega.', true); pdvHighlightError(elid('pdv-addr-number')); return; }
+    if (!neighborhood)   { toast('Informe o bairro da entrega.', true); pdvHighlightError(elid('pdv-addr-neighborhood')); return; }
+    if (!feeRaw)          { toast('Informe a taxa de entrega.', true); pdvHighlightError(elid('pdv-delivery-fee')); return; }
+  } else {
+    if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }
+  }
 
   const btn = elid('pdv-btn-save');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...'; }
 
-  const customerName = (elid('pdv-customer-name')?.value || '').trim() || 'Cliente balcão';
-  const notes = (elid('pdv-notes')?.value || '').trim();
   const subtotal = pdv.cart.reduce((s, c) => s + c.total, 0);
+  const total = subtotal + (isDelivery ? fee : 0);
   const orderNumber = `DL-${Math.floor(Math.random() * 90000) + 10000}`;
 
   const orderItems = pdv.cart.map(c => ({
@@ -5208,25 +5323,34 @@ async function pdvSave() {
   const actor = getCurrentActor();
   const orderData = {
     order_number: orderNumber,
-    customer_name: customerName,
-    customer_phone: null,
-    delivery_type: 'balcao',
+    customer_name: customerName || 'Cliente balcão',
+    customer_phone: isDelivery ? (customerPhone || null) : null,
+    delivery_type: isDelivery ? 'delivery' : 'balcao',
+    delivery_fee: isDelivery ? fee : 0,
     payment_method: 'a_definir',
     payment_status: 'pendente',
     paid_at: null,
     status: 'novo',
-    total: subtotal,
+    subtotal: subtotal,
+    total: total,
     items: orderItems,
     notes: notes || null,
     order_source: 'balcao',
-    table_number: pdv.tableNumber,
+    table_number: isDelivery ? null : pdv.tableNumber,
+    customer_address_text: isDelivery ? `${street}, nº ${number}` : null,
+    location: isDelivery ? {
+      neighborhood,
+      complement: complement || undefined,
+      reference: reference || undefined,
+      source: 'balcao_manual',
+    } : null,
     created_by_user_id: actor.id,
     created_by_email: actor.email,
     handled_by_user_id: actor.id,
     handled_by_email: actor.email,
   };
 
-  console.log('[PDV] Payload pedido presencial:', orderData);
+  console.log('[PDV] Payload pedido:', orderData);
 
   try {
     const { data, error } = await getSb().from('orders').insert(orderData).select('*').single();
@@ -5254,14 +5378,12 @@ async function pdvSave() {
     saveSeenOrderIds();
     updateOrderFilterCounts();
 
-    logAuditAction('create_order', 'order', data.id, `#${orderNumber}`, null, { table: pdv.tableNumber, total: subtotal });
+    logAuditAction('create_order', 'order', data.id, `#${orderNumber}`, null, { table: pdv.tableNumber, deliveryType: orderData.delivery_type, total });
 
     pdv.cart = [];
-    pdv.tableNumber = null;
-    elid('pdv-customer-name').value = '';
-    elid('pdv-notes').value = '';
-    pdvRenderMesas();
-    pdvRenderCart();
+    ['pdv-customer-name', 'pdv-notes', 'pdv-customer-phone', 'pdv-addr-street', 'pdv-addr-number', 'pdv-addr-neighborhood', 'pdv-delivery-fee', 'pdv-addr-complement', 'pdv-addr-reference']
+      .forEach(id => { const el = elid(id); if (el) el.value = ''; });
+    pdvSetOrderType('balcao');
 
     toast('Pedido salvo com sucesso.');
   } catch(e) {
@@ -5386,6 +5508,8 @@ window.pdvRemoveItem                  = pdvRemoveItem;
 window.pdvClearCart                    = pdvClearCart;
 window.pdvSave                        = pdvSave;
 window.pdvSelectMesa                  = pdvSelectMesa;
+window.pdvSetOrderType                = pdvSetOrderType;
+window.pdvFormatPhone                 = pdvFormatPhone;
 window.pdvCloseOptions                = pdvCloseOptions;
 window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
 window.pdvConfirmOptions              = pdvConfirmOptions;

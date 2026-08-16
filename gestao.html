@@ -295,10 +295,26 @@
             </div>
 
             <div class="pdv-cart-body">
-              <div class="pdv-cart-fields">
+              <div class="pdv-section-block" style="margin-top:0">
+                <label class="pdv-section-label">Tipo do pedido</label>
+                <div class="pdv-status-grid" id="pdv-order-type-grid">
+                  <button type="button" class="pdv-status-btn active" data-order-type="balcao" onclick="pdvSetOrderType('balcao')">
+                    <i class="fas fa-utensils"></i><span>Balcão / Mesa</span>
+                  </button>
+                  <button type="button" class="pdv-status-btn" data-order-type="delivery" onclick="pdvSetOrderType('delivery')">
+                    <i class="fas fa-motorcycle"></i><span>Delivery</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="pdv-cart-fields" style="margin-top:16px">
                 <div class="form-group">
-                  <label class="form-label">Cliente <span class="pdv-field-hint">opcional</span></label>
+                  <label class="form-label">Cliente <span class="pdv-field-hint" id="pdv-customer-hint">opcional</span></label>
                   <input type="text" id="pdv-customer-name" class="form-input" placeholder="Nome do cliente">
+                </div>
+                <div class="form-group" id="pdv-phone-group" style="display:none">
+                  <label class="form-label">Telefone / WhatsApp <span class="pdv-field-hint pdv-required">obrigatório</span></label>
+                  <input type="text" id="pdv-customer-phone" class="form-input" placeholder="(00) 00000-0000" inputmode="numeric" oninput="pdvFormatPhone(this)">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Observação <span class="pdv-field-hint">opcional</span></label>
@@ -315,17 +331,56 @@
                   <span>Subtotal</span>
                   <span id="pdv-subtotal">R$ 0,00</span>
                 </div>
+                <div class="pdv-summary-row" id="pdv-fee-row" style="display:none">
+                  <span>Taxa de entrega</span>
+                  <span id="pdv-fee-display">R$ 0,00</span>
+                </div>
                 <div class="pdv-summary-row pdv-summary-total">
                   <span>Total</span>
                   <span id="pdv-total">R$ 0,00</span>
                 </div>
               </div>
 
-              <div class="pdv-section-block">
+              <div class="pdv-section-block" id="pdv-mesa-section">
                 <label class="pdv-section-label">Mesa do cliente</label>
                 <div class="pdv-mesa-grid" id="pdv-mesa-grid"></div>
               </div>
 
+              <div class="pdv-section-block" id="pdv-delivery-section" style="display:none">
+                <label class="pdv-section-label">Dados da entrega</label>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Rua <span class="pdv-required">*</span></label>
+                    <input type="text" id="pdv-addr-street" class="form-input" placeholder="Nome da rua">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Número <span class="pdv-required">*</span></label>
+                    <input type="text" id="pdv-addr-number" class="form-input" placeholder="Nº">
+                  </div>
+                </div>
+
+                <div class="form-row" style="margin-top:12px">
+                  <div class="form-group">
+                    <label class="form-label">Bairro <span class="pdv-required">*</span></label>
+                    <input type="text" id="pdv-addr-neighborhood" class="form-input" placeholder="Bairro">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Taxa de entrega (R$) <span class="pdv-required">*</span></label>
+                    <input type="text" id="pdv-delivery-fee" class="form-input" placeholder="0,00" inputmode="decimal" oninput="pdvRenderCart()">
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-top:12px">
+                  <label class="form-label">Complemento <span class="pdv-field-hint">opcional</span></label>
+                  <input type="text" id="pdv-addr-complement" class="form-input" placeholder="Apto, bloco, etc.">
+                </div>
+
+                <div class="form-group" style="margin-top:12px">
+                  <label class="form-label">Ponto de referência <span class="pdv-field-hint">opcional</span></label>
+                  <input type="text" id="pdv-addr-reference" class="form-input" placeholder="Ex: Perto do mercado">
+                </div>
+              </div>
 
             </div>
 

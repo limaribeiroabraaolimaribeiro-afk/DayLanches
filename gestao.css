@@ -2879,6 +2879,19 @@ body.is-balcao .dash-header { display: none !important; }
   color: #b45309;
   box-shadow: 0 0 0 2px rgba(245,158,11,.15);
 }
+.pdv-status-btn.active[data-order-type] {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  box-shadow: 0 0 0 2px rgba(255,107,0,.15);
+}
+
+.pdv-required { color: var(--danger); font-weight: 700; }
+.pdv-field-hint.pdv-required { color: var(--danger); font-style: normal; }
+.pdv-field-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 2px rgba(239,68,68,.15);
+}
 
 /* Cart actions */
 .pdv-cart-actions {

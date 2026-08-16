@@ -455,7 +455,7 @@ async function handlePrintAgentPendingOrders(request, env) {
     const fields = [
       'id', 'order_number', 'created_at', 'customer_name', 'customer_phone',
       'delivery_type', 'order_source', 'table_number', 'payment_method',
-      'payment_status', 'paid_at', 'status', 'total', 'items', 'notes',
+      'payment_status', 'paid_at', 'status', 'subtotal', 'delivery_fee', 'total', 'items', 'notes',
       'customer_address_text', 'location', 'printed_at',
     ].join(',');
 

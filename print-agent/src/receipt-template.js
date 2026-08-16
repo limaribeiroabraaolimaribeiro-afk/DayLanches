@@ -14,14 +14,16 @@ function buildReceiptHtml(order, paperType) {
   const num = order.order_number || (order.id ? order.id.slice(-8).toUpperCase() : '---');
   const dateTime = order.created_at ? new Date(order.created_at).toLocaleString('pt-BR') : '---';
   const items = Array.isArray(order.items) ? order.items : [];
-  const isBalcao = order.order_source === 'balcao' || order.delivery_type === 'balcao';
+  const isBalcao = order.delivery_type ? order.delivery_type === 'balcao' : order.order_source === 'balcao';
+  const isDelivery = order.delivery_type === 'delivery';
   const hasMesa = isBalcao && order.table_number;
-  const typeLabel = isBalcao ? 'BALCÃO' : (order.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA');
+  const typeLabel = isDelivery ? 'DELIVERY' : (isBalcao ? 'BALCÃO' : (order.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA'));
   const isPaid = ['pago','paid','confirmado','confirmed','pagamento_confirmado'].includes(String(order.payment_status||'').toLowerCase()) || !!order.paid_at;
   const payLabels = { pix:'PIX',pix_online:'PIX',card:'Cartão',card_online:'Cartão',cash:'Dinheiro',online:'Online',dinheiro:'Dinheiro',pix_loja:'Pix na loja',cartao_maquininha:'Cartão maquininha',a_definir:'A definir' };
   const payLabel = payLabels[order.payment_method] || order.payment_method || '---';
   const fee = Number(order.delivery_fee || 0);
   const addressText = order.customer_address_text || (order.location?.address) || '';
+  const loc = order.location && typeof order.location === 'object' ? order.location : null;
 
   const itemsHtml = items.map(i => {
     const t = i.total || (i.finalUnitPrice||i.unitPrice||0)*(i.qty||1) || 0;
@@ -60,6 +62,25 @@ function buildReceiptHtml(order, paperType) {
   <div class="rc-type">${typeLabel}${hasMesa ? ' — MESA ' + order.table_number : ''}</div>
   <hr class="rc-sep">
   <div><span class="rc-lbl">Cliente</span><br><span class="rc-val">${esc(order.customer_name||'---')}</span></div>
+  ${isDelivery ? `
+  ${order.customer_phone ? `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(order.customer_phone)}</span></div>` : ''}
+  ${addressText ? `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px;white-space:pre-line">${esc(addressText)}</span></div>` : ''}
+  ${loc?.neighborhood ? `<div><span class="rc-lbl">Bairro</span><br><span class="rc-val">${esc(loc.neighborhood)}</span></div>` : ''}
+  ${loc?.complement ? `<div><span class="rc-lbl">Complemento</span><br><span class="rc-val">${esc(loc.complement)}</span></div>` : ''}
+  ${loc?.reference ? `<div><span class="rc-lbl">Referência</span><br><span class="rc-val">${esc(loc.reference)}</span></div>` : ''}
+  ${fee > 0 ? `<div><span class="rc-lbl">Taxa de entrega</span><br><span class="rc-val">R$ ${fmt(fee)}</span></div>` : ''}
+  <hr class="rc-sep">
+  <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(payLabel)}</span></div>
+  <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>
+  ${order.notes ? `<div style="margin-top:3px"><span class="rc-lbl">Observação</span><br><span style="font-size:11px">${esc(order.notes)}</span></div>` : ''}
+  <hr class="rc-sep">
+  <div class="rc-lbl">Itens</div>
+  ${itemsHtml}
+  <hr class="rc-sep">
+  <div class="rc-row" style="font-size:11px"><span>Subtotal</span><span>R$ ${fmt(order.subtotal||0)}</span></div>
+  ${fee > 0 ? `<div class="rc-row" style="font-size:11px"><span>Taxa de entrega</span><span>R$ ${fmt(fee)}</span></div>` : ''}
+  <div class="rc-total"><span>TOTAL</span><span>R$ ${fmt(order.total||0)}</span></div>
+  ` : `
   ${(!isBalcao && order.customer_phone) ? `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(order.customer_phone)}</span></div>` : ''}
   ${(!isBalcao && addressText) ? `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>` : ''}
   <hr class="rc-sep">
@@ -73,6 +94,7 @@ function buildReceiptHtml(order, paperType) {
   <div class="rc-row" style="font-size:11px"><span>Subtotal</span><span>R$ ${fmt(order.subtotal||0)}</span></div>
   ${fee > 0 ? `<div class="rc-row" style="font-size:11px"><span>Entrega</span><span>R$ ${fmt(fee)}</span></div>` : ''}
   <div class="rc-total"><span>TOTAL</span><span>R$ ${fmt(order.total||0)}</span></div>
+  `}
   <hr class="rc-sep">
   <div class="rc-ft">Day Lanches — sabor que marca</div>
 </body>
