@@ -643,15 +643,10 @@ async function handleWhatsAppQRCode(env) {
     }
     const data = await res.json();
 
-    /* data.code costuma ser o payload bruto usado para desenhar o QR (string longa) —
-       nunca deve ser exibido como "codigo de pareamento". So um pairingCode curto e
-       genuino (poucos caracteres, formato tipo "ABCD-1234") deve aparecer na tela. */
-    const rawPairingCode = typeof data.pairingCode === 'string' ? data.pairingCode.trim() : '';
-    const pairingCode = rawPairingCode && rawPairingCode.length <= 20 ? rawPairingCode : null;
-
+    /* Conexao e somente por QR Code — nunca repassar data.code (payload bruto usado
+       para desenhar o QR) nem data.pairingCode para a interface da Gestao. */
     return json({
       qrcode: data.base64 || data.qrcode?.base64 || null,
-      pairingCode,
       instance: env.EVOLUTION_INSTANCE,
     });
   } catch (err) {

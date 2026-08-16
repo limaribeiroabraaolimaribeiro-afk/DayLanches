@@ -2450,10 +2450,8 @@ async function waCheckStatus() {
 
 async function waGenerateQR() {
   const imgContainer = elid('wa-qrcode-img');
-  const pairingEl = elid('wa-pairing-code');
   if (!imgContainer) return;
   imgContainer.innerHTML = '<span class="wa-qr-placeholder">Gerando QR Code...</span>';
-  if (pairingEl) { pairingEl.style.display = 'none'; pairingEl.textContent = ''; }
   try {
     const res = await fetch(`${WORKER_URL}/whatsapp/qrcode`);
     const data = await res.json();
@@ -2466,11 +2464,6 @@ async function waGenerateQR() {
       imgContainer.innerHTML = `<img src="${src}" alt="QR Code WhatsApp">`;
     } else {
       imgContainer.innerHTML = '<span class="wa-qr-placeholder">QR Code não disponível no momento. Clique em "Atualizar status".</span>';
-    }
-    /* Somente um pairingCode curto e genuino (nunca o payload bruto do QR) */
-    if (data.pairingCode && pairingEl) {
-      pairingEl.textContent = `Código de pareamento: ${data.pairingCode}`;
-      pairingEl.style.display = 'block';
     }
   } catch (err) {
     imgContainer.innerHTML = '<span class="wa-qr-error">Erro ao gerar QR Code</span>';
