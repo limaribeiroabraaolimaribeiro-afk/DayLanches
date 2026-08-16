@@ -3,147 +3,74 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Day Lanches Agent</title>
+  <title>Day Lanches Impressão</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- Header -->
-  <div class="header">
-    <div class="header-left">
-      <div class="header-brand"><span class="day">Day</span><span class="lanches">Lanches</span></div>
-      <div class="header-sub">Agent</div>
+  <!-- Vista principal — o que a Dayane ve no dia a dia -->
+  <div class="view" id="view-main">
+    <div class="app-header">
+      <span class="app-title">Day Lanches Impressão</span>
+      <button type="button" class="icon-btn" id="btn-open-settings" title="Configuração avançada">⚙</button>
     </div>
-    <div class="header-right">
-      <span class="header-desc">Impressao automatica de comandas</span>
+
+    <div class="status-row">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="status-text" id="status-text">Verificando...</span>
     </div>
+
+    <div class="field">
+      <label class="field-label" for="cfg-printer">Impressora</label>
+      <select class="field-select" id="cfg-printer">
+        <option value="__default__">Impressora padrão do Windows</option>
+      </select>
+    </div>
+
+    <button type="button" class="btn btn-secondary btn-block" id="btn-test-print">Testar impressão</button>
+
+    <div class="options">
+      <label class="option-row">
+        <input type="checkbox" id="cfg-auto-print" checked>
+        <span>Imprimir pedidos automaticamente</span>
+      </label>
+      <label class="option-row">
+        <input type="checkbox" id="cfg-auto-launch">
+        <span>Iniciar com o Windows</span>
+      </label>
+    </div>
+
+    <p class="last-check">Último pedido verificado: <span id="last-check">--</span></p>
   </div>
 
-  <!-- Status bar -->
-  <div class="status-bar">
-    <div class="status-group">
-      <div class="status-dot" id="status-dot"></div>
-      <span class="status-text" id="status-text">Parado</span>
+  <!-- Vista de configuração avançada — preenchida uma unica vez na instalacao -->
+  <div class="view" id="view-settings" style="display:none">
+    <div class="app-header">
+      <button type="button" class="icon-btn" id="btn-close-settings" title="Voltar">←</button>
+      <span class="app-title">Configuração avançada</span>
     </div>
-  </div>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tab active" data-tab="monitor" id="tab-btn-monitor">Monitoramento</button>
-    <button class="tab" data-tab="config" id="tab-btn-config">Configuracoes</button>
-  </div>
+    <p class="settings-hint">Preenchido uma única vez, na instalação. Não é preciso mexer aqui no uso do dia a dia.</p>
 
-  <!-- Tab: Monitoramento -->
-  <div class="tab-content active" id="tab-monitor">
-    <div class="main-grid">
-      <!-- Acoes -->
-      <div class="card">
-        <div class="card-title">Controle</div>
-        <div class="btn-col">
-          <button class="btn btn-success btn-lg" id="btn-start" style="width:100%">Iniciar monitoramento</button>
-          <button class="btn btn-danger btn-lg" id="btn-stop" style="width:100%; display:none">Parar monitoramento</button>
-          <button class="btn btn-secondary" id="btn-test-conn" style="width:100%">Testar conexao</button>
-          <button class="btn btn-secondary" id="btn-test-print" style="width:100%">Testar impressao</button>
-        </div>
-      </div>
-
-      <!-- Stats -->
-      <div class="card">
-        <div class="card-title">Estatisticas</div>
-        <div class="stats-grid">
-          <div class="stat-box">
-            <div class="stat-val" id="stat-printed">0</div>
-            <div class="stat-label">Impressos</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-val" id="stat-print-errors">0</div>
-            <div class="stat-label">Erros impressao</div>
-          </div>
-          <div class="stat-box stat-box-wide">
-            <div class="stat-val" id="stat-last-check">--:--</div>
-            <div class="stat-label">Ultima verificacao</div>
-          </div>
-        </div>
-      </div>
+    <div class="field">
+      <label class="field-label" for="cfg-worker-url">URL do servidor</label>
+      <input type="text" class="field-input" id="cfg-worker-url" placeholder="https://day-lanches-worker...">
     </div>
-  </div>
 
-  <!-- Tab: Configuracoes -->
-  <div class="tab-content" id="tab-config">
-    <div class="main-grid">
-      <!-- Conexao Worker -->
-      <div class="card">
-        <div class="card-title">Conexao com servidor</div>
-        <div class="form-group">
-          <label class="form-label">URL do Worker</label>
-          <input type="text" class="form-input" id="cfg-worker-url" placeholder="https://day-lanches-worker...">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Token do agente</label>
-          <input type="password" class="form-input" id="cfg-token" placeholder="TOKEN">
-        </div>
-      </div>
-
-      <!-- Impressao -->
-      <div class="card">
-        <div class="card-title">Impressao</div>
-        <div class="form-group">
-          <label class="form-label">Impressora</label>
-          <select class="form-select" id="cfg-printer">
-            <option value="__default__">Impressora padrao do Windows</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Tipo de papel</label>
-          <select class="form-select" id="cfg-paper">
-            <option value="80mm">Termica 80mm</option>
-            <option value="58mm">Termica 58mm</option>
-            <option value="A4">A4</option>
-          </select>
-        </div>
-        <div class="toggle-row">
-          <span class="toggle-label">Impressao automatica</span>
-          <label class="toggle">
-            <input type="checkbox" id="cfg-auto-print" checked>
-            <span class="toggle-track"></span>
-            <span class="toggle-thumb"></span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Geral -->
-      <div class="card card-full">
-        <div class="card-title">Geral</div>
-        <div class="toggle-row">
-          <span class="toggle-label">Iniciar com Windows</span>
-          <label class="toggle">
-            <input type="checkbox" id="cfg-auto-launch">
-            <span class="toggle-track"></span>
-            <span class="toggle-thumb"></span>
-          </label>
-        </div>
-        <div class="toggle-row">
-          <span class="toggle-label">Iniciar monitoramento automaticamente</span>
-          <label class="toggle">
-            <input type="checkbox" id="cfg-auto-monitor">
-            <span class="toggle-track"></span>
-            <span class="toggle-thumb"></span>
-          </label>
-        </div>
-
-        <div style="margin-top:14px">
-          <button class="btn btn-primary" id="btn-save">Salvar configuracoes</button>
-        </div>
-      </div>
+    <div class="field">
+      <label class="field-label" for="cfg-token">Token do agente</label>
+      <input type="password" class="field-input" id="cfg-token" placeholder="Cole aqui o token">
     </div>
-  </div>
 
-  <!-- Logs (sempre visivel) -->
-  <div class="card card-logs">
-    <div class="card-title">Logs</div>
-    <div class="logs-area" id="logs-area">
-      <div class="log-line"><span class="log-info">Day Lanches Agent pronto.</span></div>
+    <div class="btn-row">
+      <button type="button" class="btn btn-secondary" id="btn-test-conn">Testar conexão</button>
+      <button type="button" class="btn btn-primary" id="btn-save-settings">Salvar</button>
     </div>
+
+    <details class="log-details">
+      <summary>Registro técnico</summary>
+      <div class="logs-area" id="logs-area"></div>
+    </details>
   </div>
 
   <script src="receipt-template.js"></script>

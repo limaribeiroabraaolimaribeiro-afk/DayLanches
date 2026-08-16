@@ -99,17 +99,17 @@ function buildTestReceiptHtml(paperType) {
     ${paperType === 'A4' ? 'max-width: 210mm; margin: 0 auto; padding: 15mm;' : 'padding: 4mm;'}
     text-align: center;
   }
-  .brand { font-size: 1.8em; font-weight: 900; text-transform: uppercase; margin-bottom: 8px; }
-  .title { font-size: 1.2em; font-weight: 700; margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 8px; }
-  .msg { font-size: 1em; line-height: 1.5; margin: 16px 0; }
-  .date { font-size: .85em; color: #666; margin-top: 16px; border-top: 1px dashed #000; padding-top: 8px; }
+  .brand { font-size: 1.8em; font-weight: 900; text-transform: uppercase; margin-bottom: 10px; }
+  .title { font-size: 1.1em; font-weight: 700; margin-bottom: 10px; }
+  .date { font-size: .85em; color: #444; margin-bottom: 14px; }
+  .ok { font-size: 1em; font-weight: 700; border-top: 1px dashed #000; padding-top: 10px; }
 </style>
 </head>
 <body>
   <div class="brand">DAY LANCHES</div>
-  <div class="title">TESTE DE IMPRESSÃO</div>
-  <div class="msg">Se você está vendo esta comanda,<br>a impressora está configurada corretamente.</div>
+  <div class="title">Teste de impressão</div>
   <div class="date">${now}</div>
+  <div class="ok">Impressora configurada com sucesso</div>
 </body>
 </html>`;
 }

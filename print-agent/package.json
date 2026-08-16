@@ -1,7 +1,7 @@
 {
-  "name": "day-lanches-agent",
-  "version": "3.0.0",
-  "description": "Day Lanches Agent — Impressao automatica de comandas",
+  "name": "day-lanches-impressao",
+  "version": "4.0.0",
+  "description": "Day Lanches Impressão - bridge de impressao local para o sistema Day Lanches",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron .",
@@ -11,7 +11,7 @@
   "author": "Day Lanches",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.0.0",
+    "electron": "22.3.27",
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
@@ -19,13 +19,18 @@
     "electron-store": "7.0.0"
   },
   "build": {
-    "appId": "com.daylanches.agent",
-    "productName": "Day Lanches Agent",
+    "appId": "com.daylanches.impressao",
+    "productName": "Day Lanches Impressão",
     "directories": {
       "output": "dist"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "ia32"]
+        }
+      ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "forceCodeSigning": false
@@ -35,7 +40,8 @@
       "allowToChangeInstallationDirectory": false,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "shortcutName": "Day Lanches Agent"
+      "shortcutName": "Day Lanches Impressão",
+      "artifactName": "Day-Lanches-Impressao-Setup.exe"
     }
   }
 }

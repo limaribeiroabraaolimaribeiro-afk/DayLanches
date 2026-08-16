@@ -1,10 +1,13 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
 const path = require('path');
-const fs = require('fs');
 const Store = require('electron-store');
 const AutoLaunch = require('auto-launch');
+
+/* Reduz uso de GPU/driver em computadores antigos (evita crashes/telas pretas
+   em hardware/driver de video desatualizado). Precisa rodar antes do app ficar pronto. */
+app.disableHardwareAcceleration();
 
 const store = new Store({
   defaults: {
@@ -14,7 +17,6 @@ const store = new Store({
     paperType: '80mm',
     autoPrintEnabled: true,
     startWithWindows: false,
-    autoMonitorEnabled: false,
   },
 });
 
@@ -37,59 +39,57 @@ function createTray() {
   }
 
   tray = new Tray(icon);
-  tray.setToolTip('Day Lanches Agent');
+  tray.setToolTip('Day Lanches Impressão');
 
-  updateTrayMenu();
+  const template = [
+    { label: 'Abrir painel', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { type: 'separator' },
+    { label: 'Sair', click: () => { app.isQuitting = true; app.quit(); } },
+  ];
+  tray.setContextMenu(Menu.buildFromTemplate(template));
 
   tray.on('double-click', () => {
     if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
   });
 }
 
-function updateTrayMenu() {
-  if (!tray) return;
-  const template = [
-    { label: 'Abrir painel', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
-    { type: 'separator' },
-    { label: 'Iniciar monitoramento', click: () => mainWindow?.webContents.send('tray-start-monitoring') },
-    { label: 'Parar monitoramento', click: () => mainWindow?.webContents.send('tray-stop-monitoring') },
-    { type: 'separator' },
-    { label: 'Sair', click: () => { app.isQuitting = true; app.quit(); } },
-  ];
-  tray.setContextMenu(Menu.buildFromTemplate(template));
-}
-
 /* ── Window ── */
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 960,
-    height: 780,
-    minWidth: 700,
-    minHeight: 600,
-    title: 'Day Lanches Agent',
+    width: 440,
+    height: 640,
+    minWidth: 380,
+    minHeight: 560,
+    title: 'Day Lanches Impressão',
     icon: path.join(__dirname, '..', '..', 'assets', 'icons', 'day-lanches-gestao-512.png'),
     show: !isHidden,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      devTools: !app.isPackaged,
     },
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.setMenuBarVisibility(false);
 
+  /* Nunca navegar para fora do app nem abrir novas janelas — a janela so mostra
+     o index.html local, nunca um site externo. */
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) event.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
       mainWindow.hide();
-    }
-  });
-
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (store.get('autoMonitorEnabled')) {
-      mainWindow.webContents.send('auto-start-monitoring');
     }
   });
 }
@@ -98,7 +98,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   autoLauncher = new AutoLaunch({
-    name: 'Day Lanches Agent',
+    name: 'Day Lanches Impressão',
     path: app.getPath('exe'),
     isHidden: true,
   });
@@ -133,15 +133,20 @@ ipcMain.handle('save-config', (_event, config) => {
 /* ── IPC: Printers ── */
 
 ipcMain.handle('get-printers', async () => {
-  const win = mainWindow || BrowserWindow.getAllWindows()[0];
-  if (!win) return [];
-  const printers = await win.webContents.getPrintersAsync();
-  return printers.map(p => ({
-    name: p.name,
-    displayName: p.displayName || p.name,
-    isDefault: p.isDefault,
-    status: p.status,
-  }));
+  try {
+    const win = mainWindow || BrowserWindow.getAllWindows()[0];
+    if (!win) return [];
+    const printers = await win.webContents.getPrintersAsync();
+    return printers.map(p => ({
+      name: p.name,
+      displayName: p.displayName || p.name,
+      isDefault: p.isDefault,
+      status: p.status,
+    }));
+  } catch (_) {
+    /* Nao ha impressora instalada ou o Windows falhou ao listar — nunca travar o app */
+    return [];
+  }
 });
 
 /* ── IPC: Auto Launch ── */
@@ -166,17 +171,6 @@ ipcMain.handle('get-auto-launch', async () => {
   } catch {
     return false;
   }
-});
-
-/* ── IPC: Auto Monitor ── */
-
-ipcMain.handle('set-auto-monitor', (_event, enabled) => {
-  store.set('autoMonitorEnabled', enabled);
-  return { success: true };
-});
-
-ipcMain.handle('get-auto-monitor', () => {
-  return store.get('autoMonitorEnabled', false);
 });
 
 /* ── IPC: Print receipt ── */
@@ -233,4 +227,3 @@ ipcMain.handle('print-receipt', async (_event, { html, printerName, paperType })
     });
   });
 });
-
