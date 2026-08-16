@@ -24,6 +24,14 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!dist*/**/*",
+      "!**/*.map",
+      "!**/*.log"
+    ],
     "win": {
       "target": [
         {

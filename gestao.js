@@ -2600,6 +2600,7 @@ function renderUserInfo() {
   const user = gs.currentUser;
   if (!user) return;
   loadProfiles();
+  loadPrintAgentDevices();
   const meta = user.user_metadata || {};
   const lastAccess = user.last_sign_in_at
     ? new Date(user.last_sign_in_at).toLocaleString('pt-BR')
@@ -4359,6 +4360,117 @@ async function toggleProfileActive(id, currentlyActive, name) {
 }
 
 /* ══════════════════════════════════════
+   PRINT AGENT — ativação de dispositivos
+   Tudo aqui passa por funções SECURITY DEFINER (RPC) — a Gestão nunca
+   lê/grava direto nas tabelas print_agent_devices/activation_codes,
+   que ficam com RLS travado e revogadas de anon/authenticated.
+   O único gate é "estar autenticado na Gestão", igual ao resto do app
+   (não existe hoje um nível "admin" real e funcional pra distinguir além disso).
+══════════════════════════════════════ */
+
+async function paGenerateCode() {
+  const actor = getCurrentActor();
+  try {
+    const { data, error } = await getSb().rpc('generate_print_agent_activation_code', {
+      input_label: null,
+      input_email: actor.email,
+      expires_in_min: 30,
+    });
+    if (error) throw error;
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.code) throw new Error('Resposta inesperada');
+
+    const box = elid('pa-new-code-box');
+    elid('pa-code-value').textContent = row.code;
+    const mins = Math.round((new Date(row.expires_at) - new Date()) / 60000);
+    elid('pa-code-expiry').textContent = `${mins} min`;
+    box.style.display = 'block';
+
+    logAuditAction('generate_print_agent_code', 'print_agent', null, row.code.replace(/.(?=.{4})/g, '•'));
+    toast('Código gerado. Válido por 30 minutos, uso único.');
+  } catch (e) {
+    console.error('[PrintAgent] Erro ao gerar código:', e);
+    toast('Erro ao gerar código. Execute a migration SQL (add_print_agent_activation.sql) antes de usar.', true);
+  }
+}
+
+async function paCopyCode() {
+  const code = elid('pa-code-value')?.textContent?.trim();
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code);
+    toast('Código copiado.');
+  } catch (e) {
+    toast('Não foi possível copiar automaticamente. Selecione o código manualmente.', true);
+  }
+}
+
+async function loadPrintAgentDevices() {
+  try {
+    const { data, error } = await getSb().rpc('list_print_agent_devices');
+    if (error) throw error;
+    renderPrintAgentDevices(data || []);
+  } catch (e) {
+    const el = elid('pa-devices-list');
+    if (el) el.innerHTML = '<p class="empty-msg">Execute a migration SQL (add_print_agent_activation.sql) para usar esta funcionalidade.</p>';
+  }
+}
+
+function renderPrintAgentDevices(devices) {
+  const el = elid('pa-devices-list');
+  if (!el) return;
+  if (!devices.length) { el.innerHTML = '<p class="empty-msg">Nenhum computador ativado ainda.</p>'; return; }
+
+  const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
+
+  const fmtRelative = (d) => {
+    if (!d) return 'Nunca';
+    const diffMs = Date.now() - new Date(d).getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return 'agora mesmo';
+    if (min < 60) return `há ${min} minuto${min === 1 ? '' : 's'}`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `há ${h} hora${h === 1 ? '' : 's'}`;
+    const days = Math.floor(h / 24);
+    return `há ${days} dia${days === 1 ? '' : 's'}`;
+  };
+
+  el.innerHTML = `<table class="rpt-table">
+    <thead><tr><th>Computador</th><th>Ativado em</th><th>Última conexão</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody>${devices.map(d => `<tr>
+      <td><strong>${esc(d.label || 'Sem nome')}</strong></td>
+      <td>${fmt(d.activated_at)}</td>
+      <td>${esc(fmtRelative(d.last_seen_at))}</td>
+      <td><span class="rpt-pill ${d.revoked_at ? 'rpt-pill-cancelled' : 'rpt-pill-paid'}">${d.revoked_at ? 'Revogado' : 'Ativo'}</span></td>
+      <td>${d.revoked_at ? '' : `<button class="btn-sale-detail" onclick="paRevokeDevice('${d.id}','${esc(d.label || 'este computador')}')"><i class="fas fa-ban"></i> Revogar</button>`}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function paRevokeDevice(id, label) {
+  const ok = await showConfirmModal({
+    title: 'Revogar computador?',
+    message: `"${label}" vai parar de conseguir imprimir comandas imediatamente. Essa ação não pode ser desfeita — será preciso gerar um novo código de ativação.`,
+    confirmText: 'Revogar',
+    cancelText: 'Cancelar',
+    danger: true,
+  });
+  if (!ok) return;
+
+  try {
+    const { error } = await getSb().rpc('revoke_print_agent_device', { input_device_id: id });
+    if (error) throw error;
+    toast(`"${label}" revogado.`);
+    logAuditAction('revoke_print_agent_device', 'print_agent', id, label);
+    loadPrintAgentDevices();
+  } catch (e) {
+    console.error('[PrintAgent] Erro ao revogar:', e);
+    toast('Erro ao revogar dispositivo.', true);
+  }
+}
+
+/* ══════════════════════════════════════
    DESCONTOS, ESTORNOS E CORTESIAS
 ══════════════════════════════════════ */
 async function applyDiscount(orderId) {
@@ -5307,6 +5419,9 @@ window.criarItemEstoque               = criarItemEstoque;
 window.estoqueMovimento               = estoqueMovimento;
 window.updateProfileRole              = updateProfileRole;
 window.toggleProfileActive            = toggleProfileActive;
+window.paGenerateCode                 = paGenerateCode;
+window.paCopyCode                     = paCopyCode;
+window.paRevokeDevice                 = paRevokeDevice;
 window.applyDiscount                  = applyDiscount;
 window.refundPayment                  = refundPayment;
 window.applyCourtesy                  = applyCourtesy;

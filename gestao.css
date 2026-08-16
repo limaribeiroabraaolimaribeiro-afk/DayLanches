@@ -3484,6 +3484,23 @@ body.is-balcao .dash-header { display: none !important; }
 .rpt-pill-pending { background: #FFF7ED; color: #EA580C; }
 .rpt-pill-cancelled { background: var(--danger-bg); color: #DC2626; }
 
+/* ── Print Agent — código de ativação ── */
+.pa-code-box {
+  background: var(--primary-light);
+  border: 1px solid #FFD9B3;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+.pa-code-label { font-size: .8rem; color: var(--text-med); margin-bottom: 8px; }
+.pa-code-value {
+  font-size: 1.8rem; font-weight: 800; letter-spacing: .1em;
+  color: var(--primary-dark); font-family: 'Consolas', monospace;
+  margin-bottom: 8px;
+}
+.pa-code-hint { font-size: .76rem; color: var(--text-muted); }
+
 .rpt-link {
   color: var(--primary);
   font-weight: 600;

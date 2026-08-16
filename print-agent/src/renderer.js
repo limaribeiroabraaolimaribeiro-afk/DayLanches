@@ -8,18 +8,21 @@ const state = {
   printedCache: new Set(),
   firstPrintRun: true,
   consecutiveFailures: 0,
-  configured: false,
   paperType: '80mm',
+  deviceToken: null,
+  workerUrl: null,
 };
 
 /* ── DOM helpers ── */
 const $ = (id) => document.getElementById(id);
 
 const ui = {
-  viewMain:      () => $('view-main'),
-  viewSettings:  () => $('view-settings'),
-  btnOpenSet:    () => $('btn-open-settings'),
-  btnCloseSet:   () => $('btn-close-settings'),
+  viewActivation: () => $('view-activation'),
+  viewMain:       () => $('view-main'),
+  activationCode: () => $('activation-code'),
+  btnActivate:    () => $('btn-activate'),
+  activationErr:  () => $('activation-error'),
+  activationBlk:  () => $('activation-blocked'),
 
   statusDot:     () => $('status-dot'),
   statusText:    () => $('status-text'),
@@ -28,15 +31,11 @@ const ui = {
   autoLaunch:    () => $('cfg-auto-launch'),
   btnTestPrint:  () => $('btn-test-print'),
   lastCheck:     () => $('last-check'),
-
-  workerUrl:     () => $('cfg-worker-url'),
-  token:         () => $('cfg-token'),
-  btnTestConn:   () => $('btn-test-conn'),
-  btnSaveSet:    () => $('btn-save-settings'),
+  btnDeactivate: () => $('btn-deactivate'),
   logsArea:      () => $('logs-area'),
 };
 
-/* ── Registro tecnico (nunca exibido para a Dayane — so dentro de "Configuração avançada") ── */
+/* ── Registro tecnico (recolhido por padrao — nunca aparece sozinho pra Dayane) ── */
 function log(message, level = 'info') {
   const area = ui.logsArea();
   if (!area) return;
@@ -52,37 +51,122 @@ function escHtml(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/* ── Status amigável (nada tecnico aparece aqui) ── */
 function setStatus(text, kind) {
   ui.statusDot().className = 'status-dot ' + (kind || '');
   ui.statusText().textContent = text;
 }
 
-/* ── Navegação entre as duas vistas (mesma janela) ── */
-function openSettings() {
+/* ══════════════════════════════════════════════════════════
+   ATIVAÇÃO
+══════════════════════════════════════════════════════════ */
+
+function showActivationView() {
   ui.viewMain().style.display = 'none';
-  ui.viewSettings().style.display = 'block';
+  ui.viewActivation().style.display = 'block';
 }
-function closeSettings() {
-  ui.viewSettings().style.display = 'none';
+
+function showMainView() {
+  ui.viewActivation().style.display = 'none';
   ui.viewMain().style.display = 'block';
 }
 
-/* ── Config ── */
+async function checkActivation() {
+  const status = await window.api.getActivationStatus();
+
+  if (!status.safeStorageAvailable) {
+    showActivationView();
+    ui.activationCode().style.display = 'none';
+    ui.btnActivate().style.display = 'none';
+    ui.activationBlk().style.display = 'block';
+    ui.activationBlk().textContent =
+      'Este computador não tem suporte a armazenamento seguro de credenciais do Windows. ' +
+      'Por segurança, não é possível ativar aqui. Fale com o suporte.';
+    log('Ativação bloqueada: safeStorage indisponível neste Windows.', 'error');
+    return false;
+  }
+
+  if (status.needsReactivation) {
+    showActivationView();
+    ui.activationErr().style.display = 'block';
+    ui.activationErr().textContent = 'A credencial salva não pôde ser lida (Windows ou usuário mudou). Ative de novo.';
+    log('Reativação necessária: credencial salva não pôde ser decifrada.', 'warn');
+    return false;
+  }
+
+  if (!status.activated) {
+    showActivationView();
+    return false;
+  }
+
+  state.deviceToken = await window.api.getDeviceToken();
+  state.workerUrl = await window.api.getWorkerUrl();
+  showMainView();
+  return true;
+}
+
+async function activate() {
+  const codeInput = ui.activationCode();
+  const btn = ui.btnActivate();
+  const errEl = ui.activationErr();
+  const code = codeInput.value.trim().toUpperCase();
+
+  errEl.style.display = 'none';
+
+  if (!code) {
+    errEl.textContent = 'Digite o código de ativação.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Ativando...';
+
+  try {
+    const result = await window.api.activateDevice(code);
+    if (!result.success) {
+      log(`Ativação falhou: ${result.error}`, 'error');
+      errEl.textContent = result.error;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    log('Dispositivo ativado com sucesso.', 'success');
+    codeInput.value = '';
+    const ok = await checkActivation();
+    if (ok) {
+      await loadConfig();
+      startPolling();
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ativar';
+  }
+}
+
+async function deactivate() {
+  if (!confirm('Isso desconecta este computador do sistema. Você vai precisar de um novo código para ativar de novo. Continuar?')) return;
+
+  stopPolling();
+  await window.api.deactivateDevice();
+  state.deviceToken = null;
+  log('Dispositivo desativado.', 'warn');
+  showActivationView();
+}
+
+/* ══════════════════════════════════════════════════════════
+   CONFIG / IMPRESSORA
+══════════════════════════════════════════════════════════ */
+
 async function loadConfig() {
   const config = await window.api.getConfig();
 
-  ui.workerUrl().value = config.workerUrl || '';
-  ui.token().value = config.printAgentToken || '';
   ui.autoPrint().checked = config.autoPrintEnabled !== false;
+  state.paperType = config.paperType || '80mm';
 
   const isAutoLaunch = await window.api.getAutoLaunch();
   ui.autoLaunch().checked = isAutoLaunch;
 
   await loadPrinters(config.printerName);
-
-  state.paperType = config.paperType || '80mm';
-  state.configured = !!(config.workerUrl && config.printAgentToken);
 }
 
 /* Deteccao de impressora: usa a salva se ela ainda existir; senao cai para a
@@ -116,11 +200,9 @@ async function loadPrinters(selectedName) {
     log('Nenhuma impressora detectada pelo Windows.', 'warn');
   }
 
-  /* Persiste a selecao automatica para nao perguntar de novo na proxima abertura */
   await window.api.saveConfig({ printerName: select.value });
 }
 
-/* ── Auto-save dos controles da vista principal (sem botao "Salvar") ── */
 async function persistPrinterChoice() {
   await window.api.saveConfig({ printerName: ui.printer().value });
   log(`Impressora selecionada: ${ui.printer().value}`, 'info');
@@ -132,51 +214,6 @@ async function persistAutoPrint() {
 async function persistAutoLaunch() {
   await window.api.setAutoLaunch(ui.autoLaunch().checked);
   log(`Iniciar com o Windows: ${ui.autoLaunch().checked ? 'ativado' : 'desativado'}.`, 'info');
-}
-
-/* ── Configuração avançada (URL + token) ── */
-async function saveSettings() {
-  const btn = ui.btnSaveSet();
-  btn.disabled = true;
-  try {
-    await window.api.saveConfig({
-      workerUrl: ui.workerUrl().value.trim().replace(/\/+$/, ''),
-      printAgentToken: ui.token().value.trim(),
-    });
-    log('Configuração avançada salva.', 'success');
-    state.configured = !!(ui.workerUrl().value.trim() && ui.token().value.trim());
-    startPolling(); /* comeca a monitorar assim que ficar configurado, sem reiniciar o app */
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function getHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${ui.token().value.trim()}`,
-  };
-}
-function getBaseUrl() {
-  return ui.workerUrl().value.trim().replace(/\/+$/, '');
-}
-
-async function testConnection() {
-  const btn = ui.btnTestConn();
-  btn.disabled = true;
-  btn.textContent = 'Testando...';
-  try {
-    const res = await fetch(`${getBaseUrl()}/print-agent/health`, { headers: getHeaders() });
-    if (res.status === 401) { log('Token inválido.', 'error'); return; }
-    if (!res.ok) { log(`Erro de conexão: HTTP ${res.status}`, 'error'); return; }
-    const data = await res.json();
-    if (data.ok) log('Conexão com o servidor OK.', 'success');
-  } catch (err) {
-    log(`Erro ao conectar: ${err.message}`, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Testar conexão';
-  }
 }
 
 /* ── Teste de impressão ── */
@@ -202,13 +239,23 @@ async function testPrint() {
 }
 
 /* ══════════════════════════════════════════════════════════
-   MONITORAMENTO — sempre ativo em segundo plano assim que
-   houver URL + token configurados. Sem botao manual de start/stop.
+   MONITORAMENTO — sempre ativo em segundo plano assim que ativado.
+   Sem botao manual de start/stop.
 ══════════════════════════════════════════════════════════ */
 
+function getHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${state.deviceToken}`,
+  };
+}
+function getBaseUrl() {
+  return state.workerUrl;
+}
+
 function startPolling() {
-  if (state.printTimer) return; /* ja esta rodando */
-  if (!state.configured) {
+  if (state.printTimer) return;
+  if (!state.deviceToken) {
     setStatus('Configuração necessária', 'warn');
     return;
   }
@@ -216,7 +263,9 @@ function startPolling() {
   state.printTimer = setInterval(pollOrders, PRINT_POLL_MS);
 }
 
-/* ── Print polling ── */
+function stopPolling() {
+  if (state.printTimer) { clearInterval(state.printTimer); state.printTimer = null; }
+}
 
 async function pollOrders() {
   try {
@@ -224,8 +273,13 @@ async function pollOrders() {
     const res = await fetch(url, { headers: getHeaders() });
 
     if (res.status === 401) {
-      log('Token inválido. Verifique a configuração avançada.', 'error');
-      setStatus('Configuração necessária', 'warn');
+      log('Credencial inválida ou revogada. É necessário reativar.', 'error');
+      stopPolling();
+      state.deviceToken = null;
+      await window.api.deactivateDevice();
+      showActivationView();
+      ui.activationErr().style.display = 'block';
+      ui.activationErr().textContent = 'Este computador precisa ser ativado novamente.';
       return;
     }
 
@@ -271,7 +325,6 @@ function handlePollSuccess() {
 function handlePollFailure(reason) {
   state.consecutiveFailures++;
   log(`Erro ao verificar pedidos: ${reason}`, 'error');
-  /* So muda o status visivel apos falhas seguidas — uma falha isolada nao assusta a Dayane */
   if (state.consecutiveFailures >= FAILURES_BEFORE_RECONNECTING) {
     setStatus('Tentando reconectar...', 'reconnecting');
   }
@@ -324,23 +377,22 @@ async function markPrinted(orderId, orderNum) {
 ══════════════════════════════════════════════════════════ */
 
 document.addEventListener('DOMContentLoaded', async () => {
-  setStatus('Verificando...', '');
-  await loadConfig();
+  ui.btnActivate().addEventListener('click', activate);
+  ui.activationCode().addEventListener('keydown', (e) => { if (e.key === 'Enter') activate(); });
 
-  /* Navegação */
-  ui.btnOpenSet().addEventListener('click', openSettings);
-  ui.btnCloseSet().addEventListener('click', closeSettings);
+  const activated = await checkActivation();
 
-  /* Vista principal — cada controle salva sozinho, sem botao "Salvar" */
-  ui.btnTestPrint().addEventListener('click', testPrint);
-  ui.printer().addEventListener('change', persistPrinterChoice);
-  ui.autoPrint().addEventListener('change', persistAutoPrint);
-  ui.autoLaunch().addEventListener('change', persistAutoLaunch);
+  if (activated) {
+    setStatus('Verificando...', '');
+    await loadConfig();
 
-  /* Configuração avançada */
-  ui.btnTestConn().addEventListener('click', testConnection);
-  ui.btnSaveSet().addEventListener('click', saveSettings);
+    ui.btnTestPrint().addEventListener('click', testPrint);
+    ui.printer().addEventListener('change', persistPrinterChoice);
+    ui.autoPrint().addEventListener('change', persistAutoPrint);
+    ui.autoLaunch().addEventListener('change', persistAutoLaunch);
+    ui.btnDeactivate().addEventListener('click', deactivate);
 
-  log('Day Lanches Impressão pronto.', 'info');
-  startPolling();
+    log('Day Lanches Impressão pronto.', 'info');
+    startPolling();
+  }
 });

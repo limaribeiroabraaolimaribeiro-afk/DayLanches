@@ -646,6 +646,26 @@
 
         <div class="g-card">
           <div class="g-card-head">
+            <h2 class="g-card-title">Print Agent — computadores ativados</h2>
+            <p class="g-card-desc">Gere um código de ativação para instalar o Print Agent num computador novo. A pessoa que instalar digita esse código uma única vez.</p>
+          </div>
+
+          <div id="pa-new-code-box" class="pa-code-box" style="display:none">
+            <p class="pa-code-label">Código de ativação — expira em <span id="pa-code-expiry">30 min</span>:</p>
+            <div class="pa-code-value" id="pa-code-value">XXXX-XXXX</div>
+            <button type="button" class="btn-secondary" onclick="paCopyCode()" style="margin:4px auto 0"><i class="fas fa-copy"></i> Copiar código</button>
+            <p class="pa-code-hint">Passe esse código para quem for instalar. Funciona uma única vez.</p>
+          </div>
+
+          <div class="g-card-actions" style="justify-content:flex-start">
+            <button class="btn-primary" onclick="paGenerateCode()"><i class="fas fa-key"></i> Gerar código de ativação</button>
+          </div>
+
+          <div id="pa-devices-list" style="margin-top:18px"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
+        </div>
+
+        <div class="g-card">
+          <div class="g-card-head">
             <h2 class="g-card-title">Segurança</h2>
           </div>
           <p class="g-card-desc">Por segurança, altere a senha periodicamente e não compartilhe o acesso com pessoas não autorizadas.</p>

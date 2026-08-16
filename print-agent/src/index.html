@@ -8,11 +8,30 @@
 </head>
 <body>
 
-  <!-- Vista principal — o que a Dayane ve no dia a dia -->
-  <div class="view" id="view-main">
+  <!-- Vista de ativação — primeira tela, some para sempre depois de ativada -->
+  <div class="view" id="view-activation" style="display:none">
+    <div class="app-header center">
+      <span class="app-title">Day Lanches Impressão</span>
+    </div>
+
+    <div class="activation-box">
+      <p class="activation-hint">Digite o código de ativação fornecido pelo suporte.</p>
+
+      <input type="text" class="activation-input" id="activation-code"
+        placeholder="XXXX-XXXX" maxlength="9" autocomplete="off"
+        autocapitalize="characters" spellcheck="false">
+
+      <button type="button" class="btn btn-primary btn-block" id="btn-activate">Ativar</button>
+
+      <p class="activation-error" id="activation-error" style="display:none"></p>
+      <p class="activation-blocked" id="activation-blocked" style="display:none"></p>
+    </div>
+  </div>
+
+  <!-- Vista principal — o que a Dayane ve no dia a dia, depois de ativado -->
+  <div class="view" id="view-main" style="display:none">
     <div class="app-header">
       <span class="app-title">Day Lanches Impressão</span>
-      <button type="button" class="icon-btn" id="btn-open-settings" title="Configuração avançada">⚙</button>
     </div>
 
     <div class="status-row">
@@ -41,31 +60,8 @@
     </div>
 
     <p class="last-check">Último pedido verificado: <span id="last-check">--</span></p>
-  </div>
 
-  <!-- Vista de configuração avançada — preenchida uma unica vez na instalacao -->
-  <div class="view" id="view-settings" style="display:none">
-    <div class="app-header">
-      <button type="button" class="icon-btn" id="btn-close-settings" title="Voltar">←</button>
-      <span class="app-title">Configuração avançada</span>
-    </div>
-
-    <p class="settings-hint">Preenchido uma única vez, na instalação. Não é preciso mexer aqui no uso do dia a dia.</p>
-
-    <div class="field">
-      <label class="field-label" for="cfg-worker-url">URL do servidor</label>
-      <input type="text" class="field-input" id="cfg-worker-url" placeholder="https://day-lanches-worker...">
-    </div>
-
-    <div class="field">
-      <label class="field-label" for="cfg-token">Token do agente</label>
-      <input type="password" class="field-input" id="cfg-token" placeholder="Cole aqui o token">
-    </div>
-
-    <div class="btn-row">
-      <button type="button" class="btn btn-secondary" id="btn-test-conn">Testar conexão</button>
-      <button type="button" class="btn btn-primary" id="btn-save-settings">Salvar</button>
-    </div>
+    <button type="button" class="link-btn" id="btn-deactivate">Desativar este computador</button>
 
     <details class="log-details">
       <summary>Registro técnico</summary>

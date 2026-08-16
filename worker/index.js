@@ -10,6 +10,7 @@
      GET  /print-agent/health                  → health check do Print Agent
      GET  /print-agent/pending-orders          → pedidos pendentes de impressão
      POST /print-agent/mark-printed            → marca pedido como impresso
+     POST /print-agent/activate                → troca codigo de ativacao por device token
      POST /order-status-notification           → cria notificação WhatsApp
      GET  /whatsapp/status                     → status da instância WhatsApp
      GET  /whatsapp/qrcode                     → QR Code para conectar WhatsApp
@@ -66,6 +67,29 @@ async function sbPost(env, table, body) {
   });
 }
 
+/* Chama uma função Postgres (RPC) com service_role. Usado para operações que
+   precisam ser atômicas (ex: resgatar um código de ativação) — a função faz
+   tudo numa única transação no banco, em vez de várias chamadas REST separadas. */
+async function sbRpc(env, fn, args) {
+  const url = `${env.SUPABASE_URL}/rest/v1/rpc/${fn}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: sbHeaders(env),
+    body: JSON.stringify(args || {}),
+  });
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, status: res.status, data };
+}
+
+/* SHA-256 hex — usado só pra token de dispositivo (alta entropia, gerado pelo
+   servidor). Não usar pra senhas/códigos curtos digitados por humano — esses
+   usam bcrypt (mais lento, resiste a força bruta), feito direto no Postgres. */
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /* ══════════════════════════════════════════════════════════
    MAIN HANDLER
 ══════════════════════════════════════════════════════════ */
@@ -109,6 +133,10 @@ export default {
 
     if (pathname === '/print-agent/mark-printed' && request.method === 'POST') {
       return handlePrintAgentMarkPrinted(request, env);
+    }
+
+    if (pathname === '/print-agent/activate' && request.method === 'POST') {
+      return handlePrintAgentActivate(request, env);
     }
 
     if (pathname === '/order-status-notification' && request.method === 'POST') {
@@ -377,9 +405,41 @@ function validatePrintAgentToken(request, env) {
   return true;
 }
 
+/* Autenticação de /print-agent/* — aceita o token mestre (uso interno/testes)
+   OU um device token emitido via ativação por código. NUNCA usada por
+   /local-agent/*, que continua isolada com validatePrintAgentToken() acima —
+   um device token de impressora não deve funcionar nas rotas do WhatsApp. */
+async function validatePrintAgentDeviceAuth(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  if (!token) return false;
+
+  if (env.PRINT_AGENT_TOKEN && token === env.PRINT_AGENT_TOKEN) return true;
+
+  try {
+    const tokenHash = await sha256Hex(token);
+    const devices = await sbGet(
+      env,
+      'print_agent_devices',
+      `device_token_hash=eq.${tokenHash}&revoked_at=is.null&select=id`
+    );
+    if (!Array.isArray(devices) || !devices.length) return false;
+
+    /* Best-effort — não bloqueia a requisição se a atualização falhar */
+    sbPatch(env, 'print_agent_devices', `id=eq.${devices[0].id}`, {
+      last_seen_at: new Date().toISOString(),
+    }).catch(() => {});
+
+    return true;
+  } catch (err) {
+    console.error('[DayLanches] Erro ao validar device token:', err);
+    return false;
+  }
+}
+
 /* GET /print-agent/health */
-function handlePrintAgentHealth(request, env) {
-  if (!validatePrintAgentToken(request, env)) {
+async function handlePrintAgentHealth(request, env) {
+  if (!(await validatePrintAgentDeviceAuth(request, env))) {
     return json({ error: 'Unauthorized' }, 401);
   }
   return json({ ok: true, service: 'day-lanches-print-agent' });
@@ -387,7 +447,7 @@ function handlePrintAgentHealth(request, env) {
 
 /* GET /print-agent/pending-orders */
 async function handlePrintAgentPendingOrders(request, env) {
-  if (!validatePrintAgentToken(request, env)) {
+  if (!(await validatePrintAgentDeviceAuth(request, env))) {
     return json({ error: 'Unauthorized' }, 401);
   }
 
@@ -411,7 +471,7 @@ async function handlePrintAgentPendingOrders(request, env) {
 
 /* POST /print-agent/mark-printed */
 async function handlePrintAgentMarkPrinted(request, env) {
-  if (!validatePrintAgentToken(request, env)) {
+  if (!(await validatePrintAgentDeviceAuth(request, env))) {
     return json({ error: 'Unauthorized' }, 401);
   }
 
@@ -455,6 +515,57 @@ async function handlePrintAgentMarkPrinted(request, env) {
   } catch (err) {
     console.error('[DayLanches] Erro ao marcar impresso:', err);
     return json({ error: 'Erro interno' }, 500);
+  }
+}
+
+/* POST /print-agent/activate — troca um codigo de ativacao curto por um
+   device token proprio daquele computador. Sem Authorization: e a unica
+   rota deste grupo que nao exige um token previo, ja que o codigo em si
+   e o que autentica esta chamada especifica.
+
+   Toda a logica sensivel (rate limit, validacao do codigo, geracao do
+   token, marcar o codigo como usado) roda numa unica transacao no
+   Postgres via RPC — nunca aqui em varias chamadas REST separadas. */
+async function handlePrintAgentActivate(request, env) {
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: 'invalid_body' }, 400); }
+
+  const code = String(body?.code || '').trim();
+  if (!code) return json({ success: false, error: 'code_required' }, 400);
+
+  /* Opcional: o proprio computador pode sugerir um nome (ex: hostname do
+     Windows) pra facilitar identificar na lista "Computadores autorizados"
+     da Gestao. Se nao vier nada, fica o rotulo definido na geracao do codigo. */
+  const deviceLabel = body?.deviceLabel ? String(body.deviceLabel).trim().slice(0, 80) : null;
+
+  const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+
+  try {
+    const { ok, data } = await sbRpc(env, 'activate_print_agent_device', {
+      input_code: code,
+      input_ip: clientIp,
+      input_device_label: deviceLabel,
+    });
+
+    if (!ok || !Array.isArray(data) || !data.length) {
+      console.error('[DayLanches] Falha ao chamar activate_print_agent_device', ok, data);
+      return json({ success: false, error: 'internal_error' }, 500);
+    }
+
+    const { device_token, error_code } = data[0];
+
+    if (error_code === 'rate_limited') return json({ success: false, error: 'rate_limited' }, 429);
+    if (error_code === 'expired')      return json({ success: false, error: 'expired' }, 410);
+    if (error_code === 'invalid')      return json({ success: false, error: 'invalid' }, 401);
+    if (error_code)                    return json({ success: false, error: error_code }, 400);
+
+    /* device_token so existe aqui, nesta resposta, uma unica vez —
+       o banco guarda so o hash a partir de agora. */
+    return json({ success: true, deviceToken: device_token });
+  } catch (err) {
+    console.error('[DayLanches] Erro na ativacao do print agent:', err);
+    return json({ success: false, error: 'internal_error' }, 500);
   }
 }
 
