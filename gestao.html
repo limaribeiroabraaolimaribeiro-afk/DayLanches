@@ -479,44 +479,50 @@
 
         <!-- Card: WhatsApp da loja -->
         <div class="g-card wa-card">
-          <div class="g-card-head">
-            <h2 class="g-card-title"><i class="fab fa-whatsapp" style="color:#25D366;margin-right:6px"></i>WhatsApp da loja</h2>
-            <p class="g-card-desc">Conecte o WhatsApp da Day Lanches para ativar mensagens e atendimento automático.</p>
-          </div>
-
-          <div id="wa-status-pill" class="wa-pill wa-pill-unknown">
-            <i class="fas fa-circle-notch fa-spin"></i> Verificando...
+          <div class="g-card-head wa-head">
+            <div>
+              <h2 class="g-card-title"><i class="fab fa-whatsapp" style="color:#25D366;margin-right:6px"></i>WhatsApp da loja</h2>
+              <p class="g-card-desc">Conecte o WhatsApp da Day Lanches para ativar mensagens e atendimento automático.</p>
+            </div>
+            <div id="wa-status-pill" class="wa-pill wa-pill-unknown">
+              <i class="fas fa-circle-notch fa-spin"></i> Verificando...
+            </div>
           </div>
 
           <!-- Estado: desconectado / conectando -->
-          <div id="wa-setup-view" style="display:none">
-            <h3 class="wa-setup-title">Conecte o WhatsApp da loja</h3>
-            <p class="wa-setup-hint">Use o celular da Day Lanches para conectar o WhatsApp ao sistema.</p>
-
-            <div class="wa-connect-layout">
-              <div class="wa-qr-box">
-                <div id="wa-qrcode-img" class="wa-qrcode-container">
-                  <span class="wa-qr-placeholder">Clique em "Gerar novo QR Code" para começar</span>
-                </div>
-                <p class="wa-qr-expire-note">O QR Code expira após alguns instantes. Se necessário, gere um novo.</p>
-              </div>
+          <div id="wa-setup-view" class="wa-setup-grid" style="display:none">
+            <div class="wa-setup-left">
+              <h3 class="wa-setup-title">Conecte o WhatsApp da loja</h3>
+              <p class="wa-setup-hint">Use o celular responsável pelo WhatsApp da Day Lanches.</p>
 
               <ol class="wa-steps">
                 <li><span class="wa-step-num">1</span><span>Abra o WhatsApp no celular da loja</span></li>
-                <li><span class="wa-step-num">2</span><span>Vá em <strong>Aparelhos conectados</strong></span></li>
-                <li><span class="wa-step-num">3</span><span>Toque em <strong>Conectar um aparelho</strong> e escaneie o QR</span></li>
+                <li><span class="wa-step-num">2</span><span>Vá em <strong>Aparelhos conectados</strong> &gt; <strong>Conectar aparelho</strong></span></li>
+                <li><span class="wa-step-num">3</span><span>Escaneie o QR Code</span></li>
               </ol>
+
+              <p class="wa-qr-expire-note">O QR Code expira após alguns instantes. Se necessário, gere um novo.</p>
+
+              <div class="wa-actions">
+                <button type="button" class="btn-primary" onclick="waGenerateQR()"><i class="fas fa-qrcode"></i> Gerar novo QR Code</button>
+                <button type="button" class="btn-secondary" onclick="waCheckStatus()"><i class="fas fa-sync-alt"></i> Atualizar status</button>
+              </div>
             </div>
 
-            <div class="g-card-actions wa-actions">
-              <button type="button" class="btn-secondary" onclick="waCheckStatus()"><i class="fas fa-sync-alt"></i> Atualizar status</button>
-              <button type="button" class="btn-primary" onclick="waGenerateQR()"><i class="fas fa-qrcode"></i> Gerar novo QR Code</button>
+            <div class="wa-qr-box">
+              <div id="wa-qrcode-img" class="wa-qrcode-container">
+                <div class="wa-qr-empty">
+                  <i class="fas fa-qrcode"></i>
+                  <span class="wa-qr-empty-title">QR ainda não gerado</span>
+                  <span class="wa-qr-empty-hint">Clique em "Gerar novo QR Code"</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Estado: conectado -->
-          <div id="wa-connected-view" style="display:none">
-            <div class="wa-connected-banner">
+          <div id="wa-connected-view" class="wa-connected-row" style="display:none">
+            <div class="wa-connected-info">
               <div class="wa-connected-icon"><i class="fas fa-check"></i></div>
               <div>
                 <div class="wa-connected-title">WhatsApp conectado</div>
@@ -530,7 +536,7 @@
               <div class="wa-indicator-item"><i class="fas fa-server"></i> Servidor <strong>Online</strong></div>
             </div>
 
-            <div class="g-card-actions wa-actions">
+            <div class="wa-actions">
               <button type="button" class="btn-secondary" onclick="waCheckStatus()"><i class="fas fa-sync-alt"></i> Verificar conexão</button>
               <button type="button" class="btn-primary" onclick="waOpenTestModal()"><i class="fas fa-paper-plane"></i> Testar mensagem</button>
             </div>
