@@ -1106,6 +1106,9 @@ a { text-decoration: none; color: inherit; }
 .acc-status-badge i { font-size: .6rem; }
 
 /* ═══════════════════ WhatsApp da loja ═══════════════════ */
+.wa-card { padding: 28px; }
+.wa-card .g-card-head { margin-bottom: 14px; }
+
 .wa-head {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
@@ -1122,22 +1125,22 @@ a { text-decoration: none; color: inherit; }
 .wa-pill-waiting       { color: #B45309; background: #FFFBEB; }
 .wa-pill-unknown       { color: var(--text-muted); background: var(--bg); }
 
-/* Grid: coluna de texto flexivel + QR de largura fixa, sem esticar a altura das colunas */
+/* Grid: coluna de texto maior + painel do QR menor e fixo, alinhados no topo */
 .wa-setup-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 40px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 360px);
+  gap: 32px;
   align-items: start;
 }
 
 .wa-setup-left { min-width: 0; }
-.wa-setup-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
-.wa-setup-hint  { font-size: .85rem; color: var(--text-med); margin-bottom: 16px; }
+.wa-setup-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.wa-setup-hint  { font-size: .85rem; color: var(--text-med); margin-bottom: 20px; }
 
 .wa-steps {
   list-style: none;
-  display: flex; flex-direction: column; gap: 10px;
-  margin-bottom: 16px;
+  display: flex; flex-direction: column; gap: 14px;
+  margin-bottom: 20px;
 }
 .wa-steps li {
   display: flex; align-items: flex-start; gap: 10px;
@@ -1158,10 +1161,23 @@ a { text-decoration: none; color: inherit; }
 
 .wa-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-.wa-qr-box { width: 220px; max-width: 100%; margin: 0 auto; }
+/* Painel do QR — fundo levemente destacado, tudo centralizado, altura fixa
+   mesmo antes do QR existir (o empty state ocupa o mesmo espaço). */
+.wa-qr-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px;
+}
+.wa-qr-panel-title {
+  font-size: .8rem; font-weight: 700; color: var(--text);
+  text-align: center;
+}
 .wa-qrcode-container {
   display: flex; justify-content: center; align-items: center;
-  width: 220px; height: 220px; max-width: 100%;
+  width: 222px; height: 222px; max-width: 100%;
   padding: 12px; background: var(--white); border: 1px solid var(--border);
   border-radius: 14px;
 }
@@ -1179,6 +1195,13 @@ a { text-decoration: none; color: inherit; }
   overflow-wrap: anywhere; word-break: break-word;
 }
 .wa-qr-error { color: var(--danger); }
+
+.wa-qr-caption {
+  list-style: none;
+  display: flex; flex-direction: column; gap: 4px;
+  text-align: center;
+  font-size: .74rem; color: var(--text-muted); line-height: 1.4;
+}
 
 /* Estado conectado — faixa horizontal compacta, sem virar um card enorme */
 .wa-connected-row {
