@@ -1,33 +1,18 @@
 # Day Lanches Agent
 
 Programa instalavel para Windows que cuida da **impressao automatica** de
-comandas quando chega pedido novo — isso continua rodando 100% local, e nao
-foi alterado pela migracao do WhatsApp para a VPS.
+comandas quando chega pedido novo, direto na impressora da loja.
 
-Este Agent tambem tem um modulo de WhatsApp local (Baileys) e um robo de
-atendimento por menu, usados no "modo sem VPS" abaixo. Com a VPS em
-producao (ver [../whatsapp-agent/README.md](../whatsapp-agent/README.md) e
-[../infra/evolution/README.md](../infra/evolution/README.md)), o WhatsApp
-passa a ser responsabilidade da VPS e **a aba "Atendimento automatico por
-menu" deste Agent deve ficar desativada** para nao responder em duplicidade
-ao mesmo cliente. A impressao continua normalmente, sem nenhuma mudanca.
-
-## Modo sem VPS (fallback)
-
-Se a VPS/Evolution API estiver fora do ar ou ainda nao configurada, este
-Agent pode assumir o WhatsApp completo sozinho:
-
-- O computador da loja precisa ficar ligado durante o atendimento
-- Se o computador desligar, impressao e mensagens param
-- Ao ligar de novo, o Agent abre sozinho (se configurado)
-- Se WhatsApp desconectar, precisa gerar QR de novo
+O WhatsApp automatico (mensagens de status e atendimento por menu) roda na
+VPS, fora deste programa — ver [../whatsapp-agent/README.md](../whatsapp-agent/README.md)
+e [../infra/evolution/README.md](../infra/evolution/README.md). Este Agent
+cuida somente da impressao.
 
 ## Pre-requisitos
 
 - Node.js 18+ instalado
 - Impressora instalada no Windows (termica 80mm, 58mm ou A4)
 - Computador com internet
-- WhatsApp da loja para escanear o QR Code
 
 ## Instalacao (desenvolvimento)
 
@@ -54,8 +39,6 @@ No terminal, dentro da pasta `worker/`:
 wrangler secret put PRINT_AGENT_TOKEN
 ```
 
-O mesmo token e usado para impressao e notificacoes WhatsApp.
-
 ## Instalar no computador da loja
 
 1. Copie o arquivo `Day-Lanches-Agent-Setup.exe` para o computador
@@ -71,17 +54,6 @@ O mesmo token e usado para impressao e notificacoes WhatsApp.
 5. **Tipo de papel**: escolha o tipo correto
 6. Clique em **Salvar configuracoes**
 
-## Conectar WhatsApp
-
-1. Va na aba **WhatsApp**
-2. Clique em **Conectar WhatsApp**
-3. Um QR Code aparece na tela
-4. No celular da loja, abra WhatsApp > Aparelhos conectados > Conectar
-5. Escaneie o QR Code
-6. Status muda para "Conectado"
-
-A sessao fica salva no computador. Nao precisa escanear toda vez.
-
 ## Ativar monitoramento automatico
 
 1. Na aba **Configuracoes**, ative:
@@ -89,9 +61,8 @@ A sessao fica salva no computador. Nao precisa escanear toda vez.
    - **Iniciar monitoramento automaticamente**
 2. Salve as configuracoes
 
-Com isso, ao ligar o computador:
-- O Agent abre sozinho e minimiza na bandeja (perto do relogio)
-- Impressao e WhatsApp ja comecam a funcionar
+Com isso, ao ligar o computador, o Agent abre sozinho e minimiza na bandeja
+(perto do relogio), e a impressao ja comeca a funcionar.
 
 ## Bandeja do sistema
 
@@ -110,16 +81,13 @@ Clique em **Testar conexao** para verificar comunicacao com o Worker.
 ### Testar impressao
 Clique em **Testar impressao** para enviar comanda de teste.
 
-### Testar WhatsApp
-Na aba WhatsApp, coloque um telefone de teste e clique em **Enviar mensagem de teste**.
+## Fluxo de impressao
 
-## Fluxo de notificacoes
-
-1. Gestao altera status do pedido (ex: Em preparo)
-2. Worker cria registro em `order_notifications`
-3. Agent busca notificacoes pendentes a cada 10 segundos
-4. Agent envia WhatsApp pelo conector local (Baileys)
-5. Agent marca notificacao como enviada
+1. Cliente ou balcao cria um pedido
+2. Worker marca o pedido como pendente de impressao (`printed_at` vazio)
+3. Agent busca pedidos pendentes a cada 5 segundos
+4. Agent imprime a comanda na impressora configurada
+5. Agent marca o pedido como impresso
 
 ## Solucao de problemas
 
@@ -128,16 +96,4 @@ Na aba WhatsApp, coloque um telefone de teste e clique em **Enviar mensagem de t
 | "Token invalido" | Verifique se o token e o mesmo do Worker |
 | Comanda nao sai | Verifique impressora ligada e selecionada |
 | "Erro de conexao" | Verifique internet |
-| WhatsApp desconectou | Va na aba WhatsApp e gere novo QR Code |
-| Mensagem nao enviou | Verifique se WhatsApp esta conectado |
 | Agent nao abre com Windows | Ative "Iniciar com Windows" e salve |
-
-## Migration SQL
-
-Antes de usar o WhatsApp automatico, execute no Supabase:
-
-```
-sql/add_local_agent_notifications.sql
-```
-
-Isso cria a tabela `order_notifications` necessaria para a fila de mensagens.

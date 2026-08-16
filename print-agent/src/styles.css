@@ -100,21 +100,6 @@ body {
 
 .status-text { font-weight: 600; }
 
-.wa-indicator,
-.bot-indicator {
-  font-size: .78rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: 3px 10px;
-  background: var(--bg);
-  border-radius: 12px;
-}
-
-.wa-indicator.wa-on { color: var(--success); background: #ecfdf5; }
-.wa-indicator.wa-off { color: var(--danger); background: #fef2f2; }
-.bot-indicator.bot-on { color: var(--success); background: #ecfdf5; }
-.bot-indicator.bot-off { color: var(--text-muted); background: var(--bg); }
-
 /* ── Tabs ── */
 
 .tabs {
@@ -327,43 +312,6 @@ body {
   letter-spacing: .04em;
 }
 
-/* ── WhatsApp status ── */
-
-.wa-status-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--bg);
-  border-radius: 6px;
-}
-
-.wa-status-label {
-  font-size: .85rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.wa-status-val {
-  font-size: .85rem;
-  font-weight: 700;
-}
-
-.wa-status-val.ws-connected { color: var(--success); }
-.wa-status-val.ws-disconnected { color: var(--danger); }
-.wa-status-val.ws-connecting { color: var(--primary); }
-
-.wa-error-msg {
-  margin-top: 10px;
-  padding: 8px 12px;
-  background: #fef2f2;
-  border: 1px solid var(--danger);
-  border-radius: 6px;
-  color: var(--danger);
-  font-size: .8rem;
-  font-weight: 600;
-}
-
 /* ── Logs ── */
 
 .logs-area {
@@ -385,34 +333,6 @@ body {
 }
 
 .log-line:last-child { border-bottom: none; }
-
-/* ── ChatBot card ── */
-
-.bot-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.bot-hint {
-  font-size: .8rem;
-  color: var(--text-muted);
-  margin-bottom: 14px;
-  line-height: 1.5;
-}
-
-.bot-body { }
-
-.bot-stats {
-  margin: 12px 0;
-}
-
-.stat-val-sm {
-  font-size: .95rem;
-  font-weight: 800;
-  color: var(--text);
-}
 
 /* ── Log colors ── */
 

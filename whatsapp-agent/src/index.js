@@ -84,12 +84,10 @@ async function handleWebhook(req, res) {
     return sendJson(res, 400, { error: 'invalid_body' });
   }
 
-  /* Verificacao: o payload da Evolution inclui a propria apikey da instancia.
-     Confirma que a chamada realmente veio da nossa Evolution API. */
-  if (payload.apikey && payload.apikey !== config.evolutionApiKey) {
-    log('WHATSAPP', 'Webhook rejeitado: apikey nao confere.');
-    return sendJson(res, 401, { error: 'unauthorized' });
-  }
+  /* Nao validamos payload.apikey aqui: em producao a Evolution (v2.3.7) envia nesse
+     campo um valor diferente de EVOLUTION_API_KEY, o que rejeitava mensagens legitimas
+     ("Webhook rejeitado: apikey nao confere"). A protecao do endpoint fica por conta do
+     firewall (porta 3001 liberada so para a subnet do Docker — ver whatsapp-agent/README.md). */
 
   if (payload.instance && payload.instance !== config.evolutionInstance) {
     /* Evento de outra instancia (nao deveria acontecer nesta VPS) — ignora sem erro. */

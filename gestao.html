@@ -477,36 +477,63 @@
           </form>
         </div>
 
-        <!-- Card: WhatsApp Automático -->
-        <div class="g-card">
+        <!-- Card: WhatsApp da loja -->
+        <div class="g-card wa-card">
           <div class="g-card-head">
-            <h2 class="g-card-title"><i class="fab fa-whatsapp" style="color:#25d366;margin-right:6px"></i>WhatsApp Automático</h2>
-            <p class="g-card-desc">Envia mensagens automáticas ao cliente quando o status do pedido muda.</p>
+            <h2 class="g-card-title"><i class="fab fa-whatsapp" style="color:#25D366;margin-right:6px"></i>WhatsApp da loja</h2>
+            <p class="g-card-desc">Conecte o WhatsApp da Day Lanches para ativar mensagens e atendimento automático.</p>
           </div>
-          <div id="wa-auto-panel">
-            <div class="wa-status-grid">
-              <div class="wa-status-row">
-                <span class="wa-status-label">Status:</span>
-                <span id="wa-status-badge" class="wa-badge wa-badge-unknown">Verificando...</span>
+
+          <div id="wa-status-pill" class="wa-pill wa-pill-unknown">
+            <i class="fas fa-circle-notch fa-spin"></i> Verificando...
+          </div>
+
+          <!-- Estado: desconectado / conectando -->
+          <div id="wa-setup-view" style="display:none">
+            <h3 class="wa-setup-title">Conecte o WhatsApp da loja</h3>
+            <p class="wa-setup-hint">Use o celular que ficará responsável pelo WhatsApp da Day Lanches.</p>
+
+            <div class="wa-connect-layout">
+              <div class="wa-qr-box">
+                <div id="wa-qrcode-img" class="wa-qrcode-container">
+                  <span class="wa-qr-placeholder">Clique em "Gerar novo QR Code" para começar</span>
+                </div>
+                <p id="wa-pairing-code" class="wa-pairing-code" style="display:none"></p>
+                <p class="wa-qr-expire-note">O QR Code expira após alguns instantes. Se necessário, gere um novo.</p>
               </div>
-              <div class="wa-status-row">
-                <span class="wa-status-label">Instância:</span>
-                <span id="wa-instance-name">—</span>
-              </div>
-              <div class="wa-status-row">
-                <span class="wa-status-label">Conexão:</span>
-                <span id="wa-connection-state">—</span>
+
+              <ol class="wa-steps">
+                <li><span class="wa-step-num">1</span><span>Abra o WhatsApp no celular da loja</span></li>
+                <li><span class="wa-step-num">2</span><span>Vá em <strong>Aparelhos conectados</strong> &gt; <strong>Conectar aparelho</strong></span></li>
+                <li><span class="wa-step-num">3</span><span>Escaneie este QR Code</span></li>
+              </ol>
+            </div>
+
+            <div class="g-card-actions wa-actions">
+              <button type="button" class="btn-secondary" onclick="waCheckStatus()"><i class="fas fa-sync-alt"></i> Atualizar status</button>
+              <button type="button" class="btn-primary" onclick="waGenerateQR()"><i class="fas fa-qrcode"></i> Gerar novo QR Code</button>
+            </div>
+          </div>
+
+          <!-- Estado: conectado -->
+          <div id="wa-connected-view" style="display:none">
+            <div class="wa-connected-banner">
+              <div class="wa-connected-icon"><i class="fas fa-check"></i></div>
+              <div>
+                <div class="wa-connected-title">WhatsApp conectado</div>
+                <div class="wa-connected-desc">O número da loja está conectado e pronto para receber e enviar mensagens automaticamente.</div>
               </div>
             </div>
-            <div id="wa-qrcode-area" style="display:none">
-              <p class="g-card-desc" style="margin:12px 0 8px">Escaneie o QR Code com o WhatsApp da loja:</p>
-              <div id="wa-qrcode-img" class="wa-qrcode-container"></div>
-              <p id="wa-pairing-code" class="wa-pairing-code" style="display:none"></p>
+
+            <div class="wa-indicators">
+              <div class="wa-indicator-item"><i class="fas fa-comment-dots"></i> Atendimento automático <strong>Ativo</strong></div>
+              <div class="wa-indicator-item"><i class="fas fa-receipt"></i> Mensagens de pedidos <strong>Ativas</strong></div>
+              <div class="wa-indicator-item"><i class="fas fa-server"></i> Servidor <strong>Online</strong></div>
             </div>
-            <div class="g-card-actions" style="flex-wrap:wrap;gap:8px">
-              <button type="button" class="btn-secondary" onclick="waCheckStatus()"><i class="fas fa-sync-alt"></i> Verificar status</button>
-              <button type="button" class="btn-secondary" onclick="waGenerateQR()"><i class="fas fa-qrcode"></i> Gerar QR Code</button>
-              <button type="button" class="btn-secondary" onclick="waOpenTestModal()"><i class="fas fa-paper-plane"></i> Testar mensagem</button>
+
+            <div class="g-card-actions wa-actions">
+              <button type="button" class="btn-secondary" onclick="waCheckStatus()"><i class="fas fa-sync-alt"></i> Verificar conexão</button>
+              <button type="button" class="btn-primary" onclick="waOpenTestModal()"><i class="fas fa-paper-plane"></i> Testar mensagem</button>
             </div>
           </div>
         </div>

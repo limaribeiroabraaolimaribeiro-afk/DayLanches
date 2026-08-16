@@ -1,7 +1,7 @@
 {
   "name": "day-lanches-agent",
-  "version": "2.0.0",
-  "description": "Day Lanches Agent — Impressao e WhatsApp automatico",
+  "version": "3.0.0",
+  "description": "Day Lanches Agent — Impressao automatica de comandas",
   "main": "src/main.js",
   "scripts": {
     "dev": "electron .",
@@ -15,11 +15,8 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.16",
     "auto-launch": "^5.0.6",
-    "electron-store": "7.0.0",
-    "pino": "^9.6.0",
-    "qrcode": "^1.5.4"
+    "electron-store": "7.0.0"
   },
   "build": {
     "appId": "com.daylanches.agent",
@@ -39,9 +36,6 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "shortcutName": "Day Lanches Agent"
-    },
-    "asarUnpack": [
-      "node_modules/@whiskeysockets/**"
-    ]
+    }
   }
 }

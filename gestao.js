@@ -2407,66 +2407,73 @@ async function handleSaveConfig(e) {
   await loadConfig();
 }
 
-/* ── WhatsApp Automático ── */
+/* ── WhatsApp da loja ──
+   Estado sempre consultado ao vivo em /whatsapp/status (Worker -> Evolution API).
+   Nunca fixar "conectado" no código - a tela reflete exatamente o que a API responder. */
+
+function waSetPill(html, kind) {
+  const pill = elid('wa-status-pill');
+  if (!pill) return;
+  pill.innerHTML = html;
+  pill.className = 'wa-pill wa-pill-' + kind;
+}
+
+function waShowConnectedView(connected) {
+  const setup = elid('wa-setup-view');
+  const connectedView = elid('wa-connected-view');
+  if (setup) setup.style.display = connected ? 'none' : 'block';
+  if (connectedView) connectedView.style.display = connected ? 'block' : 'none';
+}
 
 async function waCheckStatus() {
-  const badge = elid('wa-status-badge');
-  const instEl = elid('wa-instance-name');
-  const connEl = elid('wa-connection-state');
-  if (badge) { badge.textContent = 'Verificando...'; badge.className = 'wa-badge wa-badge-unknown'; }
+  waSetPill('<i class="fas fa-circle-notch fa-spin"></i> Verificando...', 'unknown');
   try {
     const res = await fetch(`${WORKER_URL}/whatsapp/status`);
     const data = await res.json();
-    if (instEl) instEl.textContent = data.instance || '—';
-    if (!data.configured) {
-      if (badge) { badge.textContent = 'Não configurado'; badge.className = 'wa-badge wa-badge-not-configured'; }
-      if (connEl) connEl.textContent = 'Secrets não definidos no Worker';
-      return;
-    }
     const state = (data.state || '').toLowerCase();
-    if (state === 'open' || state === 'connected') {
-      if (badge) { badge.textContent = 'Conectado'; badge.className = 'wa-badge wa-badge-connected'; }
-      if (connEl) connEl.textContent = 'WhatsApp conectado e pronto';
-    } else if (state === 'close' || state === 'disconnected') {
-      if (badge) { badge.textContent = 'Desconectado'; badge.className = 'wa-badge wa-badge-disconnected'; }
-      if (connEl) connEl.textContent = 'Gere um QR Code para reconectar';
+    const isConnected = !!data.configured && (state === 'open' || state === 'connected');
+
+    waShowConnectedView(isConnected);
+
+    if (isConnected) {
+      waSetPill('<i class="fas fa-check-circle"></i> Conectado', 'connected');
+    } else if (state === 'connecting') {
+      waSetPill('<i class="fas fa-circle-notch fa-spin"></i> Conectando...', 'connecting');
     } else {
-      if (badge) { badge.textContent = state || 'Desconhecido'; badge.className = 'wa-badge wa-badge-unknown'; }
-      if (connEl) connEl.textContent = data.error || 'Verifique a Evolution API';
+      waSetPill('<i class="fas fa-qrcode"></i> Aguardando conexão', 'waiting');
     }
   } catch (err) {
-    if (badge) { badge.textContent = 'Erro'; badge.className = 'wa-badge wa-badge-disconnected'; }
-    if (connEl) connEl.textContent = 'Falha ao consultar Worker';
+    waShowConnectedView(false);
+    waSetPill('<i class="fas fa-exclamation-triangle"></i> Não foi possível verificar agora', 'waiting');
   }
 }
 
 async function waGenerateQR() {
-  const area = elid('wa-qrcode-area');
   const imgContainer = elid('wa-qrcode-img');
   const pairingEl = elid('wa-pairing-code');
-  if (!area || !imgContainer) return;
-  area.style.display = 'block';
-  imgContainer.innerHTML = '<span style="color:var(--text-secondary);font-size:.85rem">Gerando QR Code...</span>';
-  if (pairingEl) pairingEl.style.display = 'none';
+  if (!imgContainer) return;
+  imgContainer.innerHTML = '<span class="wa-qr-placeholder">Gerando QR Code...</span>';
+  if (pairingEl) { pairingEl.style.display = 'none'; pairingEl.textContent = ''; }
   try {
     const res = await fetch(`${WORKER_URL}/whatsapp/qrcode`);
     const data = await res.json();
     if (data.error) {
-      imgContainer.innerHTML = `<span style="color:#dc2626;font-size:.85rem">${data.error}</span>`;
+      imgContainer.innerHTML = `<span class="wa-qr-error">${data.error}</span>`;
       return;
     }
     if (data.qrcode) {
       const src = data.qrcode.startsWith('data:') ? data.qrcode : `data:image/png;base64,${data.qrcode}`;
       imgContainer.innerHTML = `<img src="${src}" alt="QR Code WhatsApp">`;
     } else {
-      imgContainer.innerHTML = '<span style="color:var(--text-secondary);font-size:.85rem">QR Code não disponível. A instância pode já estar conectada.</span>';
+      imgContainer.innerHTML = '<span class="wa-qr-placeholder">QR Code não disponível no momento. Clique em "Atualizar status".</span>';
     }
+    /* Somente um pairingCode curto e genuino (nunca o payload bruto do QR) */
     if (data.pairingCode && pairingEl) {
       pairingEl.textContent = `Código de pareamento: ${data.pairingCode}`;
       pairingEl.style.display = 'block';
     }
   } catch (err) {
-    imgContainer.innerHTML = '<span style="color:#dc2626;font-size:.85rem">Erro ao gerar QR Code</span>';
+    imgContainer.innerHTML = '<span class="wa-qr-error">Erro ao gerar QR Code</span>';
   }
 }
 

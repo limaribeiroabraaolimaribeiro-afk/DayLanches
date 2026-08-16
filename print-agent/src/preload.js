@@ -13,27 +13,8 @@ contextBridge.exposeInMainWorld('api', {
   /* Print */
   printReceipt:   (data)      => ipcRenderer.invoke('print-receipt', data),
 
-  /* WhatsApp */
-  whatsappConnect:    ()          => ipcRenderer.invoke('whatsapp-connect'),
-  whatsappNewQR:      ()          => ipcRenderer.invoke('whatsapp-new-qr'),
-  whatsappReset:      ()          => ipcRenderer.invoke('whatsapp-reset'),
-  whatsappDisconnect: ()          => ipcRenderer.invoke('whatsapp-disconnect'),
-  whatsappGetStatus:  ()          => ipcRenderer.invoke('whatsapp-get-status'),
-  whatsappGetQR:      ()          => ipcRenderer.invoke('whatsapp-get-qr'),
-  whatsappSend:       (data)      => ipcRenderer.invoke('whatsapp-send-message', data),
-
-  /* ChatBot */
-  chatbotGetConfig:     ()       => ipcRenderer.invoke('chatbot-get-config'),
-  chatbotSetConfig:     (config) => ipcRenderer.invoke('chatbot-set-config', config),
-  chatbotGetStats:      ()       => ipcRenderer.invoke('chatbot-get-stats'),
-  chatbotClearSessions: ()       => ipcRenderer.invoke('chatbot-clear-sessions'),
-
   /* Events from main process */
   onAutoStartMonitoring: (cb) => ipcRenderer.on('auto-start-monitoring', cb),
   onTrayStartMonitoring: (cb) => ipcRenderer.on('tray-start-monitoring', cb),
   onTrayStopMonitoring:  (cb) => ipcRenderer.on('tray-stop-monitoring', cb),
-  onWhatsAppStatus:      (cb) => ipcRenderer.on('whatsapp-status-update', (_e, s) => cb(s)),
-  onWhatsAppQR:          (cb) => ipcRenderer.on('whatsapp-qr-update', (_e, url) => cb(url)),
-  onWhatsAppError:       (cb) => ipcRenderer.on('whatsapp-error', (_e, msg) => cb(msg)),
-  onChatbotLog:          (cb) => ipcRenderer.on('chatbot-log', (_e, data) => cb(data)),
 });

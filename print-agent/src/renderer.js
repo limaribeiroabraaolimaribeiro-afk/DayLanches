@@ -1,19 +1,14 @@
 'use strict';
 
 const PRINT_POLL_MS = 5000;
-const NOTIF_POLL_MS = 10000;
 
 const state = {
   monitoring: false,
   printTimer: null,
-  notifTimer: null,
   printedCache: new Set(),
   printedCount: 0,
   printErrors: 0,
-  waSentCount: 0,
-  waErrors: 0,
   firstPrintRun: true,
-  waStatus: 'disconnected',
 };
 
 /* ── DOM helpers ── */
@@ -36,30 +31,8 @@ const ui = {
   statusText:   () => $('status-text'),
   statPrinted:  () => $('stat-printed'),
   statPrintErr: () => $('stat-print-errors'),
-  statWaSent:   () => $('stat-wa-sent'),
-  statWaErr:    () => $('stat-wa-errors'),
   statLastChk:  () => $('stat-last-check'),
   logsArea:     () => $('logs-area'),
-  waIndicator:  () => $('wa-indicator'),
-  waStatusText: () => $('wa-status-text'),
-  waQrContainer:() => $('wa-qr-container'),
-  waQrImg:      () => $('wa-qr-img'),
-  waErrorMsg:   () => $('wa-error-msg'),
-  btnWaConnect: () => $('btn-wa-connect'),
-  btnWaNewQr:   () => $('btn-wa-new-qr'),
-  btnWaReset:   () => $('btn-wa-reset'),
-  btnWaDisconn: () => $('btn-wa-disconnect'),
-  waTestPhone:  () => $('wa-test-phone'),
-  btnWaTest:    () => $('btn-wa-test'),
-  /* ChatBot */
-  botEnabled:   () => $('cfg-bot-enabled'),
-  botHours:     () => $('cfg-bot-hours'),
-  btnBotSave:   () => $('btn-bot-save'),
-  btnBotClear:  () => $('btn-bot-clear'),
-  botIndicator: () => $('bot-indicator'),
-  botStatTotal: () => $('bot-stat-total'),
-  botStatSess:  () => $('bot-stat-sessions'),
-  botStatLast:  () => $('bot-stat-last'),
 };
 
 /* ── Logging ── */
@@ -88,8 +61,6 @@ function setStatus(text, type) {
 function updateStats() {
   ui.statPrinted().textContent = state.printedCount;
   ui.statPrintErr().textContent = state.printErrors;
-  ui.statWaSent().textContent = state.waSentCount;
-  ui.statWaErr().textContent = state.waErrors;
   ui.statLastChk().textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -229,7 +200,7 @@ async function testPrint() {
 }
 
 /* ══════════════════════════════════════════════════════════
-   MONITORAMENTO (impressao + notificacoes)
+   MONITORAMENTO (impressao)
 ══════════════════════════════════════════════════════════ */
 
 function startMonitoring() {
@@ -250,15 +221,11 @@ function startMonitoring() {
 
   pollOrders();
   state.printTimer = setInterval(pollOrders, PRINT_POLL_MS);
-
-  pollNotifications();
-  state.notifTimer = setInterval(pollNotifications, NOTIF_POLL_MS);
 }
 
 function stopMonitoring() {
   state.monitoring = false;
   if (state.printTimer) { clearInterval(state.printTimer); state.printTimer = null; }
-  if (state.notifTimer) { clearInterval(state.notifTimer); state.notifTimer = null; }
   ui.btnStart().style.display = '';
   ui.btnStop().style.display = 'none';
   setStatus('Parado', '');
@@ -371,299 +338,6 @@ async function markPrinted(orderId, orderNum) {
   }
 }
 
-/* ── Notification polling ── */
-
-let _notifFirstWarn = true;
-
-async function pollNotifications() {
-  if (!state.monitoring) return;
-
-  try {
-    const url = `${getBaseUrl()}/local-agent/pending-notifications`;
-    const res = await fetch(url, { headers: getHeaders() });
-
-    if (!res.ok) {
-      if (res.status !== 401) log(`Erro ao buscar notificacoes: HTTP ${res.status}`, 'error');
-      return;
-    }
-
-    const data = await res.json();
-    const notifications = data.notifications || [];
-
-    if (!notifications.length) return;
-
-    if (state.waStatus !== 'connected') {
-      if (_notifFirstWarn) {
-        log(`${notifications.length} notificacao(oes) pendente(s), WhatsApp nao conectado.`, 'warn');
-        _notifFirstWarn = false;
-      }
-      return;
-    }
-
-    _notifFirstWarn = true;
-
-    for (const notif of notifications) {
-      await processNotification(notif);
-      await sleep(2000);
-    }
-  } catch (err) {
-    log(`Erro ao verificar notificacoes: ${err.message}`, 'error');
-  }
-}
-
-async function processNotification(notif) {
-  const num = notif.order_number || '?';
-
-  try {
-    const result = await window.api.whatsappSend({
-      phone: notif.customer_phone,
-      message: notif.message,
-    });
-
-    if (result.success) {
-      await markNotifSent(notif.id);
-      log(`WhatsApp enviado: pedido #${num} (${notif.status})`, 'success');
-      state.waSentCount++;
-    } else {
-      await markNotifFailed(notif.id, result.error);
-      log(`Falha WhatsApp #${num}: ${result.error}`, 'error');
-      state.waErrors++;
-    }
-  } catch (err) {
-    await markNotifFailed(notif.id, err.message);
-    log(`Erro WhatsApp #${num}: ${err.message}`, 'error');
-    state.waErrors++;
-  }
-
-  updateStats();
-}
-
-async function markNotifSent(id) {
-  try {
-    await fetch(`${getBaseUrl()}/local-agent/mark-notification-sent`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ notification_id: id }),
-    });
-  } catch (_) {}
-}
-
-async function markNotifFailed(id, error) {
-  try {
-    await fetch(`${getBaseUrl()}/local-agent/mark-notification-failed`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ notification_id: id, error_message: error }),
-    });
-  } catch (_) {}
-}
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-/* ══════════════════════════════════════════════════════════
-   WHATSAPP UI
-══════════════════════════════════════════════════════════ */
-
-function showWaError(msg) {
-  const el = ui.waErrorMsg();
-  if (!el) return;
-  el.textContent = msg;
-  el.style.display = '';
-}
-
-function hideWaError() {
-  const el = ui.waErrorMsg();
-  if (!el) return;
-  el.style.display = 'none';
-}
-
-function updateWaUI(status) {
-  state.waStatus = status;
-
-  const indicator = ui.waIndicator();
-  const statusText = ui.waStatusText();
-  const btnConn = ui.btnWaConnect();
-  const btnNewQr = ui.btnWaNewQr();
-  const btnDisc = ui.btnWaDisconn();
-  const qrContainer = ui.waQrContainer();
-
-  const labels = {
-    disconnected: 'Desconectado',
-    connecting: 'Gerando QR Code...',
-    qr_ready: 'Aguardando QR Code',
-    connected: 'Conectado',
-    reconnecting: 'Reconectando...',
-  };
-
-  const cls = {
-    disconnected: 'ws-disconnected',
-    connecting: 'ws-connecting',
-    qr_ready: 'ws-connecting',
-    connected: 'ws-connected',
-    reconnecting: 'ws-connecting',
-  };
-
-  statusText.textContent = labels[status] || status;
-  statusText.className = 'wa-status-val ' + (cls[status] || '');
-
-  indicator.textContent = 'WhatsApp: ' + (labels[status] || status);
-  indicator.className = 'wa-indicator ' + (status === 'connected' ? 'wa-on' : 'wa-off');
-
-  if (status === 'connected') {
-    btnConn.style.display = 'none';
-    btnNewQr.style.display = 'none';
-    btnDisc.style.display = '';
-    qrContainer.style.display = 'none';
-  } else if (status === 'qr_ready') {
-    btnConn.style.display = 'none';
-    btnNewQr.style.display = '';
-    btnDisc.style.display = '';
-    qrContainer.style.display = '';
-  } else {
-    btnConn.style.display = '';
-    btnNewQr.style.display = '';
-    btnDisc.style.display = 'none';
-    if (status !== 'connecting' && status !== 'reconnecting') {
-      qrContainer.style.display = 'none';
-    }
-  }
-}
-
-async function connectWhatsApp() {
-  const btn = ui.btnWaConnect();
-  btn.disabled = true;
-  btn.textContent = 'Gerando QR Code...';
-  hideWaError();
-  ui.waQrContainer().style.display = 'none';
-  log('Conectando WhatsApp...', 'info');
-
-  const result = await window.api.whatsappConnect();
-
-  if (!result.success) {
-    log(`Erro ao conectar WhatsApp: ${result.error}`, 'error');
-    showWaError(result.error);
-  }
-
-  btn.disabled = false;
-  btn.textContent = 'Conectar WhatsApp';
-}
-
-async function generateNewQR() {
-  const btn = ui.btnWaNewQr();
-  btn.disabled = true;
-  btn.textContent = 'Gerando QR Code...';
-  hideWaError();
-  ui.waQrContainer().style.display = 'none';
-  log('Gerando novo QR Code...', 'info');
-
-  const result = await window.api.whatsappNewQR();
-
-  if (!result.success) {
-    log(`Erro ao gerar QR Code: ${result.error}`, 'error');
-    showWaError(result.error);
-  }
-
-  btn.disabled = false;
-  btn.textContent = 'Gerar novo QR Code';
-}
-
-async function resetWhatsApp() {
-  if (!confirm('Isso vai encerrar a conexao atual e apagar a sessao salva do WhatsApp. Deseja continuar?')) return;
-
-  const btn = ui.btnWaReset();
-  btn.disabled = true;
-  btn.textContent = 'Reconectando...';
-  hideWaError();
-  ui.waQrContainer().style.display = 'none';
-  log('Reconectando WhatsApp do zero...', 'warn');
-
-  const result = await window.api.whatsappReset();
-
-  if (!result.success) {
-    log(`Erro ao reconectar: ${result.error}`, 'error');
-    showWaError(result.error);
-  }
-
-  btn.disabled = false;
-  btn.textContent = 'Reconectar do zero';
-}
-
-async function disconnectWhatsApp() {
-  const btn = ui.btnWaDisconn();
-  btn.disabled = true;
-  log('Desconectando WhatsApp...', 'info');
-
-  await window.api.whatsappDisconnect();
-
-  btn.disabled = false;
-}
-
-async function testWhatsApp() {
-  const phone = ui.waTestPhone().value.trim();
-  if (!phone) { log('Informe o telefone de teste.', 'warn'); return; }
-
-  const btn = ui.btnWaTest();
-  btn.disabled = true;
-  btn.textContent = 'Enviando...';
-
-  try {
-    const message = 'Teste de notificacao automatica Day Lanches.\n\nSe voce recebeu esta mensagem, o WhatsApp automatico esta conectado corretamente.';
-    const result = await window.api.whatsappSend({ phone, message });
-
-    if (result.success) {
-      log('Mensagem de teste enviada.', 'success');
-    } else {
-      log(`Falha no teste: ${result.error}`, 'error');
-    }
-  } catch (err) {
-    log(`Erro no teste: ${err.message}`, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Enviar mensagem de teste';
-  }
-}
-
-/* ══════════════════════════════════════════════════════════
-   CHATBOT UI
-══════════════════════════════════════════════════════════ */
-
-async function loadBotConfig() {
-  const cfg = await window.api.chatbotGetConfig();
-  ui.botEnabled().checked = cfg.botEnabled;
-  ui.botHours().value = cfg.botBusinessHours || '';
-  updateBotIndicator(cfg.botEnabled);
-}
-
-async function saveBotConfig() {
-  await window.api.chatbotSetConfig({
-    botEnabled:       ui.botEnabled().checked,
-    botBusinessHours: ui.botHours().value.trim(),
-  });
-  updateBotIndicator(ui.botEnabled().checked);
-  log('Configuracoes do robo salvas.', 'success');
-  await refreshBotStats();
-}
-
-async function refreshBotStats() {
-  try {
-    const stats = await window.api.chatbotGetStats();
-    ui.botStatTotal().textContent = stats.total;
-    ui.botStatSess().textContent  = stats.sessionCount;
-    ui.botStatLast().textContent  = stats.lastReceivedAt
-      ? new Date(stats.lastReceivedAt).toLocaleTimeString('pt-BR')
-      : '--';
-  } catch (_) {}
-}
-
-function updateBotIndicator(enabled) {
-  const el = ui.botIndicator();
-  if (!el) return;
-  el.textContent = enabled ? 'Bot: Ativo' : 'Bot: Inativo';
-  el.className = 'bot-indicator ' + (enabled ? 'bot-on' : 'bot-off');
-}
-
 /* ══════════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════════ */
@@ -671,7 +345,6 @@ function updateBotIndicator(enabled) {
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
   await loadConfig();
-  await loadBotConfig();
 
   /* Buttons */
   ui.btnSave().addEventListener('click', saveConfig);
@@ -688,53 +361,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await window.api.setAutoMonitor(ui.autoMonitor().checked);
   });
 
-  /* WhatsApp buttons */
-  ui.btnWaConnect().addEventListener('click', connectWhatsApp);
-  ui.btnWaNewQr().addEventListener('click', generateNewQR);
-  ui.btnWaReset().addEventListener('click', resetWhatsApp);
-  ui.btnWaDisconn().addEventListener('click', disconnectWhatsApp);
-  ui.btnWaTest().addEventListener('click', testWhatsApp);
-
-  /* Bot toggle live update */
-  ui.botEnabled().addEventListener('change', () => {
-    updateBotIndicator(ui.botEnabled().checked);
-  });
-
-  /* Bot buttons */
-  ui.btnBotSave().addEventListener('click', saveBotConfig);
-  ui.btnBotClear().addEventListener('click', async () => {
-    if (!confirm('Limpar todas as sessoes do robo? Todos os clientes receberao o menu inicial novamente.')) return;
-    await window.api.chatbotClearSessions();
-    await refreshBotStats();
-    log('Sessoes do robo limpas.', 'warn');
-  });
-
-  /* WhatsApp events from main process */
-  window.api.onWhatsAppStatus((status) => {
-    updateWaUI(status);
-    if (status === 'connected') { hideWaError(); log('WhatsApp conectado.', 'success'); }
-    if (status === 'reconnecting') log('WhatsApp reconectando...', 'warn');
-    if (status === 'disconnected') log('WhatsApp desconectado.', 'warn');
-  });
-
-  window.api.onWhatsAppQR((dataUrl) => {
-    hideWaError();
-    ui.waQrImg().src = dataUrl;
-    ui.waQrContainer().style.display = '';
-    log('QR Code gerado. Escaneie com o WhatsApp da loja.', 'info');
-  });
-
-  window.api.onWhatsAppError((msg) => {
-    log(`WhatsApp erro: ${msg}`, 'error');
-    showWaError(msg);
-  });
-
-  /* ChatBot events */
-  window.api.onChatbotLog(async ({ msg, level }) => {
-    log(`[Bot] ${msg}`, level);
-    await refreshBotStats();
-  });
-
   /* Tray events */
   window.api.onAutoStartMonitoring(() => {
     log('Monitoramento automatico iniciado.', 'info');
@@ -744,16 +370,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.api.onTrayStartMonitoring(() => startMonitoring());
   window.api.onTrayStopMonitoring(() => stopMonitoring());
 
-  /* Check initial WA status */
-  const waStatus = await window.api.whatsappGetStatus();
-  updateWaUI(waStatus);
-
-  const qr = await window.api.whatsappGetQR();
-  if (qr) {
-    ui.waQrImg().src = qr;
-    ui.waQrContainer().style.display = '';
-  }
-
-  await refreshBotStats();
   log('Day Lanches Agent pronto.', 'info');
 });

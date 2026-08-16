@@ -3,7 +3,7 @@ version: "3.8"
 services:
   # ── Evolution API ──
   evolution-api:
-    image: atendai/evolution-api:v2.2.3
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: evolution-api
     restart: unless-stopped
     depends_on:
@@ -21,12 +21,18 @@ services:
       # Banco de dados
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@evolution-postgres:5432/${POSTGRES_DB}
+      # Reduz volume gravado no Postgres — nao precisamos de historico de chat/contatos
+      - DATABASE_SAVE_DATA_CHATS=false
+      - DATABASE_SAVE_DATA_CONTACTS=false
+      - DATABASE_SAVE_DATA_HISTORIC=false
+      - DATABASE_SAVE_DATA_LABELS=false
 
-      # Redis
-      - CACHE_REDIS_ENABLED=true
+      # Redis desativado como cache: usado apenas pelo container evolution-redis em si,
+      # sem interferir na sessao. Cache local em memoria no lugar.
+      - CACHE_REDIS_ENABLED=false
       - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD}@evolution-redis:6379/0
       - CACHE_REDIS_PREFIX_KEY=evolution
-      - CACHE_LOCAL_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
 
       # Autenticação
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
@@ -36,8 +42,12 @@ services:
       - DEL_INSTANCE=false
       - DEL_TEMP_INSTANCES=false
 
+      # Versao do WhatsApp Web reportada pelo Baileys — fixa a versao para evitar
+      # o bug do /instance/connect retornando count:0 (visto na v2.2.3)
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1033773198
+
       # Logs
-      - LOG_LEVEL=WARN
+      - LOG_LEVEL=INFO
       - LOG_COLOR=true
 
       # Webhook global (desativado — cada instância configura o seu)
@@ -89,6 +99,10 @@ services:
     image: caddy:2-alpine
     container_name: caddy
     restart: unless-stopped
+    # Necessario para o Caddyfile resolver {$DOMAIN} dentro do container
+    # (a interpolacao ${DOMAIN} deste docker-compose.yml nao alcanca o Caddy sozinha).
+    environment:
+      - DOMAIN=${DOMAIN}
     ports:
       - "80:80"
       - "443:443"
