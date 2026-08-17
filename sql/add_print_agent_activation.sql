@@ -75,9 +75,15 @@ revoke all on public.print_agent_activation_attempts  from anon, authenticated;
 
 -- Gera uma string curta e legível (8 caracteres, sem 0/O/1/I/L
 -- pra evitar erro de digitação), formatada "XXXX-XXXX".
+-- No Supabase, pgcrypto fica instalado no schema `extensions` (não em
+-- `public`). Como estas funções travam search_path=public, toda chamada
+-- pgcrypto precisa ser explicitamente qualificada com `extensions.` —
+-- nunca depender do search_path pra resolver gen_random_bytes/crypt/
+-- gen_salt/digest.
 create or replace function public._print_agent_random_code()
 returns text
 language plpgsql
+set search_path = public
 as $$
 declare
   chars text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -85,7 +91,7 @@ declare
   i     int;
 begin
   for i in 1..8 loop
-    raw := raw || substr(chars, 1 + (get_byte(gen_random_bytes(1), 0) % length(chars)), 1);
+    raw := raw || substr(chars, 1 + (get_byte(extensions.gen_random_bytes(1), 0) % length(chars)), 1);
   end loop;
   return substr(raw, 1, 4) || '-' || substr(raw, 5, 4);
 end;
@@ -108,10 +114,23 @@ declare
   new_code text;
   new_expiry timestamptz := now() + make_interval(mins => greatest(expires_in_min, 1));
 begin
+  -- Autorização server-side: só admin ativo pode gerar código. Nunca
+  -- confiar em input_email (vem do navegador) pra isso — email fica
+  -- só como dado de auditoria. auth.uid() vem do JWT validado pelo
+  -- PostgREST, cross-referenciado com public.profiles.role.
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'admin'
+      and coalesce(p.is_active, true) = true
+  ) then
+    raise exception 'not_authorized' using errcode = '42501';
+  end if;
+
   new_code := public._print_agent_random_code();
 
   insert into public.print_agent_activation_codes (code_hash, label, expires_at, created_by_email)
-  values (crypt(new_code, gen_salt('bf')), input_label, new_expiry, input_email);
+  values (extensions.crypt(new_code, extensions.gen_salt('bf')), input_label, new_expiry, input_email);
 
   return query select new_code, new_expiry;
 end;
@@ -164,11 +183,16 @@ begin
 
   -- Busca por hash bcrypt entre os códigos ainda não usados (used_at is null).
   -- Não filtra por expires_at aqui pra podermos distinguir "expirado" de "invalido/ja usado" abaixo.
+  -- FOR UPDATE trava a linha: se duas requisições disputarem o mesmo código
+  -- ao mesmo tempo, a segunda só prossegue depois que a primeira commita —
+  -- e nesse momento o WHERE (used_at is null) já não bate mais, então a
+  -- segunda simplesmente não encontra nada e recebe 'invalid'.
   select * into matched_code
   from public.print_agent_activation_codes
   where used_at is null
-    and code_hash = crypt(trim(input_code), code_hash)
-  limit 1;
+    and code_hash = extensions.crypt(trim(input_code), code_hash)
+  limit 1
+  for update;
 
   if matched_code.id is null then
     return query select null::text, 'invalid';
@@ -181,7 +205,7 @@ begin
   end if;
 
   -- Gera a credencial do dispositivo: 32 bytes aleatorios (256 bits), hex.
-  new_token := encode(gen_random_bytes(32), 'hex');
+  new_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   -- Prioriza o nome sugerido pelo proprio computador (ex: hostname do Windows,
   -- mais util pra identificar na lista) e cai pro rotulo definido na geracao
@@ -189,7 +213,7 @@ begin
   final_label := coalesce(nullif(trim(input_device_label), ''), matched_code.label);
 
   insert into public.print_agent_devices (device_token_hash, label, created_by_email)
-  values (encode(digest(new_token, 'sha256'), 'hex'), final_label, matched_code.created_by_email)
+  values (encode(extensions.digest(new_token, 'sha256'), 'hex'), final_label, matched_code.created_by_email)
   returning id into new_device_id;
 
   update public.print_agent_activation_codes
@@ -202,25 +226,38 @@ $$;
 
 -- Sem GRANT para anon/authenticated — só service_role (o Worker) chama esta funcao.
 
--- ── 3) Listar dispositivos (Gestão, autenticada) ────────────────
--- NUNCA retorna device_token_hash.
+-- ── 3) Listar dispositivos (Gestão, autenticada + admin) ────────
+-- NUNCA retorna device_token_hash. Convertida de "language sql" para
+-- "language plpgsql" só para permitir a checagem de autorização abaixo.
 create or replace function public.list_print_agent_devices()
 returns table(
   id uuid, label text, activated_at timestamptz,
   revoked_at timestamptz, last_seen_at timestamptz, created_by_email text
 )
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
-  select id, label, activated_at, revoked_at, last_seen_at, created_by_email
-  from public.print_agent_devices
-  order by activated_at desc;
+begin
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'admin'
+      and coalesce(p.is_active, true) = true
+  ) then
+    raise exception 'not_authorized' using errcode = '42501';
+  end if;
+
+  return query
+    select d.id, d.label, d.activated_at, d.revoked_at, d.last_seen_at, d.created_by_email
+    from public.print_agent_devices d
+    order by d.activated_at desc;
+end;
 $$;
 
 grant execute on function public.list_print_agent_devices() to authenticated;
 
--- ── 4) Revogar dispositivo (Gestão, autenticada) ────────────────
+-- ── 4) Revogar dispositivo (Gestão, autenticada + admin) ────────
 create or replace function public.revoke_print_agent_device(input_device_id uuid)
 returns boolean
 language plpgsql
@@ -228,6 +265,15 @@ security definer
 set search_path = public
 as $$
 begin
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'admin'
+      and coalesce(p.is_active, true) = true
+  ) then
+    raise exception 'not_authorized' using errcode = '42501';
+  end if;
+
   update public.print_agent_devices
   set revoked_at = now()
   where id = input_device_id and revoked_at is null;
