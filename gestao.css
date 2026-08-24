@@ -2406,8 +2406,8 @@ body.is-balcao .dash-header { display: none !important; }
 
 /* Right column: starts at y=0, full viewport height */
 .pdv-right {
-  height: 100vh;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   overflow: hidden;
   border-left: 1px solid var(--border);
   background: var(--white);
@@ -2415,13 +2415,28 @@ body.is-balcao .dash-header { display: none !important; }
 
 /* Cart card fills the right column completely */
 .pdv-cart-card {
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   border-radius: 0;
   box-shadow: none;
   margin: 0;
+}
+
+/* #pdv-new-order-view e #pdv-table-view sao os dois "modos" da comanda
+   (pedido novo / mesa ocupada), alternados via display:none/'' em JS.
+   Cada um precisa ser, ele mesmo, uma coluna flex que preenche e encolhe
+   dentro de .pdv-cart-card -- senao os filhos internos (.pdv-cart-header/
+   .pdv-cart-body/.pdv-cart-actions) perdem o flex:1/min-height:0 que
+   depende do pai ser flex, e o conteudo extra fica preso atras do
+   overflow:hidden do .pdv-right/.pdv-cart-card sem nenhuma scrollbar. */
+#pdv-new-order-view,
+#pdv-table-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .pdv-search-row {
@@ -3200,6 +3215,19 @@ body.is-balcao .dash-header { display: none !important; }
 
   .pdv-cart-header { border-radius: 0; }
   .pdv-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+  /* No mobile o padrao ja e a pagina inteira rolar (sem painel interno de
+     altura fixa) -- .pdv-right/.pdv-cart-card viram height:auto acima.
+     #pdv-new-order-view/#pdv-table-view precisam voltar a ser blocos que
+     so abraçam o conteudo aqui, senao flex:1 1 auto + min-height:0 (que
+     so faz sentido dentro do container de altura fixa do desktop) colapsa
+     o painel em vez de deixá-lo crescer com o conteudo. */
+  #pdv-new-order-view,
+  #pdv-table-view {
+    display: block;
+    flex: none;
+    min-height: auto;
+  }
 }
 
 @media (max-width: 480px) {
