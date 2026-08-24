@@ -445,7 +445,13 @@ async function handlePrintAgentHealth(request, env) {
   return json({ ok: true, service: 'day-lanches-print-agent' });
 }
 
-/* GET /print-agent/pending-orders */
+/* GET /print-agent/pending-orders
+   Devolve dois tipos de pedido:
+   1) nunca impressos (printed_at is null) — comanda inteira, como sempre.
+   2) mesas de Balcão já impressas mas com itens novos anexados depois
+      (items.length > printed_items_count) — só o "delta" de itens novos,
+      marcado com is_addition:true, pra virar um aviso "ADICIONAL — MESA N"
+      em vez de reimprimir a comanda toda (evita duplicar itens na cozinha). */
 async function handlePrintAgentPendingOrders(request, env) {
   if (!(await validatePrintAgentDeviceAuth(request, env))) {
     return json({ error: 'Unauthorized' }, 401);
@@ -456,20 +462,42 @@ async function handlePrintAgentPendingOrders(request, env) {
       'id', 'order_number', 'created_at', 'customer_name', 'customer_phone',
       'delivery_type', 'order_source', 'table_number', 'payment_method',
       'payment_status', 'paid_at', 'status', 'subtotal', 'delivery_fee', 'total', 'items', 'notes',
-      'customer_address_text', 'location', 'printed_at',
+      'customer_address_text', 'location', 'printed_at', 'printed_items_count',
     ].join(',');
 
-    const params = `select=${fields}&printed_at=is.null&status=neq.cancelado&order=created_at.asc&limit=10`;
-    const orders = await sbGet(env, 'orders', params);
+    const paramsFull = `select=${fields}&printed_at=is.null&status=neq.cancelado&order=created_at.asc&limit=10`;
+    const fullOrders = await sbGet(env, 'orders', paramsFull);
 
-    return json({ orders: Array.isArray(orders) ? orders : [] });
+    /* Sem filtro de payment_status: mesmo se a mesa foi paga rápido demais
+       entre o "adicionar item" e o próximo poll, o delta ainda tem que
+       chegar na cozinha — só some da lista quando for de fato impresso. */
+    const paramsAdd = `select=${fields}&printed_at=not.is.null&order_source=eq.balcao&table_number=not.is.null&status=neq.cancelado&order=created_at.asc&limit=10`;
+    const addCandidates = await sbGet(env, 'orders', paramsAdd);
+
+    const additions = (Array.isArray(addCandidates) ? addCandidates : [])
+      .filter(o => Array.isArray(o.items) && o.items.length > (o.printed_items_count || 0))
+      .map(o => ({
+        ...o,
+        printed_items_count_before: o.printed_items_count || 0,
+        items: o.items.slice(o.printed_items_count || 0),
+        is_addition: true,
+      }));
+
+    const orders = [...(Array.isArray(fullOrders) ? fullOrders : []), ...additions];
+
+    return json({ orders });
   } catch (err) {
     console.error('[DayLanches] Erro ao buscar pedidos pendentes:', err);
     return json({ error: 'Erro interno ao buscar pedidos' }, 500);
   }
 }
 
-/* POST /print-agent/mark-printed */
+/* POST /print-agent/mark-printed
+   printed_up_to (opcional): até qual índice do array `items` o Print Agent
+   efetivamente imprimiu — evita marcar como impresso um item que a Dayane
+   adicionou pela tela entre o Print Agent buscar os pedidos pendentes e
+   confirmar a impressão. Sem esse campo (Print Agent antigo, ainda não
+   atualizado), cai no comportamento anterior: usa o total atual de itens. */
 async function handlePrintAgentMarkPrinted(request, env) {
   if (!(await validatePrintAgentDeviceAuth(request, env))) {
     return json({ error: 'Unauthorized' }, 401);
@@ -479,12 +507,19 @@ async function handlePrintAgentMarkPrinted(request, env) {
   try { body = await request.json(); }
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
-  const { order_id } = body;
+  const { order_id, printed_up_to } = body;
   if (!order_id) return json({ error: 'order_id required' }, 400);
 
   try {
+    let newCount = printed_up_to;
+    if (newCount == null) {
+      const rows = await sbGet(env, 'orders', `id=eq.${order_id}&select=items`);
+      newCount = Array.isArray(rows?.[0]?.items) ? rows[0].items.length : 0;
+    }
+
     const res = await sbPatch(env, 'orders', `id=eq.${order_id}`, {
       printed_at: new Date().toISOString(),
+      printed_items_count: newCount,
     });
 
     if (!res.ok) {

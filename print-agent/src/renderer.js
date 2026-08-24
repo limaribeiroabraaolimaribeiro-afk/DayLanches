@@ -308,8 +308,13 @@ async function pollOrders() {
     }
 
     for (const order of orders) {
-      if (state.printedCache.has(order.id)) continue;
-      await printOrder(order);
+      /* Chave inclui o "antes" da contagem de itens impressos: um pedido já
+         impresso uma vez pode legitimamente voltar a aparecer aqui com um
+         delta novo (mais itens adicionados numa mesa) — nesse caso é um
+         trabalho de impressão diferente e não deve ser pulado pelo cache. */
+      const cacheKey = `${order.id}:${order.printed_items_count_before ?? (order.printed_items_count || 0)}`;
+      if (state.printedCache.has(cacheKey)) continue;
+      await printOrder(order, cacheKey);
     }
   } catch (err) {
     handlePollFailure(err.message);
@@ -330,14 +335,17 @@ function handlePollFailure(reason) {
   }
 }
 
-async function printOrder(order) {
+async function printOrder(order, cacheKey) {
   const num = order.order_number || order.id?.slice(0, 8) || '?';
+  const isAddition = !!order.is_addition;
 
   try {
-    const html = window.buildReceiptHtml(order, state.paperType);
+    const html = isAddition
+      ? window.buildAdditionReceiptHtml(order, state.paperType)
+      : window.buildReceiptHtml(order, state.paperType);
     const printerName = ui.printer().value;
 
-    log(`Imprimindo #${num}...`, 'info');
+    log(isAddition ? `Imprimindo itens adicionados — #${num}...` : `Imprimindo #${num}...`, 'info');
     const result = await window.api.printReceipt({ html, printerName, paperType: state.paperType });
 
     if (!result.success) {
@@ -345,20 +353,23 @@ async function printOrder(order) {
       return;
     }
 
-    log(`Comanda #${num} impressa.`, 'success');
-    state.printedCache.add(order.id);
-    await markPrinted(order.id, num);
+    log(isAddition ? `Adicional #${num} impresso.` : `Comanda #${num} impressa.`, 'success');
+    state.printedCache.add(cacheKey);
+    const printedUpTo = isAddition
+      ? (order.printed_items_count_before || 0) + order.items.length
+      : order.items.length;
+    await markPrinted(order.id, num, printedUpTo);
   } catch (err) {
     log(`Erro ao imprimir #${num}: ${err.message}`, 'error');
   }
 }
 
-async function markPrinted(orderId, orderNum) {
+async function markPrinted(orderId, orderNum, printedUpTo) {
   try {
     const res = await fetch(`${getBaseUrl()}/print-agent/mark-printed`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ order_id: orderId }),
+      body: JSON.stringify({ order_id: orderId, printed_up_to: printedUpTo }),
     });
 
     if (res.ok) {

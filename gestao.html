@@ -290,6 +290,7 @@
         <!-- DIREITA -->
         <aside class="pdv-right">
           <div class="pdv-cart pdv-cart-card" id="pdv-cart">
+          <div id="pdv-new-order-view">
             <div class="pdv-cart-header">
               <h2 class="pdv-cart-title"><i class="fas fa-cash-register"></i> Novo pedido no balcão</h2>
             </div>
@@ -392,6 +393,59 @@
                 <i class="fas fa-trash"></i> Limpar pedido
               </button>
             </div>
+          </div>
+
+          <!-- Comanda de uma mesa ocupada — mesma tela, sem navegar pra outra página -->
+          <div id="pdv-table-view" style="display:none">
+            <div class="pdv-cart-header">
+              <button class="btn-pdv-back" onclick="pdvBackToMesaGrid()"><i class="fas fa-arrow-left"></i></button>
+              <h2 class="pdv-cart-title"><i class="fas fa-chair"></i> <span id="pdv-tv-title">Mesa —</span></h2>
+            </div>
+
+            <div class="pdv-cart-body">
+              <div class="pdv-tv-meta" id="pdv-tv-meta"></div>
+
+              <div class="pdv-cart-items" id="pdv-tv-items"></div>
+
+              <div class="pdv-cart-summary" id="pdv-tv-summary"></div>
+
+              <div id="pdv-tv-addcart" style="display:none">
+                <div class="pdv-section-block">
+                  <label class="pdv-section-label">Adicionar à mesa</label>
+                  <div class="pdv-cart-items" id="pdv-table-addcart-items">
+                    <p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Escolha produtos no catálogo à esquerda</p>
+                  </div>
+                  <div class="pdv-cart-summary">
+                    <div class="pdv-summary-row">
+                      <span>Subtotal dos novos itens</span>
+                      <span id="pdv-tv-addcart-subtotal">R$ 0,00</span>
+                    </div>
+                    <div class="pdv-summary-row pdv-summary-total">
+                      <span>Total dos novos itens</span>
+                      <span id="pdv-tv-addcart-total">R$ 0,00</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="pdv-cart-actions">
+                  <button class="btn-pdv-primary" id="pdv-tv-addcart-confirm" onclick="pdvConfirmAddToTable()">
+                    <i class="fas fa-check"></i> Confirmar itens
+                  </button>
+                  <button class="btn-pdv-clear" onclick="pdvCancelAddingToTable()">
+                    <i class="fas fa-times"></i> Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="pdv-cart-actions" id="pdv-tv-actions">
+              <button class="btn-pdv-primary" onclick="pdvStartAddingToTable()">
+                <i class="fas fa-plus"></i> Adicionar produtos
+              </button>
+              <button class="btn-pdv-primary btn-pdv-pay-table" onclick="pdvPayTable()">
+                <i class="fas fa-money-bill-wave"></i> Pagar
+              </button>
+            </div>
+          </div>
           </div>
         </aside>
 

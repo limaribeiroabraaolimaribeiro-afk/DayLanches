@@ -1001,7 +1001,7 @@ async function confirmCancelOrder(id) {
     });
   } catch (_) {}
   await loadOrders();
-  if (pdv.initialized) pdvRenderMesas();
+  if (pdv.initialized) { pdvRenderMesas(); pdvExitTableViewIfStale(); }
 }
 
 function buildCallCustomerMessage(o) {
@@ -1382,7 +1382,7 @@ async function updateOrderStatus(id, status) {
   }
 
   await loadOrders();
-  if (pdv.initialized) pdvRenderMesas();
+  if (pdv.initialized) { pdvRenderMesas(); pdvExitTableViewIfStale(); }
 }
 
 let _payModalResolve = null;
@@ -1446,7 +1446,7 @@ async function confirmMarkAsPaid(id) {
   toast('Pagamento confirmado.');
   logAuditAction('mark_paid', 'order', id, `#${num}`, null, { payment_method: method });
   await loadOrders();
-  if (pdv.initialized) pdvRenderMesas();
+  if (pdv.initialized) { pdvRenderMesas(); pdvExitTableViewIfStale(); }
 }
 
 function filterOrders(filter, btn) {
@@ -1650,8 +1650,10 @@ async function markOrderPrinted(o) {
   if (!already && gs.section === 'pedidos') renderOrders();
   try {
     const nowIso = new Date().toISOString();
+    const items = Array.isArray(o.items) ? o.items : [];
     o.printed_at = nowIso;
-    await getSb().from('orders').update({ printed_at: nowIso }).eq('id', o.id);
+    o.printed_items_count = items.length;
+    await getSb().from('orders').update({ printed_at: nowIso, printed_items_count: items.length }).eq('id', o.id);
   } catch (e) {
     console.warn('Erro ao marcar comanda como impressa:', e);
   }
@@ -2905,6 +2907,7 @@ function getCurrentActor() {
 const _FRIENDLY_ACTIONS = {
   create_order:           'Pedido criado',
   create_counter_order:   'Pedido criado no balcão',
+  add_table_items:        'Itens adicionados ao pedido',
   cancel_order:           'Pedido cancelado',
   mark_paid:              'Pagamento confirmado',
   mark_order_paid:        'Pagamento confirmado',
@@ -4841,7 +4844,19 @@ const pdv = {
   optSelections: {},
   optGroups: [],
   orderType: 'balcao',
+  /* mode: 'new' (montando pedido novo) | 'table' (vendo comanda de uma mesa
+     ocupada) | 'adding' (adicionando produtos a essa comanda) */
+  mode: 'new',
+  activeTableOrder: null,
+  addCart: [],
 };
+
+/* Carrinho "ativo": o da tela de novo pedido, ou o de adição a uma mesa
+   ocupada — deixa pdvAddProduct/pdvConfirmOptions/pdvChangeQty/etc. servirem
+   os dois fluxos sem duplicar lógica. */
+function pdvActiveCart() {
+  return pdv.mode === 'adding' ? pdv.addCart : pdv.cart;
+}
 
 function pdvInit() {
   if (!pdv.initialized) {
@@ -4849,6 +4864,10 @@ function pdvInit() {
   }
   pdvRenderProducts();
   pdvRenderMesas();
+  if (pdv.mode !== 'new') {
+    pdvExitTableViewIfStale();
+    if (pdv.mode !== 'new') pdvRenderTableView();
+  }
   pdvRenderCart();
 }
 
@@ -4918,12 +4937,13 @@ async function pdvAddProduct(productId) {
     return;
   }
 
-  const existing = pdv.cart.find(c => c.productId === productId && !c.options?.length);
+  const cart = pdvActiveCart();
+  const existing = cart.find(c => c.productId === productId && !c.options?.length);
   if (existing) {
     existing.qty++;
     existing.total = existing.qty * existing.unitPrice;
   } else {
-    pdv.cart.push({
+    cart.push({
       productId,
       name: p.name,
       unitPrice: Number(p.price || 0),
@@ -4976,12 +4996,13 @@ async function pdvOpenOptions(product) {
 }
 
 function pdvAddProduct_direct(product) {
-  const existing = pdv.cart.find(c => c.productId === product.id && !c.options?.length);
+  const cart = pdvActiveCart();
+  const existing = cart.find(c => c.productId === product.id && !c.options?.length);
   if (existing) {
     existing.qty++;
     existing.total = existing.qty * existing.unitPrice;
   } else {
-    pdv.cart.push({
+    cart.push({
       productId: product.id,
       name: product.name,
       unitPrice: Number(product.price || 0),
@@ -5120,7 +5141,7 @@ function pdvConfirmOptions() {
 
   const unitPrice = Number(p.price || 0) + optExtra;
 
-  pdv.cart.push({
+  pdvActiveCart().push({
     productId: p.id,
     name: p.name,
     unitPrice,
@@ -5207,19 +5228,24 @@ function pdvHighlightError(input) {
 }
 
 function pdvRenderCart() {
-  const wrap = elid('pdv-cart-items');
-  const isDelivery = pdv.orderType === 'delivery';
+  const adding = pdv.mode === 'adding';
+  const cart = pdvActiveCart();
+  const wrap = elid(adding ? 'pdv-table-addcart-items' : 'pdv-cart-items');
+  if (!wrap) return;
+  const isDelivery = !adding && pdv.orderType === 'delivery';
   const feeRow = elid('pdv-fee-row');
+  const subtotalEl = elid(adding ? 'pdv-tv-addcart-subtotal' : 'pdv-subtotal');
+  const totalEl = elid(adding ? 'pdv-tv-addcart-total' : 'pdv-total');
 
-  if (!pdv.cart.length) {
+  if (!cart.length) {
     wrap.innerHTML = '<p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item adicionado</p>';
-    elid('pdv-subtotal').textContent = 'R$ 0,00';
-    elid('pdv-total').textContent = 'R$ 0,00';
-    if (feeRow) feeRow.style.display = 'none';
+    if (subtotalEl) subtotalEl.textContent = 'R$ 0,00';
+    if (totalEl) totalEl.textContent = 'R$ 0,00';
+    if (!adding && feeRow) feeRow.style.display = 'none';
     return;
   }
 
-  wrap.innerHTML = pdv.cart.map((c, i) => {
+  wrap.innerHTML = cart.map((c, i) => {
     const optsHtml = (c.options||[]).map(og => `${og.groupTitle}: ${og.items.map(oi=>oi.name).join(', ')}`).join(' · ');
     return `<div class="pdv-item">
       <div class="pdv-item-info">
@@ -5236,19 +5262,20 @@ function pdvRenderCart() {
     </div>`;
   }).join('');
 
-  const subtotal = pdv.cart.reduce((s, c) => s + c.total, 0);
+  const subtotal = cart.reduce((s, c) => s + c.total, 0);
   const fee = isDelivery ? pdvGetDeliveryFee() : 0;
   const total = subtotal + fee;
-  elid('pdv-subtotal').textContent = `R$ ${fmt(subtotal)}`;
-  elid('pdv-total').textContent = `R$ ${fmt(total)}`;
-  if (feeRow) {
+  if (subtotalEl) subtotalEl.textContent = `R$ ${fmt(subtotal)}`;
+  if (totalEl) totalEl.textContent = `R$ ${fmt(total)}`;
+  if (!adding && feeRow) {
     feeRow.style.display = isDelivery ? '' : 'none';
     if (isDelivery) elid('pdv-fee-display').textContent = `R$ ${fmt(fee)}`;
   }
 }
 
 function pdvChangeQty(index, delta) {
-  const item = pdv.cart[index];
+  const cart = pdvActiveCart();
+  const item = cart[index];
   if (!item) return;
   item.qty = Math.max(1, item.qty + delta);
   item.total = item.qty * item.unitPrice;
@@ -5256,7 +5283,7 @@ function pdvChangeQty(index, delta) {
 }
 
 function pdvRemoveItem(index) {
-  pdv.cart.splice(index, 1);
+  pdvActiveCart().splice(index, 1);
   pdvRenderCart();
 }
 
@@ -5364,6 +5391,19 @@ async function pdvSave() {
         full: error,
       });
 
+      /* Índice único orders_one_open_table: outra requisição (duplo clique,
+         outra aba) já abriu essa mesa entre o carregamento da tela e este
+         salvamento. Em vez de erro, abre a comanda que já existe. */
+      if (error.code === '23505' && !isDelivery) {
+        const stuckTable = pdv.tableNumber;
+        toast(`Mesa ${stuckTable} já está aberta. Abrindo pedido existente...`);
+        await loadOrders();
+        pdv.cart = [];
+        pdvSetOrderType('balcao');
+        pdvOpenTable(stuckTable);
+        return;
+      }
+
       const msg = error.message || '';
       if (msg.includes('order_source') || msg.includes('table_number')) {
         toast('Erro: execute as migrations SQL no Supabase antes de usar o Balcão.', true);
@@ -5400,14 +5440,32 @@ async function pdvSave() {
   }
 }
 
+/* Uma mesa está ocupada quando existe uma comanda de Balcão aberta pra ela:
+   não cancelada e ainda não paga. Pagar nunca muda `status` (só
+   payment_status/paid_at), então o critério tem que olhar pagamento, não
+   status — do contrário uma mesa paga fica "ocupada" pra sempre até alguém
+   avançar o status manualmente. */
+function pdvIsOpenTableOrder(o) {
+  if (!o.table_number) return false;
+  if (o.order_source !== 'balcao' && o.delivery_type !== 'balcao') return false;
+  if (o.status === 'cancelado') return false;
+  return !isPaidOrder(o);
+}
+
+function pdvFindOpenOrderForTable(num) {
+  return gs.orders.find(o => o.table_number === num && pdvIsOpenTableOrder(o)) || null;
+}
+
 function pdvGetOccupiedTables() {
   const occupied = {};
   gs.orders.forEach(o => {
-    if (!o.table_number) return;
-    if (o.order_source !== 'balcao' && o.delivery_type !== 'balcao') return;
-    const st = (o.status || '').toLowerCase();
-    if (st === 'finalizado' || st === 'cancelado') return;
-    occupied[o.table_number] = o.order_number || o.id?.slice(-8).toUpperCase() || '';
+    if (!pdvIsOpenTableOrder(o)) return;
+    occupied[o.table_number] = {
+      orderId: o.id,
+      orderNumber: o.order_number || o.id?.slice(-8).toUpperCase() || '',
+      customerName: o.customer_name || 'Cliente balcão',
+      total: Number(o.total || 0),
+    };
   });
   return occupied;
 }
@@ -5419,8 +5477,8 @@ function pdvRenderMesas() {
 
   grid.innerHTML = Array.from({ length: 10 }, (_, i) => {
     const num = i + 1;
-    const orderNum = occupied[num];
-    const isOccupied = !!orderNum;
+    const info = occupied[num];
+    const isOccupied = !!info;
     const isSelected = pdv.tableNumber === num;
 
     let cls = 'pdv-mesa-btn';
@@ -5429,24 +5487,217 @@ function pdvRenderMesas() {
     else cls += ' mesa-livre';
 
     const statusText = isSelected ? 'Selecionada' : (isOccupied ? 'Ocupada' : 'Livre');
-    const orderLine = (isOccupied && !isSelected) ? `<span class="pdv-mesa-order">#${esc(orderNum)}</span>` : '';
+    const infoLine = (isOccupied && !isSelected)
+      ? `<span class="pdv-mesa-client">${esc(info.customerName)} · R$ ${fmt(info.total)}</span>`
+      : '';
+    const titleAttr = isOccupied ? ` title="Pedido #${esc(info.orderNumber)}"` : '';
 
-    return `<button type="button" class="${cls}" ${isOccupied && !isSelected ? 'disabled' : ''} onclick="pdvSelectMesa(${num})">
+    return `<button type="button" class="${cls}"${titleAttr} onclick="pdvSelectMesa(${num})">
       <span class="pdv-mesa-num">${num}</span>
       <span class="pdv-mesa-status">${statusText}</span>
-      ${orderLine}
+      ${infoLine}
     </button>`;
   }).join('');
 }
 
 function pdvSelectMesa(num) {
   const occupied = pdvGetOccupiedTables();
-  if (occupied[num] && pdv.tableNumber !== num) {
-    toast(`Mesa ${num} está ocupada.`, true);
+  if (occupied[num]) {
+    pdvOpenTable(num);
     return;
   }
   pdv.tableNumber = pdv.tableNumber === num ? null : num;
   pdvRenderMesas();
+}
+
+/* ── Comanda da mesa (mesa ocupada) ── */
+
+function pdvOpenTable(num) {
+  const order = pdvFindOpenOrderForTable(num);
+  if (!order) {
+    toast(`Mesa ${num} não está mais ocupada.`, true);
+    pdvRenderMesas();
+    return;
+  }
+  pdv.activeTableOrder = order;
+  pdv.mode = 'table';
+  pdv.addCart = [];
+
+  const newOrderView = elid('pdv-new-order-view');
+  const tableView = elid('pdv-table-view');
+  if (newOrderView) newOrderView.style.display = 'none';
+  if (tableView) tableView.style.display = '';
+
+  pdvRenderTableView();
+  pdvRenderMesas();
+}
+
+function pdvBackToMesaGrid() {
+  pdv.mode = 'new';
+  pdv.activeTableOrder = null;
+  pdv.addCart = [];
+
+  const newOrderView = elid('pdv-new-order-view');
+  const tableView = elid('pdv-table-view');
+  if (tableView) tableView.style.display = 'none';
+  if (newOrderView) newOrderView.style.display = '';
+
+  pdvRenderMesas();
+  pdvRenderCart();
+}
+
+/* Se a mesa exibida na tela deixou de estar aberta (paga ou cancelada por
+   outra ação na mesma aba, ex: em Pedidos), sai da visão da comanda em vez
+   de continuar mostrando um pedido que não existe mais como "aberto". */
+function pdvExitTableViewIfStale() {
+  if (pdv.mode === 'new' || !pdv.activeTableOrder) return;
+  const stillOpen = pdvFindOpenOrderForTable(pdv.activeTableOrder.table_number);
+  if (!stillOpen || stillOpen.id !== pdv.activeTableOrder.id) {
+    pdvBackToMesaGrid();
+  }
+}
+
+function pdvRenderTableView() {
+  const order = pdv.activeTableOrder;
+  if (!order) return;
+
+  const titleEl = elid('pdv-tv-title');
+  if (titleEl) titleEl.textContent = `Mesa ${order.table_number} · Ocupada`;
+
+  const metaEl = elid('pdv-tv-meta');
+  if (metaEl) {
+    const opened = order.created_at ? new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+    metaEl.innerHTML = `
+      <div class="pdv-tv-meta-row"><i class="fas fa-user"></i> ${esc(order.customer_name || 'Cliente balcão')}</div>
+      <div class="pdv-tv-meta-row"><i class="fas fa-clock"></i> Aberta às ${opened}</div>
+      ${order.notes ? `<div class="pdv-tv-meta-row"><i class="fas fa-note-sticky"></i> ${esc(order.notes)}</div>` : ''}
+    `;
+  }
+
+  const items = Array.isArray(order.items) ? order.items : [];
+  const itemsEl = elid('pdv-tv-items');
+  if (itemsEl) {
+    itemsEl.innerHTML = items.length ? items.map(i => {
+      const optsHtml = (i.options || []).map(og => `${og.groupTitle}: ${(og.items || []).map(oi => oi.name).join(', ')}`).join(' · ');
+      const total = i.total || (i.finalUnitPrice || i.unitPrice || 0) * (i.qty || 1) || 0;
+      return `<div class="pdv-item">
+        <div class="pdv-item-info">
+          <div class="pdv-item-name">${i.qty || 1}x ${esc(i.name)}</div>
+          ${optsHtml ? `<div class="pdv-item-opts">${esc(optsHtml)}</div>` : ''}
+          ${i.notes ? `<div class="pdv-item-opts">Obs: ${esc(i.notes)}</div>` : ''}
+        </div>
+        <div class="pdv-item-price">R$ ${fmt(total)}</div>
+      </div>`;
+    }).join('') : '<p class="pdv-cart-empty"><i class="fas fa-basket-shopping"></i> Nenhum item</p>';
+  }
+
+  const summaryEl = elid('pdv-tv-summary');
+  if (summaryEl) {
+    const discount = Number(order.discount_amount || 0);
+    const courtesy = Number(order.courtesy_amount || 0);
+    summaryEl.innerHTML = `
+      <div class="pdv-summary-row"><span>Subtotal</span><span>R$ ${fmt(order.subtotal || 0)}</span></div>
+      ${discount > 0 ? `<div class="pdv-summary-row"><span>Desconto</span><span>- R$ ${fmt(discount)}</span></div>` : ''}
+      ${courtesy > 0 ? `<div class="pdv-summary-row"><span>Cortesia</span><span>- R$ ${fmt(courtesy)}</span></div>` : ''}
+      <div class="pdv-summary-row pdv-summary-total"><span>Total</span><span>R$ ${fmt(order.total || 0)}</span></div>
+    `;
+  }
+
+  /* Volta pro estado "comanda" (some com o sub-carrinho de adição) sempre
+     que a comanda é (re)desenhada fora do modo 'adding' */
+  const addBlock = elid('pdv-tv-addcart');
+  if (addBlock) addBlock.style.display = pdv.mode === 'adding' ? '' : 'none';
+  const actionsBlock = elid('pdv-tv-actions');
+  if (actionsBlock) actionsBlock.style.display = pdv.mode === 'adding' ? 'none' : '';
+
+  if (pdv.mode === 'adding') pdvRenderCart();
+}
+
+function pdvStartAddingToTable() {
+  pdv.mode = 'adding';
+  pdv.addCart = [];
+  pdvRenderTableView();
+  pdvRenderCart();
+}
+
+function pdvCancelAddingToTable() {
+  pdv.mode = 'table';
+  pdv.addCart = [];
+  pdvRenderTableView();
+}
+
+async function pdvConfirmAddToTable() {
+  const order = pdv.activeTableOrder;
+  if (!order) return;
+  if (!pdv.addCart.length) { toast('Adicione pelo menos um produto.', true); return; }
+
+  const btn = elid('pdv-tv-addcart-confirm');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adicionando...'; }
+
+  try {
+    const newItems = pdv.addCart.map(c => ({
+      name: c.name,
+      qty: c.qty,
+      unitPrice: c.unitPrice,
+      finalUnitPrice: c.finalUnitPrice || c.unitPrice,
+      total: c.total,
+      options: c.options || [],
+    }));
+
+    const existingItems = Array.isArray(order.items) ? order.items : [];
+    const mergedItems = [...existingItems, ...newItems]; // só anexa — nunca reordena/edita
+    const subtotal = mergedItems.reduce((s, i) => s + (i.total || 0), 0);
+    /* Preserva desconto/cortesia já aplicados em Pedidos (applyDiscount/
+       applyCourtesy alteram `total` sem tocar `items`) */
+    const discount = Number(order.discount_amount || 0);
+    const courtesy = Number(order.courtesy_amount || 0);
+    const total = Math.max(0, subtotal - discount - courtesy);
+    const now = new Date().toISOString();
+
+    const { data, error } = await getSb().from('orders')
+      .update({ items: mergedItems, subtotal, total, updated_at: now })
+      .eq('id', order.id)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('[PDV] Erro ao adicionar itens à mesa:', error);
+      toast('Erro ao adicionar itens: ' + (error.message || 'tente novamente.'), true);
+      return;
+    }
+
+    const idx = gs.orders.findIndex(o => o.id === order.id);
+    if (idx !== -1) gs.orders[idx] = data;
+    pdv.activeTableOrder = data;
+
+    logAuditAction('add_table_items', 'order', order.id, `#${data.order_number || order.id.slice(-8).toUpperCase()}`, null, {
+      added: newItems.length,
+      table: order.table_number,
+    });
+
+    pdv.mode = 'table';
+    pdv.addCart = [];
+    pdvRenderTableView();
+    pdvRenderMesas();
+    toast('Itens adicionados ao pedido.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Confirmar itens'; }
+  }
+}
+
+async function pdvPayTable() {
+  const order = pdv.activeTableOrder;
+  if (!order) return;
+
+  await confirmMarkAsPaid(order.id); // reaproveita 100% o modal/lógica de pagamento já existente
+
+  const fresh = gs.orders.find(o => o.id === order.id);
+  if (fresh && isPaidOrder(fresh)) {
+    toast(`Mesa ${order.table_number} liberada.`);
+    pdvBackToMesaGrid();
+  }
+  /* Se o modal foi cancelado, confirmMarkAsPaid não alterou nada — a
+     comanda continua exibida como estava (mesa continua ocupada). */
 }
 
 /* Expose for HTML onclick */
@@ -5508,6 +5759,12 @@ window.pdvRemoveItem                  = pdvRemoveItem;
 window.pdvClearCart                    = pdvClearCart;
 window.pdvSave                        = pdvSave;
 window.pdvSelectMesa                  = pdvSelectMesa;
+window.pdvOpenTable                   = pdvOpenTable;
+window.pdvBackToMesaGrid              = pdvBackToMesaGrid;
+window.pdvStartAddingToTable          = pdvStartAddingToTable;
+window.pdvCancelAddingToTable         = pdvCancelAddingToTable;
+window.pdvConfirmAddToTable           = pdvConfirmAddToTable;
+window.pdvPayTable                    = pdvPayTable;
 window.pdvSetOrderType                = pdvSetOrderType;
 window.pdvFormatPhone                 = pdvFormatPhone;
 window.pdvCloseOptions                = pdvCloseOptions;

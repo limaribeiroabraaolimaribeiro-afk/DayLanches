@@ -101,6 +101,63 @@ function buildReceiptHtml(order, paperType) {
 </html>`;
 }
 
+/* Aviso curto de itens adicionados depois à comanda de uma mesa já impressa
+   (Balcão). `order.items` aqui já vem só com os itens novos (o Worker faz o
+   corte) — não repete os itens antigos, então a cozinha não vê duplicidade.
+   Sem preços/total/pagamento: é aviso de produção, não recibo. */
+function buildAdditionReceiptHtml(order, paperType) {
+  const w = paperType === 'A4' ? '210mm' : (paperType === '58mm' ? '54mm' : '74mm');
+  const fs = paperType === '58mm' ? '10px' : (paperType === 'A4' ? '13px' : '12px');
+  const pad = paperType === 'A4' ? 'max-width:210mm;margin:0 auto;padding:12mm;' : 'padding:2mm;';
+
+  const num = order.order_number || (order.id ? order.id.slice(-8).toUpperCase() : '---');
+  const dateTime = new Date().toLocaleString('pt-BR');
+  const items = Array.isArray(order.items) ? order.items : [];
+  const hasMesa = !!order.table_number;
+
+  const itemsHtml = items.map(i => {
+    const opts = (i.options||[]).map(og => `<div class="rc-opt">· ${esc(og.groupTitle)}: ${(og.items||[]).map(oi=>esc(oi.name)).join(', ')}</div>`).join('');
+    const note = i.notes ? `<div class="rc-opt">Obs: ${esc(i.notes)}</div>` : '';
+    return `<div class="rc-item"><span>${i.qty||1}x ${esc(i.name)}</span></div>${opts}${note}`;
+  }).join('') || '<div>---</div>';
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8">
+<style>
+  @page { size: ${paperType === 'A4' ? 'A4' : (paperType === '58mm' ? '58mm' : '80mm')} auto; margin: 2mm; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:${fs};color:#000;background:#fff;width:${w};${pad}line-height:1.4}
+  .rc-hd{text-align:center;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:4px}
+  .rc-brand{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:.06em}
+  .rc-sub{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.15em}
+  .rc-sep{border:none;border-top:1px dashed #000;margin:4px 0}
+  .rc-row{display:flex;justify-content:space-between;gap:4px;font-size:11px}
+  .rc-lbl{font-size:9px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.04em}
+  .rc-val{font-weight:700}
+  .rc-type{text-align:center;font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;padding:4px 0;border:2px solid #000;margin:4px 0}
+  .rc-item{display:flex;justify-content:space-between;padding:3px 0;font-weight:700;font-size:13px}
+  .rc-item+.rc-item{border-top:1px dotted #ccc}
+  .rc-opt{margin-left:10px;font-size:10px;color:#333;font-weight:400}
+  .rc-ft{text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#555;margin-top:4px}
+</style>
+</head>
+<body>
+  <div class="rc-hd"><div class="rc-brand">Day Lanches</div><div class="rc-sub">Item adicionado</div></div>
+  <div class="rc-row"><span>Pedido: <strong>#${esc(num)}</strong></span><span>${dateTime}</span></div>
+  <hr class="rc-sep">
+  <div class="rc-type">ADICIONAL${hasMesa ? ' — MESA ' + order.table_number : ''}</div>
+  <hr class="rc-sep">
+  <div><span class="rc-lbl">Cliente</span><br><span class="rc-val">${esc(order.customer_name||'---')}</span></div>
+  <hr class="rc-sep">
+  <div class="rc-lbl">Itens novos</div>
+  ${itemsHtml}
+  <hr class="rc-sep">
+  <div class="rc-ft">Day Lanches — sabor que marca</div>
+</body>
+</html>`;
+}
+
 function buildTestReceiptHtml(paperType) {
   const width = paperType === 'A4' ? '210mm' : (paperType === '58mm' ? '58mm' : '80mm');
   const fontSize = paperType === '58mm' ? '11px' : (paperType === 'A4' ? '14px' : '13px');
@@ -137,4 +194,5 @@ function buildTestReceiptHtml(paperType) {
 }
 
 window.buildReceiptHtml = buildReceiptHtml;
+window.buildAdditionReceiptHtml = buildAdditionReceiptHtml;
 window.buildTestReceiptHtml = buildTestReceiptHtml;
