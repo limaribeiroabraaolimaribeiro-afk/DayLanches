@@ -2732,13 +2732,17 @@ body.is-balcao .dash-header { display: none !important; }
   align-items: center;
   justify-content: center;
   gap: 2px;
+  width: 100%;
   height: 56px;
+  min-width: 0;
+  max-width: 100%;
   border-radius: 10px;
   border: 2px solid var(--border);
   background: var(--white);
   cursor: pointer;
   transition: all .15s;
   padding: 4px 2px;
+  overflow: hidden;
 }
 .pdv-mesa-btn .pdv-mesa-num {
   font-size: .88rem;
@@ -2791,6 +2795,8 @@ body.is-balcao .dash-header { display: none !important; }
   font-weight: 600;
   color: #7f1d1d;
   line-height: 1.15;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
