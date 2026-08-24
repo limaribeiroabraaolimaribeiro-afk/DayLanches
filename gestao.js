@@ -5488,9 +5488,9 @@ function pdvRenderMesas() {
 
     const statusText = isSelected ? 'Selecionada' : (isOccupied ? 'Ocupada' : 'Livre');
     const infoLine = (isOccupied && !isSelected)
-      ? `<span class="pdv-mesa-client">${esc(info.customerName)} · R$ ${fmt(info.total)}</span>`
+      ? `<span class="pdv-mesa-client">${esc(info.customerName)}</span>`
       : '';
-    const titleAttr = isOccupied ? ` title="Pedido #${esc(info.orderNumber)}"` : '';
+    const titleAttr = isOccupied ? ` title="Pedido #${esc(info.orderNumber)} — R$ ${fmt(info.total)}"` : '';
 
     return `<button type="button" class="${cls}"${titleAttr} onclick="pdvSelectMesa(${num})">
       <span class="pdv-mesa-num">${num}</span>
