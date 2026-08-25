@@ -604,9 +604,29 @@ function setCheckoutButtonsBusy(busy) {
 
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
 
-/* Valores usados apenas se store_settings não tiver delivery_price_per_km/route_factor salvos */
-const DELIVERY_PRICE_PER_KM_FALLBACK = 2.50;
+/* Valor usado apenas se store_settings não tiver route_factor salvo */
 const DELIVERY_ROUTE_FACTOR_FALLBACK = 1.4; /* Haversine é linha reta; fator estima rota real */
+
+/* Tabela fixa de taxa de entrega por faixa de distância (substitui o
+   cálculo antigo por R$/km, que não reflete o preço real cobrado pela
+   loja). distanceKm já deve vir ajustado pelo fator de rota -- aqui só
+   aplica a tabela sobre o km arredondado para cima (1,1km conta como
+   mesa 2km, 8,1km conta como 9km, etc). Acima de 15km não existe valor
+   automático: retorna null para sinalizar "fora da tabela, consultar a
+   loja" -- nunca cobrar por extrapolação. */
+function getDeliveryFeeByDistanceTable(distanceKm) {
+  const km = Math.ceil(distanceKm);
+  if (km <= 2)  return 5;
+  if (km === 3) return 8;
+  if (km === 4) return 10;
+  if (km === 5) return 12;
+  if (km === 6) return 15;
+  if (km === 7) return 17;
+  if (km === 8) return 20;
+  if (km <= 11) return 25;
+  if (km <= 15) return 30;
+  return null; /* acima de 15km */
+}
 
 /* ──────────────────────────────────────────
    SUPABASE — integração
@@ -704,27 +724,23 @@ function calculateDeliveryFeeByKm() {
   const customerLat = Number(state.geo.lat);
   const customerLon = Number(state.geo.lon);
   const routeFactor = Number(cfg.route_factor) || DELIVERY_ROUTE_FACTOR_FALLBACK;
-  const pricePerKm  = Number(cfg.delivery_price_per_km) || DELIVERY_PRICE_PER_KM_FALLBACK;
 
-  const rawDistanceKm = calculateDistanceKm(storeLat, storeLon, customerLat, customerLon);
-  let estimatedDistanceKm = rawDistanceKm * routeFactor;
-  let freight = Math.ceil(estimatedDistanceKm * pricePerKm);
+  const rawDistanceKm       = calculateDistanceKm(storeLat, storeLon, customerLat, customerLon);
+  const estimatedDistanceKm = rawDistanceKm * routeFactor;
+  const freight             = getDeliveryFeeByDistanceTable(estimatedDistanceKm);
 
-  if (rawDistanceKm < 0.2) {
-    estimatedDistanceKm = 0;
-    freight = 0;
-  }
-
-  state.geo.straightDistanceKm = rawDistanceKm;
-  state.geo.distanceKm         = estimatedDistanceKm;
+  state.geo.straightDistanceKm  = rawDistanceKm;
+  state.geo.distanceKm          = estimatedDistanceKm;
+  /* true quando a distância passa da última faixa da tabela (>15km) --
+     não existe valor automático correto pra cobrar nesse caso. */
+  state.geo.deliveryOutOfRange  = freight === null;
 
   console.log('[FRETE DEBUG]', {
     storeLat, storeLon, customerLat, customerLon,
-    rawDistanceKm, routeFactor, estimatedDistanceKm,
-    deliveryPricePerKm: pricePerKm, freight,
+    rawDistanceKm, routeFactor, estimatedDistanceKm, freight,
   });
 
-  return freight;
+  return freight === null ? 0 : freight;
 }
 
 /* ── CONFIGURAÇÕES DA LOJA ── */
@@ -732,6 +748,10 @@ function calculateDeliveryFeeByKm() {
 const STORE_WHATSAPP = "5547991559926";
 // Trocar pela chave PIX real da loja (celular, CPF, email ou chave aleatória)
 const PIX_KEY = "47997483342";
+
+/* Acima de 15km a tabela de frete não tem valor -- nunca calcular
+   automaticamente nesse caso, só orientar a falar com a loja. */
+const DELIVERY_OUT_OF_RANGE_MESSAGE = 'Para entregas acima de 15 km, consulte a taxa pelo WhatsApp.';
 
 /* ──────────────────────────────────────────
    3. NAVEGAÇÃO
@@ -838,7 +858,9 @@ function requestGeoLocation() {
           </div>
           <div class="geo-fee-info">
             <span><i class="fas fa-route"></i> Distância aproximada: <strong>${estimated.toFixed(1).replace('.', ',')} km</strong></span>
-            <span><i class="fas fa-motorcycle"></i> Frete: <strong>R$ ${fmt(fee)}</strong></span>
+            ${state.geo.deliveryOutOfRange
+              ? `<span class="geo-fee-out-of-range"><i class="fas fa-circle-exclamation"></i> ${esc(DELIVERY_OUT_OF_RANGE_MESSAGE)}</span>`
+              : `<span><i class="fas fa-motorcycle"></i> Frete: <strong>R$ ${fmt(fee)}</strong></span>`}
           </div>
           <p id="geo-address-info" class="geo-address-info"><i class="fas fa-spinner fa-spin"></i> Buscando endereço aproximado…</p>
           <a href="${link}" target="_blank" rel="noopener" class="geo-map-link">
@@ -885,6 +907,10 @@ async function handleOnlinePayment(method) {
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para entrega, use o botão de localização antes de continuar.');
     navigateTo('delivery');
+    return;
+  }
+  if (state.deliveryType === 'delivery' && state.geo.deliveryOutOfRange) {
+    showToast(DELIVERY_OUT_OF_RANGE_MESSAGE);
     return;
   }
 
@@ -1169,6 +1195,7 @@ function getDeliveryFee() {
 
 function feeDisplay() {
   if (state.deliveryType === 'pickup') return 'Grátis';
+  if (state.geo.deliveryOutOfRange) return DELIVERY_OUT_OF_RANGE_MESSAGE;
   const fee = getDeliveryFee();
   if (state.geo.distanceKm != null) {
     return fee > 0
@@ -1650,7 +1677,7 @@ function updatePaymentPage() {
 
   el('pay-subtotal').textContent = `R$ ${fmt(sub)}`;
   el('pay-fee').textContent      = feeDisplay();
-  el('pay-total').textContent    = `R$ ${fmt(tot)}`;
+  el('pay-total').textContent    = state.geo.deliveryOutOfRange ? '—' : `R$ ${fmt(tot)}`;
 
   /* Items preview */
   const count = state.cart.reduce((s, i) => s + i.qty, 0);
@@ -1748,6 +1775,10 @@ function updateConfirmationPage() {
 ────────────────────────────────────────── */
 async function sendWhatsApp() {
   if (state.submittingOrder) return false; // trava lógica — clique/toque repetido é ignorado
+  if (state.deliveryType === 'delivery' && state.geo.deliveryOutOfRange) {
+    showToast(DELIVERY_OUT_OF_RANGE_MESSAGE);
+    return false;
+  }
 
   state.submittingOrder = true;
   setCheckoutButtonsBusy(true);
