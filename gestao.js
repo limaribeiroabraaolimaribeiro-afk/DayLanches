@@ -2393,7 +2393,6 @@ async function loadConfig() {
     setv('cfg-wa',     data.whatsapp||'');
     setv('cfg-insta',  data.instagram||'');
     setv('cfg-hours',  normalizeScheduleText(typeof data.schedule === 'string' ? data.schedule : (data.schedule?.text||'')));
-    setv('cfg-km',     data.delivery_price_per_km||'');
     gs.storeConfig = data;
     renderStoreLocationStatus();
     loadDriversList();
@@ -2415,7 +2414,9 @@ async function handleSaveConfig(e) {
     pix_key:               cfg.pix_key,
     instagram:             getv('cfg-insta'),
     schedule:              { text: normalizeScheduleText(getv('cfg-hours')) },
-    delivery_price_per_km: parseFloat(getv('cfg-km'))     || 2.5,
+    /* Não editável mais na UI (o site usa a tabela fixa de frete por
+       distância, não mais R$/km) — preserva o que já estava salvo. */
+    delivery_price_per_km: cfg.delivery_price_per_km,
     route_factor:          cfg.route_factor || 1.4,
     store_lat:             cfg.store_lat,
     store_lon:             cfg.store_lon,

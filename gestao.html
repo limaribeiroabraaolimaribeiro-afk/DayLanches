@@ -578,12 +578,34 @@
             </div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">Horário de atendimento</label><input id="cfg-hours" class="form-input" placeholder="Qua–Dom 17:30–23:00"></div>
-              <div class="form-group"><label class="form-label">Frete R$/km</label>           <input id="cfg-km"     class="form-input" type="number" step="0.1" inputmode="decimal" placeholder="2.50"></div>
             </div>
             <div class="g-card-actions">
               <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Salvar informações</button>
             </div>
           </form>
+        </div>
+
+        <!-- Card: Taxas de entrega (somente leitura — a tabela fixa quem define é o código, não este cadastro) -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title">Taxas de entrega</h2>
+            <p class="g-card-desc">Tabela fixa por distância usada no cálculo do frete no site. Não editável aqui.</p>
+          </div>
+          <table class="rpt-table">
+            <thead><tr><th>Distância</th><th>Taxa</th></tr></thead>
+            <tbody>
+              <tr><td>1–2 km</td><td>R$ 5,00</td></tr>
+              <tr><td>3 km</td><td>R$ 8,00</td></tr>
+              <tr><td>4 km</td><td>R$ 10,00</td></tr>
+              <tr><td>5 km</td><td>R$ 12,00</td></tr>
+              <tr><td>6 km</td><td>R$ 15,00</td></tr>
+              <tr><td>7 km</td><td>R$ 17,00</td></tr>
+              <tr><td>8 km</td><td>R$ 20,00</td></tr>
+              <tr><td>9–11 km</td><td>R$ 25,00</td></tr>
+              <tr><td>12–15 km</td><td>R$ 30,00</td></tr>
+            </tbody>
+          </table>
+          <p class="g-card-desc" style="margin-top:10px">Acima de 15 km: consultar taxa pelo WhatsApp.</p>
         </div>
 
         <!-- Card: WhatsApp da loja -->
