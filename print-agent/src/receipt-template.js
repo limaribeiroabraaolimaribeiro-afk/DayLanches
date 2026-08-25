@@ -70,7 +70,7 @@ function buildReceiptHtml(order, paperType) {
   ${loc?.reference ? `<div><span class="rc-lbl">Referência</span><br><span class="rc-val">${esc(loc.reference)}</span></div>` : ''}
   ${fee > 0 ? `<div><span class="rc-lbl">Taxa de entrega</span><br><span class="rc-val">R$ ${fmt(fee)}</span></div>` : ''}
   <hr class="rc-sep">
-  <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(payLabel)}</span></div>
+  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(payLabel.toUpperCase())}</div>
   <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>
   ${order.notes ? `<div style="margin-top:3px"><span class="rc-lbl">Observação</span><br><span style="font-size:11px">${esc(order.notes)}</span></div>` : ''}
   <hr class="rc-sep">
@@ -84,7 +84,7 @@ function buildReceiptHtml(order, paperType) {
   ${(!isBalcao && order.customer_phone) ? `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(order.customer_phone)}</span></div>` : ''}
   ${(!isBalcao && addressText) ? `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>` : ''}
   <hr class="rc-sep">
-  <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(payLabel)}</span></div>
+  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(payLabel.toUpperCase())}</div>
   <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>
   <hr class="rc-sep">
   <div class="rc-lbl">Itens</div>

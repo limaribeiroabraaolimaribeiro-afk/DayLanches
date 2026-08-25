@@ -348,38 +348,29 @@
               </div>
 
               <div class="pdv-section-block" id="pdv-delivery-section" style="display:none">
-                <label class="pdv-section-label">Dados da entrega</label>
+                <label class="pdv-section-label">Dados do delivery</label>
 
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">Rua <span class="pdv-required">*</span></label>
-                    <input type="text" id="pdv-addr-street" class="form-input" placeholder="Nome da rua">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Número <span class="pdv-required">*</span></label>
-                    <input type="text" id="pdv-addr-number" class="form-input" placeholder="Nº">
-                  </div>
+                <div class="form-group">
+                  <label class="form-label">Taxa de entrega (R$) <span class="pdv-required">*</span></label>
+                  <input type="text" id="pdv-delivery-fee" class="form-input" placeholder="0,00" inputmode="decimal" oninput="pdvRenderCart()">
                 </div>
 
-                <div class="form-row" style="margin-top:12px">
-                  <div class="form-group">
-                    <label class="form-label">Bairro <span class="pdv-required">*</span></label>
-                    <input type="text" id="pdv-addr-neighborhood" class="form-input" placeholder="Bairro">
+                <div class="pdv-section-block">
+                  <label class="pdv-section-label">Forma de pagamento <span class="pdv-required">*</span></label>
+                  <div class="pdv-pay-grid" id="pdv-payment-method-grid">
+                    <button type="button" class="pdv-pay-btn" data-pay="dinheiro" onclick="pdvSelectPaymentMethod('dinheiro')">
+                      <i class="fas fa-money-bill-wave"></i><span>Dinheiro</span>
+                    </button>
+                    <button type="button" class="pdv-pay-btn" data-pay="pix_loja" onclick="pdvSelectPaymentMethod('pix_loja')">
+                      <i class="fas fa-qrcode"></i><span>Pix</span>
+                    </button>
+                    <button type="button" class="pdv-pay-btn" data-pay="cartao_maquininha" onclick="pdvSelectPaymentMethod('cartao_maquininha')">
+                      <i class="fas fa-credit-card"></i><span>Cartão</span>
+                    </button>
+                    <button type="button" class="pdv-pay-btn" data-pay="a_definir" onclick="pdvSelectPaymentMethod('a_definir')">
+                      <i class="fas fa-clock"></i><span>A definir</span>
+                    </button>
                   </div>
-                  <div class="form-group">
-                    <label class="form-label">Taxa de entrega (R$) <span class="pdv-required">*</span></label>
-                    <input type="text" id="pdv-delivery-fee" class="form-input" placeholder="0,00" inputmode="decimal" oninput="pdvRenderCart()">
-                  </div>
-                </div>
-
-                <div class="form-group" style="margin-top:12px">
-                  <label class="form-label">Complemento <span class="pdv-field-hint">opcional</span></label>
-                  <input type="text" id="pdv-addr-complement" class="form-input" placeholder="Apto, bloco, etc.">
-                </div>
-
-                <div class="form-group" style="margin-top:12px">
-                  <label class="form-label">Ponto de referência <span class="pdv-field-hint">opcional</span></label>
-                  <input type="text" id="pdv-addr-reference" class="form-input" placeholder="Ex: Perto do mercado">
                 </div>
               </div>
 

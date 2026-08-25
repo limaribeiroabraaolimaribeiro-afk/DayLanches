@@ -1743,7 +1743,7 @@ function buildReceiptBlock(o) {
     if (fee > 0) html += `<div><span class="rc-lbl">Taxa de entrega</span><br><span class="rc-val">R$ ${fmt(fee)}</span></div>`;
 
     html += `<hr class="rc-sep">
-  <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(getPaymentLabel(o))}</span></div>
+  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(getPaymentLabel(o).toUpperCase())}</div>
   <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>`;
 
     if (o.notes) html += `<div style="margin-top:3px"><span class="rc-lbl">Observação</span><br><span style="font-size:11px">${esc(o.notes)}</span></div>`;
@@ -1761,7 +1761,7 @@ function buildReceiptBlock(o) {
     if (!isBalcao && addressText) html += `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>`;
 
     html += `<hr class="rc-sep">
-  <div class="rc-row"><span class="rc-lbl">Pagamento</span><span class="rc-val">${esc(getPaymentLabel(o))}</span></div>
+  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(getPaymentLabel(o).toUpperCase())}</div>
   <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>`;
 
     html += `<hr class="rc-sep">
@@ -4845,6 +4845,9 @@ const pdv = {
   optSelections: {},
   optGroups: [],
   orderType: 'balcao',
+  /* Forma de pagamento do pedido de Delivery lançado no Balcão (dinheiro |
+     pix_loja | cartao_maquininha | a_definir) -- não usado para Mesa. */
+  paymentMethod: null,
   /* mode: 'new' (montando pedido novo) | 'table' (vendo comanda de uma mesa
      ocupada) | 'adding' (adicionando produtos a essa comanda) */
   mode: 'new',
@@ -5192,12 +5195,20 @@ function pdvSetOrderType(type) {
 
   if (!isDelivery) {
     pdv.tableNumber = null;
-    ['pdv-customer-phone', 'pdv-addr-street', 'pdv-addr-number', 'pdv-addr-neighborhood', 'pdv-delivery-fee', 'pdv-addr-complement', 'pdv-addr-reference']
-      .forEach(id => { const el = elid(id); if (el) el.value = ''; });
+    pdv.paymentMethod = null;
+    document.querySelectorAll('#pdv-payment-method-grid .pdv-pay-btn').forEach(b => b.classList.remove('active'));
+    ['pdv-customer-phone', 'pdv-delivery-fee'].forEach(id => { const el = elid(id); if (el) el.value = ''; });
     pdvRenderMesas();
   }
 
   pdvRenderCart();
+}
+
+function pdvSelectPaymentMethod(method) {
+  pdv.paymentMethod = method;
+  document.querySelectorAll('#pdv-payment-method-grid .pdv-pay-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.pay === method);
+  });
 }
 
 function pdvFormatPhone(input) {
@@ -5300,7 +5311,7 @@ async function pdvClearCart() {
     if (!confirmed) return;
   }
   pdv.cart = [];
-  ['pdv-customer-name', 'pdv-notes', 'pdv-customer-phone', 'pdv-addr-street', 'pdv-addr-number', 'pdv-addr-neighborhood', 'pdv-delivery-fee', 'pdv-addr-complement', 'pdv-addr-reference']
+  ['pdv-customer-name', 'pdv-notes', 'pdv-customer-phone', 'pdv-delivery-fee']
     .forEach(id => { const el = elid(id); if (el) el.value = ''; });
   pdvSetOrderType('balcao');
 }
@@ -5312,11 +5323,6 @@ async function pdvSave() {
 
   const customerName  = (elid('pdv-customer-name')?.value || '').trim();
   const customerPhone = (elid('pdv-customer-phone')?.value || '').trim();
-  const street        = (elid('pdv-addr-street')?.value || '').trim();
-  const number         = (elid('pdv-addr-number')?.value || '').trim();
-  const neighborhood   = (elid('pdv-addr-neighborhood')?.value || '').trim();
-  const complement     = (elid('pdv-addr-complement')?.value || '').trim();
-  const reference      = (elid('pdv-addr-reference')?.value || '').trim();
   const feeRaw         = (elid('pdv-delivery-fee')?.value || '').trim();
   const fee            = pdvGetDeliveryFee();
   const notes = (elid('pdv-notes')?.value || '').trim();
@@ -5324,10 +5330,8 @@ async function pdvSave() {
   if (isDelivery) {
     if (!customerName)  { toast('Informe o nome do cliente.', true); pdvHighlightError(elid('pdv-customer-name')); return; }
     if (!customerPhone) { toast('Informe o telefone do cliente.', true); pdvHighlightError(elid('pdv-customer-phone')); return; }
-    if (!street)        { toast('Informe a rua da entrega.', true); pdvHighlightError(elid('pdv-addr-street')); return; }
-    if (!number)         { toast('Informe o número da entrega.', true); pdvHighlightError(elid('pdv-addr-number')); return; }
-    if (!neighborhood)   { toast('Informe o bairro da entrega.', true); pdvHighlightError(elid('pdv-addr-neighborhood')); return; }
     if (!feeRaw)          { toast('Informe a taxa de entrega.', true); pdvHighlightError(elid('pdv-delivery-fee')); return; }
+    if (!pdv.paymentMethod) { toast('Selecione a forma de pagamento.', true); return; }
   } else {
     if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }
   }
@@ -5355,7 +5359,11 @@ async function pdvSave() {
     customer_phone: isDelivery ? (customerPhone || null) : null,
     delivery_type: isDelivery ? 'delivery' : 'balcao',
     delivery_fee: isDelivery ? fee : 0,
-    payment_method: 'a_definir',
+    /* Delivery lançado no Balcão: cliente já envia endereço pelo WhatsApp,
+       então não é coletado aqui — só a forma de pagamento, escolhida pela
+       Dayane. Mesa/Balcão normal continuam com 'a_definir' (pagam depois,
+       ao fechar a comanda). */
+    payment_method: isDelivery ? pdv.paymentMethod : 'a_definir',
     payment_status: 'pendente',
     paid_at: null,
     status: 'novo',
@@ -5365,13 +5373,8 @@ async function pdvSave() {
     notes: notes || null,
     order_source: 'balcao',
     table_number: isDelivery ? null : pdv.tableNumber,
-    customer_address_text: isDelivery ? `${street}, nº ${number}` : null,
-    location: isDelivery ? {
-      neighborhood,
-      complement: complement || undefined,
-      reference: reference || undefined,
-      source: 'balcao_manual',
-    } : null,
+    customer_address_text: null,
+    location: null,
     created_by_user_id: actor.id,
     created_by_email: actor.email,
     handled_by_user_id: actor.id,
@@ -5422,7 +5425,7 @@ async function pdvSave() {
     logAuditAction('create_order', 'order', data.id, `#${orderNumber}`, null, { table: pdv.tableNumber, deliveryType: orderData.delivery_type, total });
 
     pdv.cart = [];
-    ['pdv-customer-name', 'pdv-notes', 'pdv-customer-phone', 'pdv-addr-street', 'pdv-addr-number', 'pdv-addr-neighborhood', 'pdv-delivery-fee', 'pdv-addr-complement', 'pdv-addr-reference']
+    ['pdv-customer-name', 'pdv-notes', 'pdv-customer-phone', 'pdv-delivery-fee']
       .forEach(id => { const el = elid(id); if (el) el.value = ''; });
     pdvSetOrderType('balcao');
 
@@ -5771,6 +5774,7 @@ window.pdvCancelAddingToTable         = pdvCancelAddingToTable;
 window.pdvConfirmAddToTable           = pdvConfirmAddToTable;
 window.pdvPayTable                    = pdvPayTable;
 window.pdvSetOrderType                = pdvSetOrderType;
+window.pdvSelectPaymentMethod         = pdvSelectPaymentMethod;
 window.pdvFormatPhone                 = pdvFormatPhone;
 window.pdvCloseOptions                = pdvCloseOptions;
 window.pdvCloseOptionsOutside         = pdvCloseOptionsOutside;
