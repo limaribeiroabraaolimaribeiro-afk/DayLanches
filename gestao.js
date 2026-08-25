@@ -5669,6 +5669,10 @@ async function pdvConfirmAddToTable() {
     const idx = gs.orders.findIndex(o => o.id === order.id);
     if (idx !== -1) gs.orders[idx] = data;
     pdv.activeTableOrder = data;
+    /* orders é a única fonte de verdade em memória; mantém a tela Pedidos
+       (e seus filtros/contadores, que leem de gs.orders) sincronizada na
+       hora, sem esperar o usuário navegar até lá ou clicar em Atualizar. */
+    renderOrders();
 
     logAuditAction('add_table_items', 'order', order.id, `#${data.order_number || order.id.slice(-8).toUpperCase()}`, null, {
       added: newItems.length,
