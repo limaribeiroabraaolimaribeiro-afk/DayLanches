@@ -1,6 +1,6 @@
 {
   "name": "day-lanches-impressao",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Day Lanches Impressão - bridge de impressao local para o sistema Day Lanches",
   "main": "src/main.js",
   "scripts": {
