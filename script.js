@@ -566,7 +566,41 @@ const state = {
   couponApplied: false,
   discount:    0,
   orderId:     null,
+  /* Trava central contra pedido duplicado por clique/toque repetido —
+     compartilhada entre handleOnlinePayment() e sendWhatsApp(), já que os
+     dois fazem saveOrderToSupabase() e são mutuamente exclusivos numa
+     mesma tentativa de checkout. */
+  submittingOrder:    false,
+  /* order_number já salvo no Supabase para a tentativa atual (ou null se
+     ainda não salvou nada). Enquanto estiver preenchido, uma nova chamada
+     reaproveita o mesmo pedido em vez de gerar outro — importante quando o
+     INSERT deu certo mas uma etapa posterior (ex: criar o link InfinitePay)
+     falhou: a repetição não pode virar um pedido novo. */
+  pendingOrderNumber: null,
 };
+
+/* Desabilita/reabilita visualmente todos os botões que iniciam um checkout
+   (pagamento online, WhatsApp/Pix, confirmar dinheiro) enquanto uma
+   submissão estiver em andamento. Reforça a trava lógica acima — não
+   substitui ela. */
+function setCheckoutButtonsBusy(busy) {
+  const btns = document.querySelectorAll(
+    '[onclick*="handleOnlinePayment"], [onclick*="sendWhatsApp"], [onclick*="confirmCashPayment"]'
+  );
+  btns.forEach(btn => {
+    if (busy) {
+      if (!btn.dataset.origLabel) btn.dataset.origLabel = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+    } else {
+      btn.disabled = false;
+      if (btn.dataset.origLabel) {
+        btn.innerHTML = btn.dataset.origLabel;
+        delete btn.dataset.origLabel;
+      }
+    }
+  });
+}
 
 const VALID_COUPONS = { 'DAY10': 10, 'PROMO5': 5 };
 
@@ -842,6 +876,8 @@ function requestGeoLocation() {
 
 /* Fluxo InfinitePay: salva pedido → cria checkout → redireciona */
 async function handleOnlinePayment(method) {
+  if (state.submittingOrder) return; // trava lógica — clique/toque repetido é ignorado
+
   if (state.deliveryType === 'delivery' && !isStoreLocationConfigured()) {
     showToast('Localização da loja não configurada. Entre em contato com a loja.');
     return;
@@ -852,91 +888,111 @@ async function handleOnlinePayment(method) {
     return;
   }
 
-  state.payMethod = method;
-  state.orderId   = Math.floor(Math.random() * 90000) + 10000;
+  state.submittingOrder = true;
+  setCheckoutButtonsBusy(true);
 
-  const f = state.form;
-  const orderNumber = `DL-${state.orderId}`;
-  const orderData = {
-    order_number:     orderNumber,
-    customer_name:    f.name,
-    customer_phone:   f.phone || '',
-    delivery_type:    state.deliveryType,
-    items: state.cart.map(i => ({
-      id:             i.id,
-      name:           i.name,
-      qty:            i.qty,
-      unitPrice:      i.basePrice || getItemUnitPrice(i),
-      finalUnitPrice: getItemUnitPrice(i),
-      options:        i.options || [],
-      addons:         i.addons  || [],
-      total:          getItemTotal(i),
-    })),
-    subtotal:         getSubtotal(),
-    delivery_fee:     getDeliveryFee(),
-    total:            getTotal(),
-    payment_method:   method,
-    payment_status:   'aguardando_pagamento',
-    payment_provider: 'infinitepay',
-    notes:            f.notes || '',
-    troco:            null,
-    location: state.geo.lat ? {
-      lat:       state.geo.lat,
-      lng:       state.geo.lon,
-      accuracy:  state.geo.accuracy || null,
-      mapsLink:  state.geo.link,
-      routeLink: state.geo.routeLink,
-      address:   state.geo.address || null,
-    } : null,
-    customer_address_text: state.geo.address || null,
-    status:           'aguardando_pagamento',
-    whatsapp_opt_in:  false,
-    whatsapp_sent:    false,
-  };
-
-  /* 1. Salvar pedido no Supabase */
   try {
-    await saveOrderToSupabase(orderData);
-  } catch (err) {
-    console.error('[DayLanches] Erro ao salvar pedido online:', err);
-    showToast('Não foi possível registrar seu pedido. Tente novamente.');
-    return;
-  }
+    state.payMethod = method;
 
-  /* 2. Criar checkout InfinitePay via Worker */
-  showToast('Gerando link de pagamento…');
-  let checkoutUrl;
-  try {
-    const res = await fetch(`${WORKER_URL}/create-payment`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ orderNumber }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      if (data.minValue) {
-        showToast('Para pagamento online, o pedido precisa ser maior que R$ 1,00.');
-      } else {
-        showToast('Não foi possível gerar o pagamento. Tente novamente.');
-      }
-      return;
+    /* Se uma tentativa anterior já salvou o pedido no Supabase e só falhou
+       numa etapa posterior (ex: gerar o link InfinitePay), reaproveita o
+       mesmo order_number em vez de criar outro pedido. */
+    const alreadySaved = !!state.pendingOrderNumber;
+    if (!state.pendingOrderNumber) {
+      state.orderId = Math.floor(Math.random() * 90000) + 10000;
+      state.pendingOrderNumber = `DL-${state.orderId}`;
     }
-    checkoutUrl = data.checkoutUrl;
-  } catch (err) {
-    console.error('[DayLanches] Erro ao criar pagamento:', err);
-    showToast('Não foi possível gerar o pagamento. Tente novamente.');
-    return;
+    const orderNumber = state.pendingOrderNumber;
+
+    if (!alreadySaved) {
+      const f = state.form;
+      const orderData = {
+        order_number:     orderNumber,
+        customer_name:    f.name,
+        customer_phone:   f.phone || '',
+        delivery_type:    state.deliveryType,
+        items: state.cart.map(i => ({
+          id:             i.id,
+          name:           i.name,
+          qty:            i.qty,
+          unitPrice:      i.basePrice || getItemUnitPrice(i),
+          finalUnitPrice: getItemUnitPrice(i),
+          options:        i.options || [],
+          addons:         i.addons  || [],
+          total:          getItemTotal(i),
+        })),
+        subtotal:         getSubtotal(),
+        delivery_fee:     getDeliveryFee(),
+        total:            getTotal(),
+        payment_method:   method,
+        payment_status:   'aguardando_pagamento',
+        payment_provider: 'infinitepay',
+        notes:            f.notes || '',
+        troco:            null,
+        location: state.geo.lat ? {
+          lat:       state.geo.lat,
+          lng:       state.geo.lon,
+          accuracy:  state.geo.accuracy || null,
+          mapsLink:  state.geo.link,
+          routeLink: state.geo.routeLink,
+          address:   state.geo.address || null,
+        } : null,
+        customer_address_text: state.geo.address || null,
+        status:           'aguardando_pagamento',
+        whatsapp_opt_in:  false,
+        whatsapp_sent:    false,
+      };
+
+      /* 1. Salvar pedido no Supabase */
+      try {
+        await saveOrderToSupabase(orderData);
+      } catch (err) {
+        console.error('[DayLanches] Erro ao salvar pedido online:', err);
+        showToast('Não foi possível registrar seu pedido. Tente novamente.');
+        state.pendingOrderNumber = null; // nunca chegou a salvar — pode gerar outro número na próxima
+        return;
+      }
+    }
+
+    /* 2. Criar checkout InfinitePay via Worker */
+    showToast('Gerando link de pagamento…');
+    let checkoutUrl;
+    try {
+      const res = await fetch(`${WORKER_URL}/create-payment`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ orderNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.minValue) {
+          showToast('Para pagamento online, o pedido precisa ser maior que R$ 1,00.');
+        } else {
+          showToast('Não foi possível gerar o pagamento. Tente novamente.');
+        }
+        return; // pedido já existe (order_number preservado) — retry reaproveita, não duplica
+      }
+      checkoutUrl = data.checkoutUrl;
+    } catch (err) {
+      console.error('[DayLanches] Erro ao criar pagamento:', err);
+      showToast('Não foi possível gerar o pagamento. Tente novamente.');
+      return; // idem — pedido já existe, não gera outro
+    }
+
+    /* 3. Salvar dados no localStorage para a página obrigado */
+    try {
+      localStorage.setItem('lastOrderNumber', orderNumber);
+      localStorage.setItem('lastOrderTotal',  String(getTotal()));
+      localStorage.setItem('lastOrderMethod', method);
+    } catch(_) {}
+
+    /* 4. Redirecionar para checkout InfinitePay */
+    state.pendingOrderNumber = null; // fluxo concluído — próxima tentativa (se houver) é um pedido novo
+    window.location.href = checkoutUrl;
+  } finally {
+    state.submittingOrder = false;
+    setCheckoutButtonsBusy(false);
   }
-
-  /* 3. Salvar dados no localStorage para a página obrigado */
-  try {
-    localStorage.setItem('lastOrderNumber', orderNumber);
-    localStorage.setItem('lastOrderTotal',  String(getTotal()));
-    localStorage.setItem('lastOrderMethod', method);
-  } catch(_) {}
-
-  /* 4. Redirecionar para checkout InfinitePay */
-  window.location.href = checkoutUrl;
 }
 
 function handleCashPayment() {
@@ -1691,71 +1747,93 @@ function updateConfirmationPage() {
    13. WHATSAPP
 ────────────────────────────────────────── */
 async function sendWhatsApp() {
-  const f     = state.form;
-  const troco = state.payMethod === 'cash' ? (el('troco-input')?.value.trim() || '') : '';
-  if (troco) state.form.troco = troco;
+  if (state.submittingOrder) return false; // trava lógica — clique/toque repetido é ignorado
 
-  const orderData = {
-    order_number:    `DL-${state.orderId}`,
-    customer_name:   f.name,
-    customer_phone:  f.phone || '',
-    delivery_type:   state.deliveryType,
-    items: state.cart.map(i => ({
-      id:             i.id,
-      name:           i.name,
-      qty:            i.qty,
-      unitPrice:      i.basePrice || getItemUnitPrice(i),
-      finalUnitPrice: getItemUnitPrice(i),
-      options:        i.options || [],
-      addons:         i.addons  || [],
-      total:          getItemTotal(i),
-    })),
-    subtotal:        getSubtotal(),
-    delivery_fee:    getDeliveryFee(),
-    total:           getTotal(),
-    payment_method:  state.payMethod,
-    payment_status:  state.payMethod === 'pix' ? 'aguardando_comprovante' : 'pagamento_na_entrega',
-    notes:           f.notes || '',
-    troco:           troco   || null,
-    location: state.geo.lat ? {
-      lat:         state.geo.lat,
-      lng:         state.geo.lon,
-      accuracy:    state.geo.accuracy || null,
-      mapsLink:    state.geo.link,
-      routeLink:   state.geo.routeLink,
-      address:     state.geo.address || null,
-    } : null,
-    customer_address_text: state.geo.address || null,
-    status:          'novo',
-    whatsapp_opt_in: false,
-    whatsapp_sent:   true,
-  };
+  state.submittingOrder = true;
+  setCheckoutButtonsBusy(true);
 
   try {
-    await saveOrderToSupabase(orderData);
-  } catch (err) {
-    console.error('[DayLanches] Erro ao salvar pedido:', err);
-    showToast('Não foi possível registrar seu pedido. Tente novamente.');
-    return false;
+    const f     = state.form;
+    const troco = state.payMethod === 'cash' ? (el('troco-input')?.value.trim() || '') : '';
+    if (troco) state.form.troco = troco;
+
+    /* Mesmo esquema de reaproveitamento de handleOnlinePayment: se um
+       pedido já foi salvo nesta tentativa, não gera outro order_number. */
+    const alreadySaved = !!state.pendingOrderNumber;
+    if (!state.pendingOrderNumber) {
+      state.orderId = state.orderId || Math.floor(Math.random() * 90000) + 10000;
+      state.pendingOrderNumber = `DL-${state.orderId}`;
+    }
+
+    if (!alreadySaved) {
+      const orderData = {
+        order_number:    state.pendingOrderNumber,
+        customer_name:   f.name,
+        customer_phone:  f.phone || '',
+        delivery_type:   state.deliveryType,
+        items: state.cart.map(i => ({
+          id:             i.id,
+          name:           i.name,
+          qty:            i.qty,
+          unitPrice:      i.basePrice || getItemUnitPrice(i),
+          finalUnitPrice: getItemUnitPrice(i),
+          options:        i.options || [],
+          addons:         i.addons  || [],
+          total:          getItemTotal(i),
+        })),
+        subtotal:        getSubtotal(),
+        delivery_fee:    getDeliveryFee(),
+        total:           getTotal(),
+        payment_method:  state.payMethod,
+        payment_status:  state.payMethod === 'pix' ? 'aguardando_comprovante' : 'pagamento_na_entrega',
+        notes:           f.notes || '',
+        troco:           troco   || null,
+        location: state.geo.lat ? {
+          lat:         state.geo.lat,
+          lng:         state.geo.lon,
+          accuracy:    state.geo.accuracy || null,
+          mapsLink:    state.geo.link,
+          routeLink:   state.geo.routeLink,
+          address:     state.geo.address || null,
+        } : null,
+        customer_address_text: state.geo.address || null,
+        status:          'novo',
+        whatsapp_opt_in: false,
+        whatsapp_sent:   true,
+      };
+
+      try {
+        await saveOrderToSupabase(orderData);
+      } catch (err) {
+        console.error('[DayLanches] Erro ao salvar pedido:', err);
+        showToast('Não foi possível registrar seu pedido. Tente novamente.');
+        state.pendingOrderNumber = null; // nunca chegou a salvar — pode tentar de novo
+        return false;
+      }
+    }
+
+    const payLabels = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro', online: 'Online', pix_online: 'PIX online', card_online: 'Cartão online' };
+    const payNote = {
+      pix:  '\nJá vou enviar o comprovante por aqui.',
+      card: '\nPagamento no cartão na entrega/retirada.',
+      cash: `\nPagamento em dinheiro na entrega/retirada.${troco ? `\nTroco para: R$ ${troco}` : ''}`,
+    };
+
+    const message =
+      `Olá, fiz meu pedido pelo site da Day Lanches.\n\n` +
+      `Pedido: DL-${state.orderId}\n` +
+      `Nome: ${f.name}\n` +
+      `Total: R$ ${fmt(getTotal())}\n` +
+      `Pagamento: ${payLabels[state.payMethod] || state.payMethod}` +
+      (payNote[state.payMethod] || '');
+
+    window.open(`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
+    state.pendingOrderNumber = null; // fluxo concluído — próxima tentativa (se houver) é um pedido novo
+    return true;
+  } finally {
+    state.submittingOrder = false;
+    setCheckoutButtonsBusy(false);
   }
-
-  const payLabels = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro', online: 'Online', pix_online: 'PIX online', card_online: 'Cartão online' };
-  const payNote = {
-    pix:  '\nJá vou enviar o comprovante por aqui.',
-    card: '\nPagamento no cartão na entrega/retirada.',
-    cash: `\nPagamento em dinheiro na entrega/retirada.${troco ? `\nTroco para: R$ ${troco}` : ''}`,
-  };
-
-  const message =
-    `Olá, fiz meu pedido pelo site da Day Lanches.\n\n` +
-    `Pedido: DL-${state.orderId}\n` +
-    `Nome: ${f.name}\n` +
-    `Total: R$ ${fmt(getTotal())}\n` +
-    `Pagamento: ${payLabels[state.payMethod] || state.payMethod}` +
-    (payNote[state.payMethod] || '');
-
-  window.open(`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
-  return true;
 }
 
 /* ──────────────────────────────────────────
