@@ -1703,7 +1703,9 @@ function buildReceiptBlock(o) {
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === 'string' ? JSON.parse(o.items || '[]') : []);
   const loc = o.location && typeof o.location === 'object' ? o.location : null;
   const dateTime = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—';
-  const isPaid = isPaidOrder(o);
+  /* payment_method 'a_definir' (ou vazio) nunca aparece na comanda impressa —
+     é só o estado interno de "mesa ainda não fechou a conta". */
+  const showPayMethod = !!o.payment_method && o.payment_method !== 'a_definir';
   const isBalcao = o.delivery_type ? o.delivery_type === 'balcao' : o.order_source === 'balcao';
   const isDelivery = o.delivery_type === 'delivery';
   const hasMesa = isBalcao && o.table_number;
@@ -1742,9 +1744,8 @@ function buildReceiptBlock(o) {
     if (loc?.reference) html += `<div><span class="rc-lbl">Referência</span><br><span class="rc-val">${esc(loc.reference)}</span></div>`;
     if (fee > 0) html += `<div><span class="rc-lbl">Taxa de entrega</span><br><span class="rc-val">R$ ${fmt(fee)}</span></div>`;
 
-    html += `<hr class="rc-sep">
-  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(getPaymentLabel(o).toUpperCase())}</div>
-  <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>`;
+    html += `<hr class="rc-sep">`;
+    if (showPayMethod) html += `<div class="rc-status">FORMA DE PAGAMENTO: ${esc(getPaymentLabel(o).toUpperCase())}</div>`;
 
     if (o.notes) html += `<div style="margin-top:3px"><span class="rc-lbl">Observação</span><br><span style="font-size:11px">${esc(o.notes)}</span></div>`;
 
@@ -1760,9 +1761,8 @@ function buildReceiptBlock(o) {
     if (!isBalcao && o.customer_phone) html += `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(o.customer_phone)}</span></div>`;
     if (!isBalcao && addressText) html += `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>`;
 
-    html += `<hr class="rc-sep">
-  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(getPaymentLabel(o).toUpperCase())}</div>
-  <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>`;
+    html += `<hr class="rc-sep">`;
+    if (showPayMethod) html += `<div class="rc-status">FORMA DE PAGAMENTO: ${esc(getPaymentLabel(o).toUpperCase())}</div>`;
 
     html += `<hr class="rc-sep">
   <div class="rc-lbl">Itens</div>
@@ -4846,7 +4846,7 @@ const pdv = {
   optGroups: [],
   orderType: 'balcao',
   /* Forma de pagamento do pedido de Delivery lançado no Balcão (dinheiro |
-     pix_loja | cartao_maquininha | a_definir) -- não usado para Mesa. */
+     pix_loja | cartao_maquininha) -- obrigatória, não usado para Mesa. */
   paymentMethod: null,
   /* mode: 'new' (montando pedido novo) | 'table' (vendo comanda de uma mesa
      ocupada) | 'adding' (adicionando produtos a essa comanda) */
@@ -5324,13 +5324,27 @@ async function pdvSave() {
   const customerName  = (elid('pdv-customer-name')?.value || '').trim();
   const customerPhone = (elid('pdv-customer-phone')?.value || '').trim();
   const feeRaw         = (elid('pdv-delivery-fee')?.value || '').trim();
-  const fee            = pdvGetDeliveryFee();
   const notes = (elid('pdv-notes')?.value || '').trim();
+  /* Validação estrita só pra salvar (o preview ao vivo em pdvRenderCart()
+     continua usando pdvGetDeliveryFee(), que é tolerante por design).
+     parseFloat sozinho aceita lixo depois do número ("12abc"→12), então o
+     formato inteiro precisa bater com a regex antes de converter — só
+     dígitos, com no máximo um separador decimal (vírgula ou ponto) e até
+     2 casas. Um valor negativo ou mal digitado não pode virar 0/entrega
+     grátis em silêncio. */
+  let fee = 0;
 
   if (isDelivery) {
     if (!customerName)  { toast('Informe o nome do cliente.', true); pdvHighlightError(elid('pdv-customer-name')); return; }
     if (!customerPhone) { toast('Informe o telefone do cliente.', true); pdvHighlightError(elid('pdv-customer-phone')); return; }
-    if (!feeRaw)          { toast('Informe a taxa de entrega.', true); pdvHighlightError(elid('pdv-delivery-fee')); return; }
+
+    if (!feeRaw) { toast('Informe uma taxa de entrega válida.', true); pdvHighlightError(elid('pdv-delivery-fee')); return; }
+    const feeNormalized = feeRaw.replace(',', '.');
+    if (feeNormalized.startsWith('-')) { toast('A taxa de entrega não pode ser negativa.', true); pdvHighlightError(elid('pdv-delivery-fee')); return; }
+    if (!/^\d+(?:\.\d{1,2})?$/.test(feeNormalized)) { toast('Informe uma taxa de entrega válida.', true); pdvHighlightError(elid('pdv-delivery-fee')); return; }
+    fee = Number(feeNormalized);
+    if (!Number.isFinite(fee)) { toast('Informe uma taxa de entrega válida.', true); pdvHighlightError(elid('pdv-delivery-fee')); return; }
+
     if (!pdv.paymentMethod) { toast('Selecione a forma de pagamento.', true); return; }
   } else {
     if (!pdv.tableNumber) { toast('Selecione a mesa do cliente.', true); return; }

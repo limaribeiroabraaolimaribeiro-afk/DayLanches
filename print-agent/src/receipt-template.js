@@ -18,9 +18,11 @@ function buildReceiptHtml(order, paperType) {
   const isDelivery = order.delivery_type === 'delivery';
   const hasMesa = isBalcao && order.table_number;
   const typeLabel = isDelivery ? 'DELIVERY' : (isBalcao ? 'BALCÃO' : (order.delivery_type === 'pickup' ? 'RETIRADA' : 'ENTREGA'));
-  const isPaid = ['pago','paid','confirmado','confirmed','pagamento_confirmado'].includes(String(order.payment_status||'').toLowerCase()) || !!order.paid_at;
   const payLabels = { pix:'PIX',pix_online:'PIX',card:'Cartão',card_online:'Cartão',cash:'Dinheiro',online:'Online',dinheiro:'Dinheiro',pix_loja:'Pix na loja',cartao_maquininha:'Cartão maquininha',a_definir:'A definir' };
   const payLabel = payLabels[order.payment_method] || order.payment_method || '---';
+  /* payment_method 'a_definir' (ou vazio) nunca aparece na comanda impressa —
+     é só o estado interno de "mesa ainda não fechou a conta". */
+  const showPayMethod = !!order.payment_method && order.payment_method !== 'a_definir';
   const fee = Number(order.delivery_fee || 0);
   const addressText = order.customer_address_text || (order.location?.address) || '';
   const loc = order.location && typeof order.location === 'object' ? order.location : null;
@@ -70,8 +72,7 @@ function buildReceiptHtml(order, paperType) {
   ${loc?.reference ? `<div><span class="rc-lbl">Referência</span><br><span class="rc-val">${esc(loc.reference)}</span></div>` : ''}
   ${fee > 0 ? `<div><span class="rc-lbl">Taxa de entrega</span><br><span class="rc-val">R$ ${fmt(fee)}</span></div>` : ''}
   <hr class="rc-sep">
-  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(payLabel.toUpperCase())}</div>
-  <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>
+  ${showPayMethod ? `<div class="rc-status">FORMA DE PAGAMENTO: ${esc(payLabel.toUpperCase())}</div>` : ''}
   ${order.notes ? `<div style="margin-top:3px"><span class="rc-lbl">Observação</span><br><span style="font-size:11px">${esc(order.notes)}</span></div>` : ''}
   <hr class="rc-sep">
   <div class="rc-lbl">Itens</div>
@@ -84,8 +85,7 @@ function buildReceiptHtml(order, paperType) {
   ${(!isBalcao && order.customer_phone) ? `<div><span class="rc-lbl">Telefone</span><br><span class="rc-val">${esc(order.customer_phone)}</span></div>` : ''}
   ${(!isBalcao && addressText) ? `<div style="margin-top:2px"><span class="rc-lbl">Endereço</span><br><span class="rc-val" style="font-size:10px">${esc(addressText)}</span></div>` : ''}
   <hr class="rc-sep">
-  <div class="rc-status">FORMA DE PAGAMENTO: ${esc(payLabel.toUpperCase())}</div>
-  <div class="rc-status">${isPaid ? '✓ PAGO' : '● PAGAMENTO PENDENTE'}</div>
+  ${showPayMethod ? `<div class="rc-status">FORMA DE PAGAMENTO: ${esc(payLabel.toUpperCase())}</div>` : ''}
   <hr class="rc-sep">
   <div class="rc-lbl">Itens</div>
   ${itemsHtml}

@@ -2859,7 +2859,7 @@ body.is-balcao .dash-header { display: none !important; }
 
 .pdv-pay-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
@@ -3235,7 +3235,7 @@ body.is-balcao .dash-header { display: none !important; }
   .pdv-mesa-grid { grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .pdv-mesa-btn { height: 50px; }
   .pdv-mesa-btn .pdv-mesa-num { font-size: .8rem; }
-  .pdv-pay-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .pdv-pay-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .pdv-pay-btn, .pdv-status-btn { height: 44px; font-size: .78rem; }
   .pdv-pay-btn i, .pdv-status-btn i { font-size: .9rem; }
   .pdv-pay-btn span, .pdv-status-btn span { font-size: .7rem; }
