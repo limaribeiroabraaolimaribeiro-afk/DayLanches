@@ -229,6 +229,33 @@ a { text-decoration: none; color: inherit; }
 .btn-sound i { font-size: .8rem; }
 .btn-test-sound:hover { border-color: var(--primary); color: var(--primary); }
 
+/* Botão "Fechar loja hoje" — reaproveita a mesma forma do .btn-sound, mas
+   discreto (borda cinza) em funcionamento normal e vermelho sólido quando a
+   loja já está fechada manualmente, pra ficar óbvio de longe no cabeçalho. */
+.btn-close-store {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 16px;
+  font-size: .75rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  color: var(--text-med);
+  background: var(--white);
+  transition: all .15s;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.btn-close-store:hover { border-color: var(--danger); color: var(--danger); }
+.btn-close-store i { font-size: .8rem; }
+.btn-close-store.is-closed {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .dash-user {
   display: flex; align-items: center; gap: 6px;
   font-size: .82rem; color: var(--text-med);

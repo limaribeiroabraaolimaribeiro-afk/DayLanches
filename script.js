@@ -896,9 +896,24 @@ function requestGeoLocation() {
   );
 }
 
+/* Revalida store_settings direto no banco (não confia no storeConfig em
+   memória, que pode ser de antes da Dayane fechar a loja) — usado só nos
+   pontos que efetivamente criam o pedido, pra uma aba antiga não conseguir
+   finalizar depois de um fechamento manual. */
+async function blockIfManuallyClosed() {
+  await loadStoreConfig();
+  const status = getStoreStatus();
+  if (status.manualClosed) {
+    showClosedModal(status);
+    return true;
+  }
+  return false;
+}
+
 /* Fluxo InfinitePay: salva pedido → cria checkout → redireciona */
 async function handleOnlinePayment(method) {
   if (state.submittingOrder) return; // trava lógica — clique/toque repetido é ignorado
+  if (await blockIfManuallyClosed()) return;
 
   if (state.deliveryType === 'delivery' && !isStoreLocationConfigured()) {
     showToast('Localização da loja não configurada. Entre em contato com a loja.');
@@ -1533,9 +1548,9 @@ function goToCheckout() {
     showToast('Adicione produtos ao carrinho primeiro');
     return;
   }
-  if (!getStoreStatus().isOpen) {
-    const modal = el('closed-modal');
-    if (modal) modal.style.display = 'flex';
+  const status = getStoreStatus();
+  if (!status.isOpen) {
+    showClosedModal(status);
     return;
   }
   closeCart();
@@ -1775,6 +1790,7 @@ function updateConfirmationPage() {
 ────────────────────────────────────────── */
 async function sendWhatsApp() {
   if (state.submittingOrder) return false; // trava lógica — clique/toque repetido é ignorado
+  if (await blockIfManuallyClosed()) return false;
   if (state.deliveryType === 'delivery' && state.geo.deliveryOutOfRange) {
     showToast(DELIVERY_OUT_OF_RANGE_MESSAGE);
     return false;
@@ -2908,7 +2924,7 @@ const DAY_TOKEN_MAP = {
 };
 
 /* Usado apenas se store_settings não tiver nenhum horário salvo/interpretável */
-const FALLBACK_SCHEDULE_TEXT = 'Quinta a domingo 17:30 às 23:00';
+const FALLBACK_SCHEDULE_TEXT = 'Quarta a domingo 17:30 às 23:00';
 
 let storeConfig = null;
 
@@ -3034,8 +3050,26 @@ function getWeekMap() {
   return buildWeekMap(getScheduleRawText()) || buildWeekMap(FALLBACK_SCHEDULE_TEXT);
 }
 
+const MANUAL_CLOSED_DEFAULT_MESSAGE = 'Hoje não estaremos atendendo.';
+
+/* Data de hoje em America/Sao_Paulo no formato YYYY-MM-DD — mesmo formato
+   que o Postgres devolve pra uma coluna `date`, então dá pra comparar como
+   string direto, sem matemática de fuso horário extra na comparação. */
+function getSaoPauloDateISO(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date || new Date());
+  const y = parts.find(p => p.type === 'year').value;
+  const m = parts.find(p => p.type === 'month').value;
+  const d = parts.find(p => p.type === 'day').value;
+  return `${y}-${m}-${d}`;
+}
+
 /* Retorna o status de funcionamento agora (horário de Brasília), com base no
-   schedule informado ou, se omitido, no horário salvo em store_settings. */
+   schedule informado ou, se omitido, no horário salvo em store_settings.
+   Fechamento manual de hoje (Gestão → "Fechar loja hoje") tem prioridade
+   sobre o horário semanal normal — não altera/substitui o weekMap, só força
+   isOpen=false quando manual_closed_date bate com o dia de hoje. */
 function isStoreOpenNow(scheduleText) {
   const weekMap = (scheduleText !== undefined ? buildWeekMap(scheduleText) : null) || getWeekMap();
 
@@ -3054,15 +3088,23 @@ function isStoreOpenNow(scheduleText) {
   const minute  = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
   const cur     = hour * 60 + minute;
 
-  const today  = weekMap[weekday];
-  const isOpen = !!(today.open && today.from != null && today.to != null && cur >= today.from && cur < today.to);
+  const today = weekMap[weekday];
+  const scheduleOpen = !!(today.open && today.from != null && today.to != null && cur >= today.from && cur < today.to);
+
+  const manualClosedDate = storeConfig?.manual_closed_date || null;
+  const manualClosed = !!manualClosedDate && manualClosedDate === getSaoPauloDateISO(now);
+  const manualClosedMessage = manualClosed ? (storeConfig?.manual_closed_message || '').trim() : '';
+
+  const isOpen = manualClosed ? false : scheduleOpen;
 
   return {
     isOpen,
+    manualClosed,
+    manualClosedMessage,
     todayLabel: WEEKDAY_NAMES[weekday],
     openTime:   today.from != null ? formatMinutes(today.from) : null,
     closeTime:  today.to   != null ? formatMinutes(today.to)   : null,
-    message:    isOpen ? 'Aberto agora' : 'Fechado agora',
+    message:    isOpen ? 'Aberto agora' : (manualClosed ? 'Fechado hoje' : 'Fechado agora'),
     weekMap,
     weekday,
   };
@@ -3118,7 +3160,7 @@ function getStoreStatus() {
 
 function updateStoreStatus() {
   const status = isStoreOpenNow();
-  const { isOpen, weekMap, closeTime } = status;
+  const { isOpen, manualClosed, manualClosedMessage, weekMap, closeTime } = status;
 
   const banner  = el('store-status-banner');
   const badge   = el('menu-status-badge');
@@ -3135,17 +3177,25 @@ function updateStoreStatus() {
   if (banner) {
     banner.style.display = 'flex';
     banner.className = 'store-banner ' + (isOpen ? 'open' : 'closed');
-    banner.innerHTML = isOpen
-      ? `<i class="fas fa-circle-check store-banner-ico"></i>
+    if (isOpen) {
+      banner.innerHTML = `<i class="fas fa-circle-check store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Estamos abertos agora</strong>
            <span>Atendimento até às ${closeTime}.</span>
-         </div>`
-      : `<i class="fas fa-clock store-banner-ico"></i>
+         </div>`;
+    } else if (manualClosed) {
+      banner.innerHTML = `<i class="fas fa-store-slash store-banner-ico"></i>
+         <div class="store-banner-text">
+           <strong>Loja fechada hoje</strong>
+           <span>${esc(manualClosedMessage || MANUAL_CLOSED_DEFAULT_MESSAGE)}</span>
+         </div>`;
+    } else {
+      banner.innerHTML = `<i class="fas fa-clock store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Estamos fechados no momento</strong>
            <span>Nosso atendimento: ${openSummary || 'consulte os horários na loja'}.</span>
          </div>`;
+    }
   }
 
   if (badge && txt) {
@@ -3199,7 +3249,46 @@ function closeMenu() {
 /* ──────────────────────────────────────────
    MODAL: LOJA FECHADA
 ────────────────────────────────────────── */
+/* Preenche e mostra o modal de loja fechada. Fechamento manual (Dayane
+   fechou a loja hoje) é bloqueio rígido — sem opção de "enviar mesmo
+   assim" — diferente do fechamento por horário normal, que deixa o
+   cliente continuar pro próximo atendimento (comportamento já existente,
+   inalterado). */
+function showClosedModal(status) {
+  const modal = el('closed-modal');
+  if (!modal) return;
+
+  const title    = el('closed-modal-title');
+  const text     = el('closed-modal-text');
+  const note     = el('closed-modal-note');
+  const hours    = el('closed-modal-hours');
+  const confirmBtn = el('closed-modal-confirm-btn');
+
+  if (status?.manualClosed) {
+    if (title) title.textContent = 'Loja fechada hoje';
+    if (text)  text.textContent  = 'A loja está fechada hoje.';
+    if (note) {
+      note.textContent = status.manualClosedMessage || MANUAL_CLOSED_DEFAULT_MESSAGE;
+      note.style.display = '';
+    }
+    if (hours) hours.style.display = 'none';
+    if (confirmBtn) confirmBtn.style.display = 'none';
+  } else {
+    if (title) title.textContent = 'Loja fechada no momento';
+    if (text)  text.textContent  = 'Seu pedido pode ser montado e enviado, mas o atendimento será feito no próximo horário de funcionamento.';
+    if (note) note.style.display = 'none';
+    if (hours) hours.style.display = '';
+    if (confirmBtn) confirmBtn.style.display = '';
+  }
+
+  modal.style.display = 'flex';
+}
+
 function confirmClosedCheckout() {
+  /* Reforço: se a loja foi fechada manualmente (ou nesse meio-tempo), nunca
+     deixa passar mesmo que o botão "enviar mesmo assim" apareça por algum
+     estado antigo do modal. */
+  if (getStoreStatus().manualClosed) return;
   const modal = el('closed-modal');
   if (modal) modal.style.display = 'none';
   closeCart();
@@ -3231,7 +3320,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   initCarousel();
   await loadStoreConfig();
   updateStoreStatus();
-  setInterval(updateStoreStatus, 60000);
+  /* Reusa o único timer existente pra também refrescar o store_settings
+     (não só reavaliar o horário com o dado antigo em memória) — assim uma
+     aba já aberta enxerga um fechamento manual feito pela Dayane em até
+     60s, sem precisar de outro setInterval separado. */
+  setInterval(async () => { await loadStoreConfig(); updateStoreStatus(); }, 60000);
 
   /* Abrir produto direto pelo link ?produto=ID (aceita UUID ou id numérico antigo) */
   const _pid = new URLSearchParams(window.location.search).get('produto');

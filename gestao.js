@@ -2238,7 +2238,7 @@ const DAY_TOKEN_MAP = {
   sab: 6, sabado: 6,
 };
 
-const FALLBACK_SCHEDULE_TEXT = 'Quinta a domingo 17:30 às 23:00';
+const FALLBACK_SCHEDULE_TEXT = 'Quarta a domingo 17:30 às 23:00';
 
 function stripAccents(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -2396,7 +2396,116 @@ async function loadConfig() {
     gs.storeConfig = data;
     renderStoreLocationStatus();
     loadDriversList();
+    pdvRenderCloseStoreButtons();
   } catch (e) { console.warn('Erro config:', e); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   FECHAMENTO MANUAL DA LOJA — "Fechar loja hoje"
+   Reaproveita store_settings (mesma linha id='store' já usada acima).
+   manual_closed_date só vale pro dia exato (America/Sao_Paulo) em que foi
+   setado — no dia seguinte deixa de ter efeito sozinho, sem precisar de
+   rotina de limpeza. Botões em ambos os cabeçalhos (Gestão normal e
+   Balcão) usam a classe .js-close-store-btn (não IDs) pra atualizar os
+   dois de uma vez, sem duplicar id.
+══════════════════════════════════════════════════════════ */
+const MANUAL_CLOSE_MAX_LEN = 180;
+
+function getSaoPauloDateISO(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date || new Date());
+  const y = parts.find(p => p.type === 'year').value;
+  const m = parts.find(p => p.type === 'month').value;
+  const d = parts.find(p => p.type === 'day').value;
+  return `${y}-${m}-${d}`;
+}
+
+function isStoreManuallyClosedToday() {
+  const d = gs.storeConfig?.manual_closed_date;
+  return !!d && d === getSaoPauloDateISO();
+}
+
+/* Busca só os 3 campos de fechamento manual — chamado no login (antes de
+   loadConfig(), que só roda quando a aba Configurações é aberta) pra que
+   os dois cabeçalhos já mostrem o estado certo assim que a Gestão abre. */
+async function pdvSyncCloseStoreState() {
+  try {
+    const { data, error } = await getSb().from('store_settings')
+      .select('manual_closed_date, manual_closed_message, manual_closed_at')
+      .eq('id', 'store').single();
+    if (!error && data) gs.storeConfig = { ...(gs.storeConfig || {}), ...data };
+  } catch (e) { console.warn('Erro ao carregar estado de fechamento manual:', e); }
+  pdvRenderCloseStoreButtons();
+}
+
+function pdvRenderCloseStoreButtons() {
+  const closedToday = isStoreManuallyClosedToday();
+  document.querySelectorAll('.js-close-store-btn').forEach(btn => {
+    btn.classList.toggle('is-closed', closedToday);
+    btn.title = closedToday ? 'Loja fechada hoje — clique para reabrir' : 'Fechar loja hoje';
+    const label = btn.querySelector('.btn-sound-label');
+    if (label) label.textContent = closedToday ? 'Loja fechada hoje' : 'Fechar loja hoje';
+  });
+}
+
+function pdvOpenCloseStoreModal() {
+  if (isStoreManuallyClosedToday()) { pdvOpenReopenStoreModal(); return; }
+
+  const message = `
+    <p>A loja ficará fechada para pedidos durante o restante de hoje.</p>
+    <label class="pdv-section-label" style="display:block;margin-top:10px">Observação para os clientes (opcional)</label>
+    <textarea id="close-store-note" maxlength="${MANUAL_CLOSE_MAX_LEN}" rows="3"
+      style="width:100%;resize:vertical;padding:8px;border-radius:8px;border:1.5px solid var(--border);font:inherit"
+      placeholder="Ex.: Hoje não teremos atendimento. Voltamos amanhã normalmente."></textarea>`;
+
+  showConfirmModal({
+    title: 'Fechar loja hoje',
+    message,
+    confirmText: 'Fechar loja hoje',
+    cancelText: 'Cancelar',
+    danger: true,
+  }).then(async (ok) => {
+    if (!ok) return;
+    const note = (elid('close-store-note')?.value || '').trim().slice(0, MANUAL_CLOSE_MAX_LEN);
+    await pdvCloseStoreToday(note);
+  });
+}
+
+function pdvOpenReopenStoreModal() {
+  showConfirmModal({
+    title: 'Reabrir loja hoje',
+    message: '<p>A loja volta a seguir o horário normal de funcionamento imediatamente.</p>',
+    confirmText: 'Reabrir loja hoje',
+    cancelText: 'Cancelar',
+  }).then(async (ok) => { if (ok) await pdvReopenStoreToday(); });
+}
+
+async function pdvCloseStoreToday(message) {
+  const todayISO = getSaoPauloDateISO();
+  const { error } = await getSb().from('store_settings').update({
+    manual_closed_date: todayISO,
+    manual_closed_message: message || null,
+    manual_closed_at: new Date().toISOString(),
+  }).eq('id', 'store');
+  if (error) { toast('Erro ao fechar a loja: ' + error.message, true); return; }
+  gs.storeConfig = { ...(gs.storeConfig || {}), manual_closed_date: todayISO, manual_closed_message: message || null };
+  pdvRenderCloseStoreButtons();
+  toast('Loja fechada para hoje.');
+  logAuditAction('close_store_manual', 'config', 'store', 'Fechamento manual da loja', null, { date: todayISO, message: message || '' });
+}
+
+async function pdvReopenStoreToday() {
+  const { error } = await getSb().from('store_settings').update({
+    manual_closed_date: null,
+    manual_closed_message: null,
+    manual_closed_at: null,
+  }).eq('id', 'store');
+  if (error) { toast('Erro ao reabrir a loja: ' + error.message, true); return; }
+  gs.storeConfig = { ...(gs.storeConfig || {}), manual_closed_date: null, manual_closed_message: null };
+  pdvRenderCloseStoreButtons();
+  toast('Loja reaberta.');
+  logAuditAction('reopen_store_manual', 'config', 'store', 'Reabertura manual da loja', null, {});
 }
 
 function normalizeWhatsApp(raw) {
@@ -2926,6 +3035,8 @@ const _FRIENDLY_ACTIONS = {
   toggle_product:         'Status do produto alterado',
   save_config:            'Configurações da loja alteradas',
   update_store_config:    'Configurações da loja alteradas',
+  close_store_manual:     'Loja fechada manualmente por hoje',
+  reopen_store_manual:    'Loja reaberta manualmente',
   save_location:          'Localização da loja atualizada',
   update_location:        'Localização da loja atualizada',
   export_report:          'Exportação realizada',
@@ -4705,6 +4816,7 @@ document.addEventListener('DOMContentLoaded', () => {
       elid('user-display').textContent = _uName;
       var _pu = elid('pdv-user-display'); if (_pu) _pu.textContent = _uName;
       loadProducts();
+      pdvSyncCloseStoreState();
       loadOrders().then(() => {
         gs.orders.forEach(o => gs.seenOrderIds.add(o.id));
         saveSeenOrderIds();
@@ -5832,3 +5944,5 @@ window.applyCourtesy                  = applyCourtesy;
 window.assignDriver                   = assignDriver;
 window.salvarEntregador               = salvarEntregador;
 window.exportBackupData               = exportBackupData;
+window.pdvOpenCloseStoreModal         = pdvOpenCloseStoreModal;
+window.pdvOpenReopenStoreModal        = pdvOpenReopenStoreModal;

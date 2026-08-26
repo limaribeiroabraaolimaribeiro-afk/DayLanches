@@ -631,12 +631,13 @@
   <div class="closed-modal-overlay" id="closed-modal" style="display:none">
     <div class="closed-modal-box">
       <div class="closed-modal-icon"><i class="fas fa-store-slash"></i></div>
-      <h3 class="closed-modal-title">Loja fechada no momento</h3>
-      <p class="closed-modal-text">Seu pedido pode ser montado e enviado, mas o atendimento será feito no próximo horário de funcionamento.</p>
+      <h3 class="closed-modal-title" id="closed-modal-title">Loja fechada no momento</h3>
+      <p class="closed-modal-text" id="closed-modal-text">Seu pedido pode ser montado e enviado, mas o atendimento será feito no próximo horário de funcionamento.</p>
+      <p class="closed-modal-note" id="closed-modal-note" style="display:none"></p>
       <p class="closed-modal-hours" id="closed-modal-hours"><i class="fas fa-clock"></i> Quinta a domingo, 17:30 às 23:00</p>
       <div class="closed-modal-btns">
         <button class="btn-secondary" onclick="cancelClosedCheckout()">Cancelar</button>
-        <button class="btn-primary"   onclick="confirmClosedCheckout()">Enviar mesmo assim</button>
+        <button class="btn-primary" id="closed-modal-confirm-btn" onclick="confirmClosedCheckout()">Enviar mesmo assim</button>
       </div>
     </div>
   </div>

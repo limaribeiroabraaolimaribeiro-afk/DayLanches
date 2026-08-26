@@ -2424,6 +2424,7 @@ a { text-decoration: none; color: inherit; }
 }
 .closed-modal-title { font-size: 1.05rem; font-weight: 800; color: var(--text); }
 .closed-modal-text  { font-size: .84rem; color: var(--text-med); line-height: 1.5; }
+.closed-modal-note  { font-size: .84rem; font-weight: 700; color: var(--text); line-height: 1.5; }
 .closed-modal-hours {
   font-size: .82rem; font-weight: 600; color: var(--primary-dark);
   background: var(--primary-light); border: 1px solid #FFD5B5;
