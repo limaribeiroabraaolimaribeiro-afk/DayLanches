@@ -296,8 +296,10 @@ async function handleWebhook(request, env) {
   const paidCents = Number(payload.paid_amount || payload.amount || 0);
   const paidBRL   = paidCents > 0 ? paidCents / 100 : null;
 
-  /* Atualizar pagamento */
-  await sbPatch(env, 'orders', `id=eq.${orderId}`, {
+  /* 1) Confirmar pagamento no banco — operação crítica. Isso sempre precisa
+     acontecer e ser reportado à InfinitePay independente do que rolar com
+     a notificação de WhatsApp depois. */
+  const patchRes = await sbPatch(env, 'orders', `id=eq.${orderId}`, {
     payment_status:   'pago',
     status:           'novo',
     paid_amount:      paidBRL,
@@ -307,6 +309,21 @@ async function handleWebhook(request, env) {
     paid_at:          new Date().toISOString(),
     updated_at:       new Date().toISOString(),
   });
+
+  if (!patchRes.ok) {
+    const detail = await patchRes.text().catch(() => '');
+    console.error('[DayLanches] Webhook: falha ao confirmar pagamento:', patchRes.status, detail);
+    return json({ error: 'Falha ao confirmar pagamento' }, 500);
+  }
+
+  /* 2) Notificar o cliente é best-effort — uma falha aqui (Evolution fora do
+     ar, telefone inválido, etc.) nunca desfaz nem impede a confirmação do
+     pagamento acima, que já foi salva e já será respondida como sucesso. */
+  try {
+    await dispatchOrderNotification(orderId, 'pagamento_confirmado', env);
+  } catch (err) {
+    console.error('[DayLanches] Webhook: falha ao notificar pagamento confirmado:', err);
+  }
 
   return json({ ok: true });
 }
@@ -608,19 +625,33 @@ async function handlePrintAgentActivate(request, env) {
    POST /order-status-notification — envia WhatsApp ao cliente
 ══════════════════════════════════════════════════════════ */
 const NOTIFICATION_MESSAGES = {
-  em_preparo: (name, num, link) => `Olá, ${name}! 👋\n\nSeu pedido ${num} está em preparação.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
-  saiu_para_entrega: (name, num, link) => `Olá, ${name}! 🛵\n\nSeu pedido ${num} saiu para entrega.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
+  pagamento_confirmado: (name, num, link) => `Olá, ${name}! ✅\n\nPagamento do pedido ${num} confirmado.\n\nRecebemos seu pedido e ele já foi enviado para a Day Lanches. 🍔\n\nVocê pode acompanhar seu pedido por aqui:\n${link}\n\nDay Lanches`,
+  em_preparo: (name, num, link) => `Olá, ${name}! 👋\n\nSeu pedido ${num} está em preparação. 🍔\n\nEstamos preparando tudo para você.\n\nAcompanhe seu pedido:\n${link}\n\nDay Lanches`,
+  saiu_para_entrega: (name, num, link) => `Olá, ${name}! 🛵\n\nSeu pedido ${num} saiu para entrega.\n\nEm breve ele estará com você.\n\nAcompanhe seu pedido:\n${link}\n\nDay Lanches`,
   pronto: (name, num, link) => `Olá, ${name}! ✅\n\nSeu pedido ${num} está pronto para retirada.\n\nAcompanhe por aqui:\n${link}\n\nDay Lanches`,
   finalizado: (name, num, link) => `Olá, ${name}! ✅\n\nSeu pedido ${num} foi finalizado.\n\nDay Lanches`,
   cancelado: (name, num, link, reason) => `Olá, ${name}.\n\nSeu pedido ${num} foi cancelado.\n${reason ? `\nMotivo:\n${reason}\n` : ''}\nDay Lanches`,
 };
 
 const NOTIFIED_FIELD = {
+  pagamento_confirmado: 'notified_payment_confirmed_at',
   em_preparo: 'notified_preparing_at',
   saiu_para_entrega: 'notified_out_for_delivery_at',
   pronto: 'notified_ready_at',
   cancelado: 'notified_cancelled_at',
 };
+
+/* Regras de negócio por status: quando o status não fizer sentido pro tipo
+   de pedido, pula o envio sem erro (evita, por exemplo, mandar "saiu para
+   entrega" pra uma mesa ou retirada — o botão de status na Gestão é o
+   mesmo pra todos os tipos de pedido, então essa checagem tem que ficar
+   aqui, não na UI). */
+function notificationAllowedForOrder(newStatus, order) {
+  if (newStatus === 'saiu_para_entrega' && order.delivery_type !== 'delivery') {
+    return false;
+  }
+  return true;
+}
 
 function normalizePhone(raw) {
   const digits = String(raw || '').replace(/\D/g, '');
@@ -653,6 +684,122 @@ async function sendWhatsAppMessage(phone, message, env) {
   }
 }
 
+/* Fonte única do envio de notificação de status por WhatsApp — usada tanto
+   por /order-status-notification (Gestão, clique de status) quanto pelo
+   webhook da InfinitePay (pagamento confirmado), chamada direto em
+   processo, sem o Worker fazer uma requisição HTTP pra ele mesmo.
+
+   Proteção contra duplicidade em duas camadas:
+   1) notified_<status>_at em orders — checado ANTES de tentar (evita
+      trabalho desnecessário no caso comum).
+   2) o INSERT em order_notifications só "ganha o direito" de processar a
+      notificação se realmente for aceito pelo banco — o índice único
+      parcial (order_id, status) WHERE status_send IN ('pendente','enviado')
+      já existente (add_local_agent_notifications.sql) rejeita com 409 uma
+      segunda tentativa concorrente pro mesmo (order_id, status). Só quem
+      recebeu 409 desiste; só quem conseguiu inserir de fato envia a
+      mensagem. Isso cobre o caso de dois webhooks/cliques chegando quase
+      ao mesmo tempo — a checagem em (1) sozinha não seria suficiente
+      porque as duas tentativas concorrentes passariam por ela antes que
+      qualquer uma tivesse terminado de gravar o notified_<status>_at. */
+async function dispatchOrderNotification(orderId, newStatus, env, opts = {}) {
+  const msgBuilder = NOTIFICATION_MESSAGES[newStatus];
+  if (!msgBuilder) return { ok: true, sent: false, reason: 'status_without_notification' };
+
+  const notifiedField = NOTIFIED_FIELD[newStatus];
+
+  const orders = await sbGet(env, 'orders',
+    `id=eq.${orderId}&select=order_number,customer_name,customer_phone,tracking_token,delivery_type,${notifiedField || 'id'},cancel_reason`);
+  if (!orders?.length) return { ok: false, sent: false, reason: 'order_not_found' };
+  const order = orders[0];
+
+  if (notifiedField && order[notifiedField]) {
+    return { ok: true, sent: false, reason: 'already_notified' };
+  }
+
+  if (!notificationAllowedForOrder(newStatus, order)) {
+    return { ok: true, sent: false, reason: 'not_applicable_for_order_type' };
+  }
+
+  const phone = normalizePhone(order.customer_phone);
+  if (!phone) return { ok: true, sent: false, reason: 'no_phone' };
+
+  const num = order.order_number || orderId.slice(0, 8);
+  const name = order.customer_name || 'cliente';
+  const siteUrl = env.SITE_URL || 'https://www.daylanches.com.br';
+  const link = order.tracking_token ? `${siteUrl}/acompanhar.html?token=${order.tracking_token}` : siteUrl;
+  const reason = opts.cancelReason || order.cancel_reason || '';
+
+  const message = msgBuilder(name, `#${num}`, link, reason);
+
+  const insertRes = await sbPost(env, 'order_notifications', {
+    order_id: orderId,
+    order_number: num,
+    customer_name: name,
+    customer_phone: phone,
+    status: newStatus,
+    message,
+    tracking_link: link,
+    channel: 'whatsapp_local',
+    status_send: 'pendente',
+  });
+
+  if (!insertRes.ok) {
+    if (insertRes.status === 409) {
+      /* Outra tentativa concorrente já ganhou o direito de notificar este
+         (order_id, status) — não é erro, é a proteção funcionando. */
+      return { ok: true, sent: false, reason: 'already_notified' };
+    }
+    const detail = await insertRes.text().catch(() => '');
+    console.error('[DayLanches] Erro ao criar order_notification:', insertRes.status, detail);
+    return { ok: false, sent: false, reason: 'notification_insert_failed' };
+  }
+
+  const patchFilter = `order_id=eq.${orderId}&status=eq.${newStatus}&status_send=eq.pendente`;
+  const hasEvolution = !!(env.EVOLUTION_API_URL && env.EVOLUTION_API_KEY && env.EVOLUTION_INSTANCE);
+  let result = { sent: false, reason: 'queued_for_local_agent' };
+
+  if (hasEvolution) {
+    result = await sendWhatsAppMessage(phone, message, env);
+    const now = new Date().toISOString();
+
+    if (result.sent) {
+      await sbPatch(env, 'order_notifications', patchFilter,
+        { status_send: 'enviado', sent_at: now, updated_at: now });
+    } else {
+      /* Nunca deixar como "enviado" se a Evolution respondeu erro. */
+      await sbPatch(env, 'order_notifications', patchFilter,
+        { status_send: 'falhou', failed_at: now, error_message: result.reason || 'erro desconhecido', updated_at: now });
+    }
+  }
+
+  if (notifiedField && result.sent) {
+    await sbPatch(env, 'orders', `id=eq.${orderId}`, { [notifiedField]: new Date().toISOString() });
+  }
+
+  const auditAction = result.sent
+    ? 'order_notification_sent'
+    : (hasEvolution ? 'order_notification_failed' : 'order_notification_queued');
+
+  try {
+    await fetch(`${env.SUPABASE_URL}/rest/v1/audit_logs`, {
+      method: 'POST',
+      headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        actor_name: 'Sistema',
+        action: auditAction,
+        entity_type: 'order',
+        entity_id: orderId,
+        entity_label: `#${num}`,
+        source: 'worker',
+        metadata: { status: newStatus, phone, channel: hasEvolution ? 'whatsapp_qr' : 'whatsapp_local', sent: result.sent, reason: result.reason || null },
+      }),
+    });
+  } catch (_) {}
+
+  return { ok: true, sent: result.sent, reason: result.reason || null };
+}
+
 async function handleOrderStatusNotification(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
@@ -660,85 +807,12 @@ async function handleOrderStatusNotification(request, env) {
   const { order_id, new_status, cancel_reason } = body;
   if (!order_id || !new_status) return json({ error: 'order_id e new_status obrigatórios' }, 400);
 
-  const msgBuilder = NOTIFICATION_MESSAGES[new_status];
-  if (!msgBuilder) return json({ ok: true, sent: false, reason: 'status_without_notification' });
-
-  const notifiedField = NOTIFIED_FIELD[new_status];
-
   try {
-    const orders = await sbGet(env, 'orders',
-      `id=eq.${order_id}&select=order_number,customer_name,customer_phone,tracking_token,${notifiedField || 'id'},cancel_reason`);
-    if (!orders?.length) return json({ error: 'Pedido não encontrado' }, 404);
-    const order = orders[0];
-
-    if (notifiedField && order[notifiedField]) {
-      return json({ ok: true, sent: false, reason: 'already_notified' });
+    const result = await dispatchOrderNotification(order_id, new_status, env, { cancelReason: cancel_reason });
+    if (!result.ok) {
+      const status = result.reason === 'order_not_found' ? 404 : 500;
+      return json({ error: result.reason || 'Erro interno' }, status);
     }
-
-    const phone = normalizePhone(order.customer_phone);
-    if (!phone) return json({ ok: true, sent: false, reason: 'no_phone' });
-
-    const num = order.order_number || order_id.slice(0, 8);
-    const name = order.customer_name || 'cliente';
-    const siteUrl = env.SITE_URL || 'https://www.daylanches.com.br';
-    const link = order.tracking_token ? `${siteUrl}/acompanhar.html?token=${order.tracking_token}` : siteUrl;
-    const reason = cancel_reason || order.cancel_reason || '';
-
-    const message = msgBuilder(name, `#${num}`, link, reason);
-
-    /* Criar registro na tabela order_notifications */
-    const notifRecord = {
-      order_id,
-      order_number: num,
-      customer_name: name,
-      customer_phone: phone,
-      status: new_status,
-      message,
-      tracking_link: link,
-      channel: 'whatsapp_local',
-      status_send: 'pendente',
-    };
-
-    try {
-      await sbPost(env, 'order_notifications', notifRecord);
-    } catch (_) {
-      console.error('[DayLanches] Erro ao criar order_notification');
-    }
-
-    /* Se Evolution API configurada (modo VPS), envia direto e marca */
-    const hasEvolution = !!(env.EVOLUTION_API_URL && env.EVOLUTION_API_KEY && env.EVOLUTION_INSTANCE);
-    let result = { sent: false, reason: 'queued_for_local_agent' };
-
-    if (hasEvolution) {
-      result = await sendWhatsAppMessage(phone, message, env);
-
-      if (result.sent) {
-        await sbPatch(env, 'order_notifications',
-          `order_id=eq.${order_id}&status=eq.${new_status}&status_send=eq.pendente`,
-          { status_send: 'enviado', sent_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-      }
-    }
-
-    if (notifiedField && result.sent) {
-      await sbPatch(env, 'orders', `id=eq.${order_id}`, { [notifiedField]: new Date().toISOString() });
-    }
-
-    try {
-      await fetch(`${env.SUPABASE_URL}/rest/v1/audit_logs`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          actor_name: 'Sistema',
-          action: result.sent ? 'order_notification_sent' : 'order_notification_queued',
-          entity_type: 'order',
-          entity_id: order_id,
-          entity_label: `#${num}`,
-          source: 'worker',
-          metadata: { status: new_status, phone, channel: hasEvolution ? 'whatsapp_qr' : 'whatsapp_local', sent: result.sent, reason: result.reason || null },
-        }),
-      });
-    } catch (_) {}
-
     return json({ ok: true, sent: result.sent, reason: result.reason || null });
   } catch (err) {
     console.error('[DayLanches] Erro notificação:', err);

@@ -1373,12 +1373,18 @@ async function updateOrderStatus(id, status) {
         body: JSON.stringify({ order_id: id, new_status: status }),
       });
       const result = await res.json();
+      const silentReasons = ['queued_for_local_agent', 'not_configured', 'no_phone', 'already_notified', 'not_applicable_for_order_type'];
       if (result.sent) toast('Notificação enviada ao cliente.');
-      else if (result.reason === 'queued_for_local_agent') { /* agente local envia */ }
-      else if (result.reason === 'not_configured') { /* silencioso */ }
-      else if (result.reason === 'no_phone') { /* sem telefone */ }
-      else if (result.reason === 'already_notified') { /* já notificado */ }
-    } catch (_) { /* não bloqueia */ }
+      else if (!silentReasons.includes(result.reason)) {
+        /* Status já foi salvo com sucesso acima — isso aqui é só a mensagem
+           não ter saído (Evolution fora do ar, etc.). Nunca desfazemos o
+           status por causa disso, só avisamos a Dayane que ela precisa
+           avisar o cliente por outro meio se for o caso. */
+        toast('Status atualizado, mas não foi possível enviar o WhatsApp.', true);
+      }
+    } catch (_) {
+      toast('Status atualizado, mas não foi possível enviar o WhatsApp.', true);
+    }
   }
 
   await loadOrders();
