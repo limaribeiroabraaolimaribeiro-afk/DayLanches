@@ -22,7 +22,8 @@ function fmt(n) { return Number(n || 0).toFixed(2).replace('.', ','); }
 function toast(msg, isErr) {
   const t = elid('gc-toast');
   if (!t) return;
-  t.textContent = msg;
+  const icon = isErr ? 'fa-circle-exclamation' : 'fa-circle-check';
+  t.innerHTML = `<i class="fas ${icon}"></i><span>${esc(msg)}</span>`;
   t.className = 'gc-toast show' + (isErr ? ' toast-error' : '');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.classList.remove('show'); }, 3200);
@@ -97,7 +98,7 @@ async function gcHandleLogin(e) {
   const errEl = elid('login-error');
   const btn = elid('login-btn');
   if (errEl) errEl.style.display = 'none';
-  if (btn) { btn.disabled = true; btn.textContent = 'Entrando...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...'; }
 
   try {
     const { error } = await getSb().auth.signInWithPassword({ email, password });
@@ -178,12 +179,14 @@ function gcRenderProducts() {
   grid.innerHTML = list.map(p => {
     const img = p.image_url || p.img || '';
     const hasOptions = p._hasOptions;
+    const desc = esc(p.description || p.desc || '');
     return `<div class="gc-product-card">
       ${img
         ? `<img class="gc-product-img" src="${esc(img)}" alt="${esc(p.name)}" loading="lazy" onerror="this.outerHTML='<div class=&quot;gc-product-img-ph&quot;><i class=&quot;fas fa-image&quot;></i></div>'">`
         : '<div class="gc-product-img-ph"><i class="fas fa-image"></i></div>'}
       <div class="gc-product-body">
         <div class="gc-product-name">${esc(p.name)}</div>
+        ${desc ? `<div class="gc-product-desc">${desc}</div>` : ''}
         <div class="gc-product-price">R$ ${fmt(p.price)}</div>
         <button type="button" class="gc-product-add" onclick="gcAddProduct('${p.id}')">
           <i class="fas fa-${hasOptions ? 'sliders' : 'plus'}"></i> ${hasOptions ? 'Escolher' : 'Adicionar'}
@@ -263,17 +266,22 @@ function gcRenderOptionsSheet() {
     const max = g.max_select || (g.required && !g.multiple ? 1 : 0);
     const itemsHtml = g.items.map(i => {
       const isSel = sel.includes(i.id);
-      const priceLabel = Number(i.price_delta || 0) > 0 ? `+ R$ ${fmt(i.price_delta)}` : (g.free_limit > 0 ? 'Grátis' : '');
+      const priceLabel = Number(i.price_delta || 0) > 0
+        ? `<span class="gc-opt-item-price">+R$ ${fmt(i.price_delta)}</span>`
+        : (g.free_limit > 0 ? `<span class="gc-opt-item-price gc-opt-item-price-free">Grátis</span>` : '');
       return `<div class="gc-opt-item${isSel ? ' selected' : ''}" onclick="gcToggleOption('${g.id}','${i.id}',${max})">
         <span class="gc-opt-item-label">${esc(i.name)}</span>
-        ${priceLabel ? `<span class="gc-opt-item-price">${priceLabel}</span>` : ''}
+        ${priceLabel}
         <span class="gc-opt-check"><i class="fas fa-check"></i></span>
       </div>`;
     }).join('');
     return `<div class="gc-opt-group">
-      <div class="gc-opt-group-title">${esc(g.title)}${g.required ? ' *' : ''}</div>
-      ${g.free_limit > 0 ? `<div class="gc-opt-group-hint">${g.free_limit} grátis, demais cobrados</div>` : ''}
-      ${itemsHtml}
+      <div class="gc-opt-group-head">
+        <span class="gc-opt-group-title">${esc(g.title)}</span>
+        ${g.required ? '<span class="gc-opt-tag gc-opt-tag-req">Obrigatório</span>' : ''}
+        ${g.free_limit > 0 ? `<span class="gc-opt-tag gc-opt-tag-free">${g.free_limit} grátis</span>` : ''}
+      </div>
+      <div class="gc-opt-items">${itemsHtml}</div>
     </div>`;
   }).join('');
   gcUpdateOptTotal();
@@ -415,11 +423,13 @@ async function gcRenderMesas() {
       const isOccupied = !!order;
       const cls = isOccupied ? 'ocupada' : 'livre';
       const info = isOccupied
-        ? `<span class="gc-mesa-info">${esc(order.customer_name || 'Cliente balcão')} · R$ ${fmt(order.total)}</span>`
-        : '';
+        ? `<div class="gc-mesa-info"><i class="fas fa-user"></i><span>${esc(order.customer_name || 'Cliente balcão')}</span></div>
+           <div class="gc-mesa-total">R$ ${fmt(order.total)}</div>`
+        : `<div class="gc-mesa-hint">Toque para abrir</div>`;
       return `<button type="button" class="gc-mesa-btn ${cls}" onclick="gcSelectMesa(${num})">
+        <span class="gc-mesa-badge"><i class="fas fa-circle"></i>${isOccupied ? 'Ocupada' : 'Livre'}</span>
+        <span class="gc-mesa-label">Mesa</span>
         <span class="gc-mesa-num">${num}</span>
-        <span class="gc-mesa-status">${isOccupied ? 'Ocupada' : 'Livre'}</span>
         ${info}
       </button>`;
     }).join('');
@@ -472,9 +482,13 @@ function gcRenderComandaAtual() {
   itemsEl.innerHTML = items.length
     ? items.map(i => {
         const t = i.total || (i.finalUnitPrice || i.unitPrice || 0) * (i.qty || 1) || 0;
-        return `<div class="gc-comanda-item-row"><span>${i.qty || 1}x ${esc(i.name)}</span><span>R$ ${fmt(t)}</span></div>`;
+        return `<div class="gc-comanda-item-row">
+          <span class="gc-qty-badge">${i.qty || 1}×</span>
+          <span class="gc-comanda-item-name">${esc(i.name)}</span>
+          <span class="gc-comanda-item-price">R$ ${fmt(t)}</span>
+        </div>`;
       }).join('')
-    : '<p class="gc-cart-empty">Nenhum item ainda.</p>';
+    : '<p class="gc-cart-empty"><i class="fas fa-receipt"></i>Nenhum item ainda.</p>';
   elid('comanda-atual-total').textContent = `R$ ${fmt(gc.existingOrder.total)}`;
 
   const addBtn = elid('btn-adicionar-pedido');
@@ -537,24 +551,29 @@ function gcRenderCartBar() {
 function gcRenderCartItemsInto(containerId, editable) {
   const el = elid(containerId);
   if (!el) return;
-  if (!gc.cart.length) { el.innerHTML = '<p class="gc-cart-empty">Nenhum item novo ainda.</p>'; return; }
+  if (!gc.cart.length) { el.innerHTML = '<p class="gc-cart-empty"><i class="fas fa-cart-shopping"></i>Nenhum item novo ainda.</p>'; return; }
 
   el.innerHTML = gc.cart.map((c, i) => {
-    const opts = (c.options || []).map(og => `${og.groupTitle}: ${(og.items || []).map(oi => oi.name).join(', ')}`).join(' · ');
+    const optsHtml = (c.options || []).filter(og => og.items && og.items.length).map(og =>
+      `<span class="gc-opt-chip"><b>${esc(og.groupTitle)}:</b> ${esc(og.items.map(oi => oi.name).join(', '))}</span>`
+    ).join('');
     return `<div class="gc-cart-item">
-      <div class="gc-cart-item-info">
-        <div class="gc-cart-item-name">${c.qty}x ${esc(c.name)}</div>
-        ${opts ? `<div class="gc-cart-item-opts">${esc(opts)}</div>` : ''}
-        ${editable ? `<div class="gc-cart-item-actions">
-          <div class="gc-qty-stepper">
-            <button type="button" class="gc-qty-btn" onclick="gcChangeQty(${i},-1)"><i class="fas fa-minus"></i></button>
-            <span>${c.qty}</span>
-            <button type="button" class="gc-qty-btn" onclick="gcChangeQty(${i},1)"><i class="fas fa-plus"></i></button>
-          </div>
-          <button type="button" class="gc-cart-item-remove" onclick="gcRemoveItem(${i})"><i class="fas fa-trash"></i> Remover</button>
-        </div>` : ''}
+      <div class="gc-cart-item-main">
+        <span class="gc-qty-badge">${c.qty}×</span>
+        <div class="gc-cart-item-info">
+          <div class="gc-cart-item-name">${esc(c.name)}</div>
+          ${optsHtml ? `<div class="gc-cart-item-opts">${optsHtml}</div>` : ''}
+        </div>
+        <div class="gc-cart-item-price">R$ ${fmt(c.total)}</div>
       </div>
-      <div class="gc-cart-item-price">R$ ${fmt(c.total)}</div>
+      ${editable ? `<div class="gc-cart-item-actions">
+        <div class="gc-qty-stepper">
+          <button type="button" class="gc-qty-btn" onclick="gcChangeQty(${i},-1)"><i class="fas fa-minus"></i></button>
+          <span>${c.qty}</span>
+          <button type="button" class="gc-qty-btn" onclick="gcChangeQty(${i},1)"><i class="fas fa-plus"></i></button>
+        </div>
+        <button type="button" class="gc-cart-item-remove" onclick="gcRemoveItem(${i})"><i class="fas fa-trash"></i> Remover</button>
+      </div>` : ''}
     </div>`;
   }).join('');
 }
@@ -625,13 +644,14 @@ async function gcSubmitOrder() {
   if (gc.submitting) return; // trava contra duplo toque
   if (!gc.cart.length) { toast('Adicione pelo menos um produto.', true); return; }
   if (!gc.tableNumber) { toast('Selecione uma mesa.', true); return; }
+  if (navigator.onLine === false) { toast('Sem conexão. Verifique a internet para enviar pedidos.', true); return; }
 
   gc.submitting = true;
   const btn = elid('btn-enviar-pedido');
   const originalLabel = elid('btn-enviar-label')?.textContent || 'Enviar pedido';
   if (btn) { btn.disabled = true; }
   const labelEl = elid('btn-enviar-label');
-  if (labelEl) labelEl.textContent = 'Enviando...';
+  if (labelEl) labelEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
 
   const notes = (elid('cart-notes')?.value || '').trim();
 
@@ -765,13 +785,129 @@ async function gcContinueTable() {
 }
 
 /* ══════════════════════════════════════════════════════════
+   INSTALAR COMO APP — beforeinstallprompt (Android/Chrome/Edge) e
+   instruções manuais (iOS/Safari, que não expõe esse evento). Puramente
+   apresentacional: nunca cria/altera pedido, nunca chama Supabase.
+══════════════════════════════════════════════════════════ */
+const INSTALL_DISMISS_KEY = 'gc_install_dismissed_until';
+const INSTALL_DISMISS_DAYS = 7;
+
+gc.deferredInstallPrompt = null;
+gc.installPromptInFlight = false;
+gc.isIOSDevice = /iphone|ipad|ipod/i.test(navigator.userAgent || '') ||
+  (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+
+function gcIsStandalone() {
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    window.navigator.standalone === true;
+}
+
+function gcInstallSnoozed() {
+  const until = Number(localStorage.getItem(INSTALL_DISMISS_KEY) || 0);
+  return until > Date.now();
+}
+
+function gcDismissInstall() {
+  try {
+    localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now() + INSTALL_DISMISS_DAYS * 24 * 60 * 60 * 1000));
+  } catch (_) { /* localStorage indisponível (modo privado etc.) — só esconde nesta sessão */ }
+  const card = elid('install-card');
+  if (card) card.style.display = 'none';
+}
+
+function gcUpdateInstallCardVisibility() {
+  const card = elid('install-card');
+  if (!card) return;
+
+  if (gcIsStandalone() || localStorage.getItem('gc_install_done') === '1' || gcInstallSnoozed()) {
+    card.style.display = 'none';
+    return;
+  }
+
+  if (gc.isIOSDevice) {
+    elid('install-title').textContent = 'Instale o Garçom no seu iPhone';
+    elid('install-desc').textContent = 'Adicione à Tela de Início para abrir como aplicativo, sem a barra do navegador.';
+    elid('install-cta-label').textContent = 'Ver como instalar';
+    card.style.display = 'flex';
+    return;
+  }
+
+  if (gc.deferredInstallPrompt) {
+    elid('install-title').textContent = 'Instale o App Garçom';
+    elid('install-desc').textContent = 'Atenda as mesas com mais rapidez direto pelo celular.';
+    elid('install-cta-label').textContent = 'Instalar aplicativo';
+    card.style.display = 'flex';
+    return;
+  }
+
+  card.style.display = 'none';
+}
+
+async function gcInstallClick() {
+  if (gc.isIOSDevice) {
+    elid('ios-install-overlay').style.display = 'flex';
+    return;
+  }
+
+  if (!gc.deferredInstallPrompt || gc.installPromptInFlight) return;
+  gc.installPromptInFlight = true;
+
+  try {
+    const promptEvent = gc.deferredInstallPrompt;
+    gc.deferredInstallPrompt = null; // um evento só serve para um prompt()
+    promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    if (choice && choice.outcome === 'accepted') {
+      const card = elid('install-card');
+      if (card) card.style.display = 'none';
+    } else {
+      gcUpdateInstallCardVisibility(); // recusou: não insiste agora (card só volta se houver novo prompt)
+    }
+  } catch (_) {
+    // Prompt indisponível/cancelado pelo navegador — sem tela de erro pro garçom.
+  } finally {
+    gc.installPromptInFlight = false;
+  }
+}
+
+function gcCloseIosInstallModal() {
+  elid('ios-install-overlay').style.display = 'none';
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  gc.deferredInstallPrompt = e;
+  gcUpdateInstallCardVisibility();
+});
+
+window.addEventListener('appinstalled', () => {
+  gc.deferredInstallPrompt = null;
+  try { localStorage.setItem('gc_install_done', '1'); } catch (_) {}
+  const card = elid('install-card');
+  if (card) card.style.display = 'none';
+});
+
+/* ══════════════════════════════════════════════════════════
+   CONEXÃO — só um aviso honesto; nunca finge que um pedido foi enviado
+   sem rede. Não implementa fila offline nesta tarefa.
+══════════════════════════════════════════════════════════ */
+function gcUpdateOnlineStatus() {
+  const banner = elid('offline-banner');
+  if (banner) banner.style.display = navigator.onLine === false ? 'flex' : 'none';
+}
+window.addEventListener('online', gcUpdateOnlineStatus);
+window.addEventListener('offline', gcUpdateOnlineStatus);
+
+/* ══════════════════════════════════════════════════════════
    INIT
 ══════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+  gcUpdateOnlineStatus();
   if (!window.supabaseClient) {
     const errEl = elid('login-error');
     if (errEl) { errEl.textContent = 'Supabase não carregado.'; errEl.style.display = 'block'; }
     return;
   }
   gcInitAuth();
+  gcUpdateInstallCardVisibility();
 });
