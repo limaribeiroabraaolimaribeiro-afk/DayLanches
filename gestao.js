@@ -39,6 +39,7 @@ const gs = {
   printedOrderIds: new Set(),
   autoPrintEnabled: false,
   salesFilter: { type: 'today', month: '', year: '', start: '', end: '' },
+  lastPedidosDay: null, // 'YYYY-MM-DD' (America/Sao_Paulo) — detecta virada do dia na aba Pedidos
 };
 
 /* ══════════════════════════════════════
@@ -935,11 +936,25 @@ async function refreshOrders() {
   }
 }
 
+/* Pedidos de hoje (dia civil da loja, America/Sao_Paulo) — só pra exibição
+   na aba Pedidos. gs.orders continua com os até 500 pedidos mais recentes
+   sem filtro de data: Balcão, Vendas, Relatórios, Caixa e Backup dependem
+   dele intacto e não são tocados por este filtro. */
+function getTodayOrdersForPedidos() {
+  const { start, end } = getSaoPauloDayRangeUTC();
+  return gs.orders.filter(o => {
+    if (!o.created_at) return false;
+    const d = new Date(o.created_at);
+    return d >= start && d < end;
+  });
+}
+
 function renderOrders() {
   const wrap = elid('orders-list');
+  const todayOrders = getTodayOrdersForPedidos();
   let list = gs.orderFilter === 'all'
-    ? gs.orders
-    : gs.orders.filter(o => o.status === gs.orderFilter);
+    ? todayOrders
+    : todayOrders.filter(o => o.status === gs.orderFilter);
 
   const q = (elid('orders-search')?.value || '').trim().toLowerCase();
   if (q) {
@@ -953,18 +968,25 @@ function renderOrders() {
   updateOrderFilterCounts();
 
   if (!list.length) {
-    wrap.innerHTML = '<p class="empty-msg">Nenhum pedido encontrado.</p>';
+    wrap.innerHTML = todayOrders.length
+      ? '<p class="empty-msg">Nenhum pedido encontrado.</p>'
+      : `<p class="empty-msg">
+          <i class="fas fa-receipt" style="font-size:1.8rem;display:block;margin-bottom:10px;opacity:.5"></i>
+          <strong style="display:block;color:var(--text);font-size:1rem;margin-bottom:4px">Nenhum pedido hoje</strong>
+          Os novos pedidos aparecerão aqui.
+        </p>`;
     return;
   }
   wrap.innerHTML = list.map(orderCard).join('');
 }
 
 function updateOrderFilterCounts() {
+  const todayOrders = getTodayOrdersForPedidos();
   const keys = ['all','novo','em_preparo','saiu_para_entrega','finalizado','cancelado'];
   keys.forEach(k => {
     const el = elid(`filter-count-${k}`);
     if (!el) return;
-    const n = k === 'all' ? gs.orders.length : gs.orders.filter(o => o.status === k).length;
+    const n = k === 'all' ? todayOrders.length : todayOrders.filter(o => o.status === k).length;
     el.textContent = n > 0 ? `(${n})` : '';
   });
 }
@@ -1573,6 +1595,17 @@ function startOrdersPolling() {
 
 async function checkForNewOrders() {
   try {
+    /* Virada do dia civil da loja: reaproveita este polling de 15s (já
+       rodando) em vez de criar um timer novo. Se o dia mudou desde a
+       última checagem, reaplica o filtro "somente hoje" da aba Pedidos
+       mesmo sem nenhum pedido novo ter chegado. */
+    const today = getSaoPauloDateISO();
+    if (gs.lastPedidosDay && gs.lastPedidosDay !== today) {
+      updateOrderFilterCounts();
+      if (gs.section === 'pedidos') renderOrders();
+    }
+    gs.lastPedidosDay = today;
+
     const { data, error } = await getSb()
       .from('orders')
       .select('*')
@@ -2425,6 +2458,23 @@ function getSaoPauloDateISO(date) {
   const m = parts.find(p => p.type === 'month').value;
   const d = parts.find(p => p.type === 'day').value;
   return `${y}-${m}-${d}`;
+}
+
+/* Janela [início do dia civil, início do dia seguinte) da loja em
+   America/Sao_Paulo, convertida para instantes UTC reais — usada pela aba
+   Pedidos pra filtrar created_at sem depender do timezone do banco/navegador.
+   Reaproveita getSaoPauloDateISO() (mesmo helper do fechamento manual da
+   loja) em vez de duplicar lógica de timezone. O offset SP↔UTC é calculado
+   dinamicamente (não hardcoda -03:00) pra continuar correto mesmo se o
+   Brasil um dia voltar a ter horário de verão. */
+function getSaoPauloDayRangeUTC(date) {
+  const ref = date || new Date();
+  const dayStr = getSaoPauloDateISO(ref);
+  const asUTC = new Date(ref.toLocaleString('en-US', { timeZone: 'UTC' }));
+  const asSP  = new Date(ref.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const offsetMs = asUTC.getTime() - asSP.getTime();
+  const startUTC = new Date(`${dayStr}T00:00:00.000Z`).getTime() + offsetMs;
+  return { start: new Date(startUTC), end: new Date(startUTC + 24 * 60 * 60 * 1000) };
 }
 
 function isStoreManuallyClosedToday() {
