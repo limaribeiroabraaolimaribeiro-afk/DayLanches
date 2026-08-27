@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Day Lanches — Atendimento</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="garcom.css?v=1">
+</head>
+<body>
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<section id="view-login" class="gc-view gc-view-login">
+  <div class="gc-login-box">
+    <div class="gc-brand">
+      <span class="gc-brand-day">Day</span><span class="gc-brand-lanches">Lanches</span>
+    </div>
+    <p class="gc-login-sub">Atendimento de mesa</p>
+    <form id="login-form" class="gc-login-form">
+      <label class="gc-field-label">E-mail</label>
+      <input type="email" id="login-email" class="gc-input" autocomplete="username" required>
+      <label class="gc-field-label">Senha</label>
+      <input type="password" id="login-password" class="gc-input" autocomplete="current-password" required>
+      <p id="login-error" class="gc-login-error" style="display:none"></p>
+      <button type="submit" id="login-btn" class="gc-btn gc-btn-primary gc-btn-lg">Entrar</button>
+    </form>
+  </div>
+</section>
+
+<!-- ═══════════ GRADE DE MESAS ═══════════ -->
+<section id="view-mesas" class="gc-view" style="display:none">
+  <header class="gc-header">
+    <div class="gc-header-brand">
+      <span class="gc-brand-day">Day</span><span class="gc-brand-lanches">Lanches</span>
+    </div>
+    <div class="gc-header-sub">Atendimento</div>
+    <button type="button" class="gc-icon-btn gc-logout-btn" onclick="gcLogout()" title="Sair" aria-label="Sair">
+      <i class="fas fa-arrow-right-from-bracket"></i>
+    </button>
+  </header>
+
+  <div class="gc-body">
+    <div id="mesas-loading" class="gc-loading"><i class="fas fa-spinner fa-spin"></i> Carregando mesas...</div>
+    <div id="mesas-grid" class="gc-mesas-grid" style="display:none"></div>
+  </div>
+</section>
+
+<!-- ═══════════ MESA / CARDÁPIO ═══════════ -->
+<section id="view-comanda" class="gc-view" style="display:none">
+  <header class="gc-table-banner" id="table-banner">
+    <button type="button" class="gc-icon-btn" onclick="gcTrocarMesa()" title="Trocar mesa" aria-label="Voltar">
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    <div class="gc-table-banner-info">
+      <div class="gc-table-banner-num">MESA —</div>
+      <div class="gc-table-banner-status" id="table-banner-status"></div>
+    </div>
+    <button type="button" class="gc-btn gc-btn-ghost gc-btn-sm" onclick="gcTrocarMesa()">Trocar mesa</button>
+  </header>
+
+  <div class="gc-body gc-body-comanda">
+    <!-- Comanda já existente (mesa ocupada) -->
+    <div id="comanda-atual-block" class="gc-card" style="display:none">
+      <div class="gc-card-title"><i class="fas fa-receipt"></i> Comanda atual</div>
+      <div id="comanda-atual-items" class="gc-comanda-items"></div>
+      <div class="gc-comanda-total">
+        <span>Total atual</span>
+        <span id="comanda-atual-total">R$ 0,00</span>
+      </div>
+      <button type="button" class="gc-btn gc-btn-primary gc-btn-block" id="btn-adicionar-pedido" onclick="gcStartAdding()">
+        <i class="fas fa-plus"></i> Adicionar ao pedido
+      </button>
+    </div>
+
+    <!-- Catálogo (mesa livre: direto; mesa ocupada: só depois de "Adicionar ao pedido") -->
+    <div id="catalogo-block">
+      <div class="gc-search-row">
+        <i class="fas fa-search gc-search-icon"></i>
+        <input type="text" id="gc-search" class="gc-search-input" placeholder="Buscar produto..." oninput="gcRenderProducts()">
+      </div>
+      <div id="cat-row" class="gc-cat-row"></div>
+      <div id="products-loading" class="gc-loading"><i class="fas fa-spinner fa-spin"></i> Carregando cardápio...</div>
+      <div id="products-grid" class="gc-products-grid" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Barra fixa do carrinho -->
+  <button type="button" id="cart-bar" class="gc-cart-bar" style="display:none" onclick="gcShowView('cart')">
+    <span id="cart-bar-summary">0 itens • R$ 0,00</span>
+    <span class="gc-cart-bar-cta">VER PEDIDO <i class="fas fa-chevron-up"></i></span>
+  </button>
+</section>
+
+<!-- ═══════════ CARRINHO (novos itens) ═══════════ -->
+<section id="view-cart" class="gc-view" style="display:none">
+  <header class="gc-header gc-header-simple">
+    <button type="button" class="gc-icon-btn" onclick="gcShowView('comanda')" aria-label="Voltar">
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    <div class="gc-header-title" id="cart-header-title">MESA —</div>
+  </header>
+
+  <div class="gc-body">
+    <div class="gc-card">
+      <div class="gc-card-title">Novos itens</div>
+      <div id="cart-items" class="gc-cart-items"></div>
+    </div>
+
+    <div class="gc-card">
+      <label class="gc-field-label">Observação geral (opcional)</label>
+      <textarea id="cart-notes" class="gc-textarea" rows="2" maxlength="240" placeholder="Ex.: sem cebola, entregar rápido..."></textarea>
+    </div>
+  </div>
+
+  <div class="gc-bottom-bar">
+    <div class="gc-bottom-total">
+      <span>Total dos novos itens</span>
+      <span id="cart-total">R$ 0,00</span>
+    </div>
+    <button type="button" class="gc-btn gc-btn-primary gc-btn-lg gc-btn-block" id="btn-ir-confirmar" onclick="gcGoToConfirm()">
+      Enviar pedido
+    </button>
+  </div>
+</section>
+
+<!-- ═══════════ CONFIRMAÇÃO ═══════════ -->
+<section id="view-confirm" class="gc-view" style="display:none">
+  <header class="gc-header gc-header-simple">
+    <button type="button" class="gc-icon-btn" onclick="gcShowView('cart')" aria-label="Voltar">
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    <div class="gc-header-title">Confirmar pedido</div>
+  </header>
+
+  <div class="gc-body">
+    <div class="gc-confirm-table" id="confirm-table-label">MESA —</div>
+    <div class="gc-card">
+      <div id="confirm-items" class="gc-cart-items"></div>
+    </div>
+    <div class="gc-confirm-total">
+      <span>Total dos novos itens</span>
+      <span id="confirm-total">R$ 0,00</span>
+    </div>
+  </div>
+
+  <div class="gc-bottom-bar gc-bottom-bar-2btn">
+    <button type="button" class="gc-btn gc-btn-ghost gc-btn-lg" onclick="gcShowView('cart')">Voltar</button>
+    <button type="button" class="gc-btn gc-btn-primary gc-btn-lg" id="btn-enviar-pedido" onclick="gcSubmitOrder()">
+      <span id="btn-enviar-label">Enviar para Mesa —</span>
+    </button>
+  </div>
+</section>
+
+<!-- ═══════════ SUCESSO ═══════════ -->
+<section id="view-success" class="gc-view" style="display:none">
+  <div class="gc-success-box">
+    <div class="gc-success-icon"><i class="fas fa-circle-check"></i></div>
+    <h1 class="gc-success-title">Pedido enviado com sucesso</h1>
+    <div class="gc-success-table" id="success-table-label">Mesa —</div>
+    <p class="gc-success-note">A impressão será processada automaticamente.</p>
+    <div class="gc-success-actions">
+      <button type="button" class="gc-btn gc-btn-primary gc-btn-lg gc-btn-block" id="btn-continuar-mesa" onclick="gcContinueTable()">Continuar na mesa</button>
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-lg gc-btn-block" onclick="gcTrocarMesa()">Escolher outra mesa</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ BOTTOM SHEET: OPÇÕES/ADICIONAIS ═══════════ -->
+<div id="opt-overlay" class="gc-sheet-overlay" style="display:none" onclick="gcCloseOptionsOutside(event)">
+  <div class="gc-sheet">
+    <div class="gc-sheet-handle"></div>
+    <div class="gc-sheet-header">
+      <div>
+        <div class="gc-sheet-title" id="opt-title">Produto</div>
+        <div class="gc-sheet-subtitle" id="opt-subtitle">R$ 0,00</div>
+      </div>
+      <button type="button" class="gc-icon-btn" onclick="gcCloseOptions()" aria-label="Fechar"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="opt-groups" class="gc-sheet-body"></div>
+    <div class="gc-sheet-footer">
+      <div class="gc-qty-stepper">
+        <button type="button" class="gc-qty-btn" onclick="gcOptQty(-1)"><i class="fas fa-minus"></i></button>
+        <span id="opt-qty">1</span>
+        <button type="button" class="gc-qty-btn" onclick="gcOptQty(1)"><i class="fas fa-plus"></i></button>
+      </div>
+      <button type="button" class="gc-btn gc-btn-primary gc-btn-lg" onclick="gcConfirmOptions()">
+        Adicionar <span id="opt-total">R$ 0,00</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MODAL: CONFIRMAÇÃO DE TROCA DE MESA ═══════════ -->
+<div id="confirm-swap-overlay" class="gc-modal-overlay" style="display:none">
+  <div class="gc-modal">
+    <div class="gc-modal-icon"><i class="fas fa-triangle-exclamation"></i></div>
+    <h2 class="gc-modal-title">Descartar itens não enviados?</h2>
+    <p class="gc-modal-message">Você tem itens no carrinho que ainda não foram enviados. Se trocar de mesa agora, eles serão perdidos.</p>
+    <div class="gc-modal-actions">
+      <button type="button" class="gc-btn gc-btn-ghost gc-btn-lg" onclick="gcCancelSwap()">Cancelar</button>
+      <button type="button" class="gc-btn gc-btn-danger gc-btn-lg" onclick="gcConfirmSwap()">Trocar mesmo assim</button>
+    </div>
+  </div>
+</div>
+
+<div id="gc-toast" class="gc-toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js?v=6"></script>
+<script src="garcom.js?v=1"></script>
+</body>
+</html>

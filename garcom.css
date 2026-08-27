@@ -1,0 +1,589 @@
+/* Day Lanches — Atendimento (garçom). Página nova e independente do Balcão
+   da Gestão — não compartilha CSS com gestao.css, só a paleta visual (valores
+   copiados, não a folha de estilo). Mobile-first: pensada pra uso com uma mão,
+   360–430px de largura. */
+
+:root {
+  --primary:       #FF6B00;
+  --primary-dark:  #E05A00;
+  --primary-light: #FFF3EB;
+  --success:       #22C55E;
+  --success-bg:    #F0FDF4;
+  --danger:        #EF4444;
+  --danger-bg:     #FEF2F2;
+  --bg:            #F5F5F5;
+  --white:         #FFFFFF;
+  --border:        #E5E7EB;
+  --text:          #1A1A1A;
+  --text-med:      #4B5563;
+  --text-muted:    #9CA3AF;
+  --radius:        14px;
+  --safe-b:        env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
+body {
+  font-family: 'Poppins', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.gc-view {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* ── Marca ── */
+.gc-brand-day    { color: var(--text); font-weight: 800; }
+.gc-brand-lanches{ color: var(--primary); font-weight: 800; }
+
+/* ── Botões (área de toque grande, sem depender de hover) ── */
+.gc-btn {
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: .95rem;
+  padding: 12px 18px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity .15s, transform .05s;
+}
+.gc-btn:active { transform: scale(.98); }
+.gc-btn:disabled { opacity: .55; pointer-events: none; }
+.gc-btn-primary { background: var(--primary); color: #fff; }
+.gc-btn-danger  { background: var(--danger); color: #fff; }
+.gc-btn-ghost   { background: var(--white); color: var(--text); border: 1.5px solid var(--border); }
+.gc-btn-lg      { min-height: 56px; font-size: 1.02rem; }
+.gc-btn-sm      { min-height: 36px; padding: 6px 12px; font-size: .78rem; }
+.gc-btn-block   { width: 100%; }
+
+.gc-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+.gc-icon-btn:active { background: rgba(0,0,0,.06); }
+
+/* ── Login ── */
+.gc-view-login {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(180deg, var(--primary-light), var(--bg) 60%);
+}
+.gc-login-box {
+  width: 100%;
+  max-width: 380px;
+}
+.gc-brand { text-align: center; font-size: 1.8rem; margin-bottom: 4px; }
+.gc-login-sub { text-align: center; color: var(--text-med); margin: 0 0 28px; font-size: .92rem; }
+.gc-login-form { display: flex; flex-direction: column; gap: 6px; }
+.gc-field-label { font-size: .78rem; font-weight: 600; color: var(--text-med); margin-top: 10px; }
+.gc-input, .gc-textarea {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font-size: 1rem;
+  font-family: inherit;
+  width: 100%;
+  background: var(--white);
+  color: var(--text);
+}
+.gc-input:focus, .gc-textarea:focus { outline: none; border-color: var(--primary); }
+.gc-textarea { resize: vertical; min-height: 60px; }
+.gc-login-error {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: .85rem;
+  margin: 10px 0 0;
+}
+#login-btn { margin-top: 20px; }
+
+/* ── Header (grade de mesas) ── */
+.gc-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 12px;
+  padding-top: max(14px, env(safe-area-inset-top));
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.gc-header-brand { font-size: 1.15rem; }
+.gc-header-sub { color: var(--text-muted); font-size: .82rem; margin-left: 8px; flex: 1; }
+.gc-logout-btn { margin-left: auto; color: var(--text-muted); }
+.gc-header-simple .gc-header-title { font-weight: 700; font-size: 1rem; }
+
+.gc-body {
+  flex: 1;
+  padding: 14px 14px calc(24px + var(--safe-b));
+  overflow-y: auto;
+  width: 100%;
+  max-width: 100vw;
+}
+
+.gc-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 0;
+  font-size: .95rem;
+}
+
+/* ── Grade de mesas ── */
+.gc-mesas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 420px) {
+  .gc-mesas-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.gc-mesa-btn {
+  border: none;
+  border-radius: var(--radius);
+  min-height: 92px;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  width: 100%;
+  min-width: 0;
+}
+.gc-mesa-btn:active { transform: scale(.97); }
+.gc-mesa-num { font-size: 1.5rem; font-weight: 800; color: var(--text); }
+.gc-mesa-status {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.gc-mesa-btn.livre .gc-mesa-status { background: var(--success-bg); color: var(--success); }
+.gc-mesa-btn.ocupada { background: var(--primary-light); border-color: var(--primary); }
+.gc-mesa-btn.ocupada .gc-mesa-status { background: var(--primary); color: #fff; }
+.gc-mesa-info {
+  font-size: .7rem;
+  color: var(--text-med);
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Banner fixo da mesa selecionada — nunca pode sumir durante o atendimento ── */
+.gc-table-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+  padding-top: max(14px, env(safe-area-inset-top));
+  background: var(--primary);
+  color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.gc-table-banner .gc-icon-btn { color: #fff; }
+.gc-table-banner-info { flex: 1; min-width: 0; text-align: center; }
+.gc-table-banner-num { font-size: 1.25rem; font-weight: 800; letter-spacing: .03em; }
+.gc-table-banner-status { font-size: .74rem; opacity: .92; text-transform: uppercase; letter-spacing: .04em; }
+.gc-table-banner .gc-btn-ghost {
+  background: rgba(255,255,255,.16);
+  border-color: transparent;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.gc-body-comanda { padding-bottom: calc(96px + var(--safe-b)); }
+
+/* ── Cards genéricos ── */
+.gc-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.gc-card-title {
+  font-weight: 700;
+  font-size: .95rem;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gc-card-title i { color: var(--primary); }
+
+.gc-comanda-items { display: flex; flex-direction: column; gap: 8px; }
+.gc-comanda-item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: .88rem;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
+}
+.gc-comanda-item-row:last-child { border-bottom: none; padding-bottom: 0; }
+.gc-comanda-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  font-size: 1rem;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1.5px solid var(--border);
+}
+#btn-adicionar-pedido { margin-top: 14px; }
+
+/* ── Busca + categorias ── */
+.gc-search-row { position: relative; margin-bottom: 10px; }
+.gc-search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+.gc-search-input { padding-left: 40px; }
+.gc-cat-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.gc-cat-row::-webkit-scrollbar { display: none; }
+.gc-cat-btn {
+  flex-shrink: 0;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--text-med);
+  white-space: nowrap;
+}
+.gc-cat-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* ── Grade de produtos ── */
+.gc-products-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.gc-product-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gc-product-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: var(--bg);
+  display: block;
+}
+.gc-product-img-ph {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 1.6rem;
+  background: var(--bg);
+}
+.gc-product-body { padding: 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.gc-product-name { font-size: .86rem; font-weight: 700; line-height: 1.25; }
+.gc-product-price { font-size: .82rem; color: var(--text-med); font-weight: 600; }
+.gc-product-add {
+  margin-top: auto;
+  border: none;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border-radius: 9px;
+  padding: 9px 8px;
+  font-size: .8rem;
+  font-weight: 700;
+  min-height: 40px;
+}
+.gc-product-add:active { background: var(--primary); color: #fff; }
+
+/* ── Barra fixa do carrinho ── */
+.gc-cart-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + var(--safe-b));
+  background: var(--text);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: .92rem;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  z-index: 6;
+}
+.gc-cart-bar-cta { color: var(--primary); display: flex; align-items: center; gap: 6px; }
+
+/* ── Carrinho / itens novos ── */
+.gc-cart-items { display: flex; flex-direction: column; gap: 12px; }
+.gc-cart-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
+}
+.gc-cart-item:last-child { border-bottom: none; padding-bottom: 0; }
+.gc-cart-item-info { flex: 1; min-width: 0; }
+.gc-cart-item-name { font-weight: 700; font-size: .92rem; }
+.gc-cart-item-opts { font-size: .76rem; color: var(--text-med); margin-top: 2px; }
+.gc-cart-item-price { font-weight: 700; font-size: .88rem; white-space: nowrap; }
+.gc-cart-item-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.gc-qty-stepper { display: flex; align-items: center; gap: 10px; }
+.gc-qty-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .85rem;
+  color: var(--text);
+}
+.gc-qty-btn:active { background: var(--bg); }
+.gc-cart-item-remove {
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  font-size: .82rem;
+  font-weight: 700;
+  padding: 8px 4px;
+  min-height: 36px;
+}
+.gc-cart-empty { text-align: center; color: var(--text-muted); padding: 30px 0; font-size: .9rem; }
+
+/* ── Barra inferior fixa (carrinho / confirmação) ── */
+.gc-bottom-bar {
+  position: sticky;
+  bottom: 0;
+  background: var(--white);
+  border-top: 1px solid var(--border);
+  padding: 12px 14px calc(12px + var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-bottom-bar-2btn { flex-direction: row; }
+.gc-bottom-bar-2btn .gc-btn { flex: 1; }
+.gc-bottom-total { display: flex; justify-content: space-between; font-weight: 700; font-size: .95rem; }
+
+/* ── Confirmação ── */
+.gc-confirm-table {
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 2px solid var(--primary);
+  border-radius: 12px;
+  background: var(--primary-light);
+}
+.gc-confirm-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  font-size: 1.1rem;
+  padding: 14px 4px;
+}
+
+/* ── Sucesso ── */
+.gc-view-login, #view-success { }
+#view-success {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+.gc-success-box { max-width: 380px; width: 100%; }
+.gc-success-icon { font-size: 4rem; color: var(--success); margin-bottom: 14px; }
+.gc-success-title { font-size: 1.3rem; margin: 0 0 10px; }
+.gc-success-table {
+  display: inline-block;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--primary-dark);
+  background: var(--primary-light);
+  padding: 8px 20px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+.gc-success-note { color: var(--text-med); font-size: .9rem; margin-bottom: 28px; }
+.gc-success-actions { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Bottom sheet (adicionais) ── */
+.gc-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+}
+.gc-sheet {
+  background: var(--white);
+  width: 100%;
+  max-height: 88dvh;
+  border-radius: 20px 20px 0 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--safe-b);
+}
+.gc-sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 999px;
+  margin: 10px auto 0;
+}
+.gc-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 18px 6px;
+}
+.gc-sheet-title { font-size: 1.05rem; font-weight: 800; }
+.gc-sheet-subtitle { color: var(--text-med); font-size: .85rem; margin-top: 2px; }
+.gc-sheet-body { overflow-y: auto; padding: 6px 18px 12px; flex: 1; }
+.gc-opt-group { margin-bottom: 18px; }
+.gc-opt-group-title { font-weight: 700; font-size: .88rem; margin-bottom: 2px; }
+.gc-opt-group-hint { font-size: .74rem; color: var(--text-muted); margin-bottom: 8px; }
+.gc-opt-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.gc-opt-item-label { font-size: .9rem; flex: 1; }
+.gc-opt-item-price { font-size: .8rem; color: var(--text-med); }
+.gc-opt-check {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+}
+.gc-opt-item.selected .gc-opt-check { background: var(--primary); border-color: var(--primary); color: #fff; }
+.gc-sheet-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+}
+.gc-sheet-footer .gc-btn { flex: 1; }
+
+/* ── Modal genérico (troca de mesa) ── */
+.gc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 30;
+}
+.gc-modal {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+}
+.gc-modal-icon { font-size: 2.2rem; color: var(--danger); margin-bottom: 10px; }
+.gc-modal-title { font-size: 1.05rem; margin: 0 0 8px; }
+.gc-modal-message { color: var(--text-med); font-size: .88rem; margin: 0 0 20px; }
+.gc-modal-actions { display: flex; gap: 10px; }
+.gc-modal-actions .gc-btn { flex: 1; }
+
+/* ── Toast ── */
+.gc-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + var(--safe-b));
+  transform: translate(-50%, 120%);
+  background: var(--text);
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: .88rem;
+  font-weight: 600;
+  max-width: 90vw;
+  text-align: center;
+  z-index: 50;
+  transition: transform .25s ease;
+  pointer-events: none;
+}
+.gc-toast.show { transform: translate(-50%, 0); }
+.gc-toast.toast-error { background: var(--danger); }
+
+/* ── Empty state genérico ── */
+.gc-empty-msg { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: .88rem; grid-column: 1 / -1; }
