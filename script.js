@@ -2399,37 +2399,109 @@ function getProductShareUrl(product) {
   return `${SITE_URL}/share/${slug}.html`;
 }
 
-function shareProductWhatsApp() {
-  if (!ppProductId) return;
-  const p = getProductsList().find(pr => pr.id === ppProductId);
-  if (!p) return;
-  const url     = getProductShareUrl(p);
-  const message =
-    `🔥 Olha esse produto da Day Lanches!\n\n` +
+function buildProductShareMessage(p) {
+  const url = getProductShareUrl(p);
+  return `🔥 Olha esse produto da Day Lanches!\n\n` +
     `🍔 *${p.name}*\n` +
     `💰 R$ ${fmt(p.price)}\n\n` +
     `Peça pelo cardápio online:\n${url}\n\n` +
     `📍 Day Lanches — Luiz Alves/SC`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+}
+
+/* MIME real (do Content-Type da resposta, não da extensão da URL) → extensão
+   segura de arquivo. Só os formatos abaixo são aceitos como anexo — qualquer
+   outra coisa (SVG, AVIF, HTML de página de erro etc.) cai no fallback. */
+const SHARE_IMAGE_ALLOWED_TYPES = {
+  'image/jpeg': 'jpg', 'image/jpg': 'jpg',
+  'image/png':  'png',
+  'image/webp': 'webp',
+  'image/gif':  'gif',
+};
+
+/* Resolve a imagem real do produto (local ou de outro domínio) em um File
+   pronto pra Web Share API. Nunca lança erro — qualquer falha (CORS, rede,
+   formato não suportado, produto sem imagem) retorna null e quem chamou
+   decide o fallback de texto+link. */
+async function getProductShareImageFile(product) {
+  const src = product?.img;
+  if (!src) return null;
+  try {
+    const absoluteUrl = new URL(src, location.href).href;
+    const res = await fetch(absoluteUrl, { mode: 'cors' });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const ext = SHARE_IMAGE_ALLOWED_TYPES[blob.type];
+    if (!ext) return null;
+    const safeName = slugify(product.name || 'produto') || 'produto';
+    return new File([blob], `${safeName}.${ext}`, { type: blob.type });
+  } catch (_) {
+    return null;
+  }
+}
+
+/* Tenta o compartilhamento com a FOTO REAL anexada (Web Share API Level 2).
+   Retorna true (sucesso), 'cancelled' (usuário cancelou o share sheet — quem
+   chamou NÃO deve abrir outro fallback nesse caso) ou false (não deu pra
+   anexar imagem — CORS, formato, API ausente, erro técnico — quem chamou
+   deve seguir para o fallback de texto+link). */
+async function shareProductWithImage(p) {
+  if (!navigator.share || !navigator.canShare) return false;
+  const file = await getProductShareImageFile(p);
+  if (!file || !navigator.canShare({ files: [file] })) return false;
+  try {
+    await navigator.share({ files: [file], text: buildProductShareMessage(p) });
+    return true;
+  } catch (err) {
+    if (err && err.name === 'AbortError') return 'cancelled';
+    return false;
+  }
+}
+
+let ppShareInFlight = false; // trava contra duplo toque enquanto baixa a imagem/abre o share sheet
+
+async function shareProductWhatsApp() {
+  if (!ppProductId || ppShareInFlight) return;
+  const p = getProductsList().find(pr => pr.id === ppProductId);
+  if (!p) return;
+
+  ppShareInFlight = true;
+  try {
+    const result = await shareProductWithImage(p);
+    if (result === true || result === 'cancelled') return;
+    // Fallback: preview de link (wa.me só pré-preenche texto, não anexa arquivo)
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildProductShareMessage(p))}`, '_blank');
+  } finally {
+    ppShareInFlight = false;
+  }
 }
 
 async function shareProduct() {
-  if (!ppProductId) return;
+  if (!ppProductId || ppShareInFlight) return;
   const p = getProductsList().find(pr => pr.id === ppProductId);
   if (!p) return;
-  const url       = getProductShareUrl(p);
-  const shareText = `🔥 ${p.name} na Day Lanches por R$ ${fmt(p.price)}! Peça pelo cardápio online.`;
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: `${p.name} — Day Lanches`, text: shareText, url });
-    } catch (_) { /* cancelado pelo usuário */ }
-  } else {
-    try {
-      await navigator.clipboard.writeText(`${shareText}\n${url}`);
-      showToast('Link do produto copiado!');
-    } catch (_) {
-      showToast('Copie o link: ' + url);
+
+  ppShareInFlight = true;
+  try {
+    const result = await shareProductWithImage(p);
+    if (result === true || result === 'cancelled') return;
+
+    // Fallback: comportamento já existente (share nativo de texto/URL, ou clipboard)
+    const url       = getProductShareUrl(p);
+    const shareText = `🔥 ${p.name} na Day Lanches por R$ ${fmt(p.price)}! Peça pelo cardápio online.`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${p.name} — Day Lanches`, text: shareText, url });
+      } catch (_) { /* cancelado pelo usuário */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${shareText}\n${url}`);
+        showToast('Link do produto copiado!');
+      } catch (_) {
+        showToast('Copie o link: ' + url);
+      }
     }
+  } finally {
+    ppShareInFlight = false;
   }
 }
 
