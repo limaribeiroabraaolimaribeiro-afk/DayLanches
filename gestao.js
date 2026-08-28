@@ -40,6 +40,14 @@ const gs = {
   autoPrintEnabled: false,
   salesFilter: { type: 'today', month: '', year: '', start: '', end: '' },
   lastPedidosDay: null, // 'YYYY-MM-DD' (America/Sao_Paulo) — detecta virada do dia na aba Pedidos
+
+  /* Segunda camada de segurança — áreas administrativas (em memória, nunca persistido) */
+  adminSectionsUnlocked: false,
+  adminUnlockExpiresAt: 0,
+  pendingSection: null,
+  pinAttemptInFlight: false,
+  pinFailCount: 0,
+  pinCooldownUntil: 0,
 };
 
 /* ══════════════════════════════════════
@@ -156,7 +164,93 @@ function showView(name) {
   });
 }
 
-function showSection(name) {
+/* ══════════════════════════════════════
+   SEGUNDA CAMADA DE SEGURANÇA — áreas administrativas
+   Vendas, Relatórios, Configurações, Despesas, Estoque e Acessos só
+   abrem depois de uma senha administrativa (além do login normal do
+   Supabase). A checagem fica centralizada aqui: showSection() é o
+   único caminho de navegação (chamado pelos botões do menu e por
+   qualquer chamada via console), então nada abre a section protegida
+   sem passar por este guard antes.
+══════════════════════════════════════ */
+const PROTECTED_SECTIONS = new Set(['vendas', 'relatorios', 'config', 'despesas', 'estoque', 'acessos']);
+const ADMIN_UNLOCK_MS = 15 * 60 * 1000; // 15 minutos
+
+function isAdminUnlocked() {
+  return gs.adminSectionsUnlocked === true && Date.now() < gs.adminUnlockExpiresAt;
+}
+
+function unlockAdminSections() {
+  gs.adminSectionsUnlocked = true;
+  gs.adminUnlockExpiresAt = Date.now() + ADMIN_UNLOCK_MS;
+  gs.pinFailCount = 0;
+  gs.pinCooldownUntil = 0;
+}
+
+function renewAdminUnlock() {
+  if (gs.adminSectionsUnlocked) gs.adminUnlockExpiresAt = Date.now() + ADMIN_UNLOCK_MS;
+}
+
+/* redirectSafe: se true e a section atual for protegida, navega de volta
+   para uma section livre (Pedidos) — usado no logout, expiração e no
+   botão "Bloquear agora", pra ninguém ficar olhando pra tela protegida
+   já bloqueada. */
+function lockAdminSections(redirectSafe) {
+  gs.adminSectionsUnlocked = false;
+  gs.adminUnlockExpiresAt = 0;
+  gs.pendingSection = null;
+  if (redirectSafe && PROTECTED_SECTIONS.has(gs.section)) _activateSection('pedidos');
+}
+
+function lockAdminSectionsManually() {
+  lockAdminSections(true);
+  toast('Áreas administrativas bloqueadas.');
+}
+
+/* Verifica a cada 30s se o desbloqueio expirou por inatividade — sem isso,
+   quem ficasse parado numa aba protegida (ex: Relatórios aberto e a pessoa
+   sai da mesa) nunca seria bloqueado, porque nada reexecutaria o guard. */
+setInterval(() => {
+  if (gs.adminSectionsUnlocked && Date.now() >= gs.adminUnlockExpiresAt) lockAdminSections(true);
+}, 30000);
+
+async function showSection(name) {
+  if (!PROTECTED_SECTIONS.has(name)) { _activateSection(name); return; }
+
+  if (isAdminUnlocked()) {
+    renewAdminUnlock();
+    _activateSection(name);
+    return;
+  }
+
+  gs.pendingSection = name;
+
+  let state;
+  try {
+    const { data, error } = await getSb().rpc('get_management_pin_state');
+    if (error) throw error;
+    state = Array.isArray(data) ? data[0] : data;
+  } catch (e) {
+    console.error('[Gestão] Erro ao verificar senha administrativa:', e);
+    toast('Não foi possível verificar a senha administrativa. Tente novamente.', true);
+    gs.pendingSection = null;
+    return;
+  }
+
+  if (!state?.is_configured) {
+    if (state?.can_manage) {
+      openAdminPinModal('setup', { isChange: false });
+    } else {
+      toast('Nenhuma senha administrativa foi configurada ainda. Peça para a administradora configurar em Configurações > Segurança.', true);
+      gs.pendingSection = null;
+    }
+    return;
+  }
+
+  openAdminPinModal('verify');
+}
+
+function _activateSection(name) {
   document.querySelectorAll('.dash-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   const sec = elid(`section-${name}`);
@@ -169,7 +263,7 @@ function showSection(name) {
   document.body.classList.toggle('is-balcao', name === 'balcao');
   gs.section = name;
   if (name === 'vendas')      renderSales();
-  if (name === 'config')      { loadConfig(); waCheckStatus(); }
+  if (name === 'config')      { loadConfig(); waCheckStatus(); renderAdminPinStatusCard(); }
   if (name === 'acessos')     renderUserInfo();
   if (name === 'pedidos')     loadOrders();
   if (name === 'balcao')      pdvInit();
@@ -2934,6 +3028,166 @@ async function submitChangePassword() {
   logAuditAction('change_password', 'user', gs.currentUser?.id, gs.currentUser?.email);
 }
 
+/* ── Senha administrativa (2ª camada de segurança) ── */
+let _adminPinMode = 'verify'; // 'verify' | 'setup'
+let _adminPinIsChange = false;
+
+function openAdminPinModal(mode, opts = {}) {
+  _adminPinMode = mode;
+  _adminPinIsChange = !!opts.isChange;
+  const isSetup = mode === 'setup';
+
+  setv('admin-pin-input', '');
+  setv('admin-pin-confirm-input', '');
+  hideAdminPinError();
+
+  elid('admin-pin-confirm-group').style.display = isSetup ? 'block' : 'none';
+  elid('admin-pin-title').textContent = isSetup
+    ? (_adminPinIsChange ? 'Alterar senha administrativa' : 'Criar senha administrativa')
+    : 'Área restrita';
+  elid('admin-pin-subtitle').textContent = isSetup
+    ? 'Defina a senha administrativa usada para abrir Vendas, Relatórios, Configurações, Despesas, Estoque e Acessos.'
+    : 'Digite a senha administrativa para continuar.';
+  elid('admin-pin-submit-btn').textContent = isSetup ? 'Salvar' : 'Entrar';
+  elid('admin-pin-input').placeholder = isSetup ? 'Mínimo 6 caracteres' : 'Senha administrativa';
+
+  elid('admin-pin-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => elid('admin-pin-input')?.focus(), 60);
+}
+
+function closeAdminPinModal() {
+  elid('admin-pin-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  gs.pendingSection = null;
+}
+
+function _adminPinBgClick(e) {
+  if (e.target === elid('admin-pin-overlay')) closeAdminPinModal();
+}
+
+
+function showAdminPinError(msg) {
+  const el = elid('admin-pin-error');
+  el.innerHTML = `<i class="fas fa-circle-exclamation"></i> ${esc(msg)}`;
+  el.style.display = 'flex';
+}
+
+function hideAdminPinError() {
+  elid('admin-pin-error').style.display = 'none';
+}
+
+async function submitAdminPin() {
+  if (gs.pinAttemptInFlight) return;
+
+  const pin = getv('admin-pin-input');
+  hideAdminPinError();
+
+  if (_adminPinMode === 'setup') {
+    const confirmPin = getv('admin-pin-confirm-input');
+    if (pin.length < 6)      return showAdminPinError('A senha deve ter no mínimo 6 caracteres.');
+    if (pin !== confirmPin)  return showAdminPinError('As senhas não coincidem.');
+  } else {
+    if (!pin) return showAdminPinError('Digite a senha administrativa.');
+    /* Throttle local é só UX (evita bater a RPC sem necessidade) — quem decide
+       de verdade é o servidor. A mensagem é a mesma de senha errada de propósito:
+       o cliente não deve conseguir distinguir "errei a senha" de "estou bloqueado". */
+    if (Date.now() < gs.pinCooldownUntil) return showAdminPinError('Senha incorreta.');
+  }
+
+  gs.pinAttemptInFlight = true;
+  const btn = elid('admin-pin-submit-btn');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando...';
+
+  try {
+    if (_adminPinMode === 'setup') {
+      const { error } = await getSb().rpc('set_management_pin', { input_pin: pin });
+      if (error) { showAdminPinError('Não foi possível salvar a senha. Tente novamente.'); return; }
+
+      toast(_adminPinIsChange ? 'Senha administrativa alterada.' : 'Senha administrativa criada.');
+      logAuditAction(
+        _adminPinIsChange ? 'change_management_pin' : 'create_management_pin',
+        'security', null, 'Senha administrativa'
+      );
+      unlockAdminSections();
+      const pending = gs.pendingSection;
+      closeAdminPinModal();
+      if (pending) _activateSection(pending);
+      renderAdminPinStatusCard();
+    } else {
+      const { data, error } = await getSb().rpc('verify_management_pin', { input_pin: pin });
+      if (error) { showAdminPinError('Erro ao verificar a senha. Tente novamente.'); return; }
+
+      if (data === true) {
+        unlockAdminSections();
+        const pending = gs.pendingSection;
+        closeAdminPinModal();
+        if (pending) _activateSection(pending);
+      } else {
+        gs.pinFailCount++;
+        if (gs.pinFailCount >= 5) gs.pinCooldownUntil = Date.now() + 30000;
+        showAdminPinError('Senha incorreta.'); // mensagem genérica sempre — nunca revela se foi PIN errado ou bloqueio
+      }
+    }
+  } finally {
+    gs.pinAttemptInFlight = false;
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+/* Abre o fluxo de criar/trocar senha administrativa a partir de
+   Configurações > Segurança (fora do fluxo de navegação protegida). */
+async function openChangeManagementPinModal() {
+  let state;
+  try {
+    const { data, error } = await getSb().rpc('get_management_pin_state');
+    if (error) throw error;
+    state = Array.isArray(data) ? data[0] : data;
+  } catch (e) {
+    toast('Não foi possível verificar permissões.', true);
+    return;
+  }
+
+  if (!state?.can_manage) {
+    toast('Apenas administradores podem criar ou alterar a senha administrativa.', true);
+    return;
+  }
+
+  openAdminPinModal('setup', { isChange: state.is_configured === true });
+}
+
+async function renderAdminPinStatusCard() {
+  const box = elid('admin-pin-status-box');
+  if (!box) return;
+  box.innerHTML = '<p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p>';
+
+  try {
+    const { data, error } = await getSb().rpc('get_management_pin_state');
+    if (error) throw error;
+    const state = Array.isArray(data) ? data[0] : data;
+    const configured = !!state?.is_configured;
+    const canManage = !!state?.can_manage;
+
+    let html = `<p class="acc-info-value">${configured
+      ? '<i class="fas fa-circle-check" style="color:#16A34A"></i> Senha administrativa configurada.'
+      : '<i class="fas fa-circle-exclamation" style="color:#F59E0B"></i> Nenhuma senha administrativa configurada ainda.'}</p>`;
+
+    if (canManage) {
+      html += `<div class="g-card-actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="btn-secondary" onclick="openChangeManagementPinModal()"><i class="fas fa-key"></i> ${configured ? 'Alterar senha administrativa' : 'Criar senha administrativa'}</button>
+      </div>`;
+    } else {
+      html += `<p class="g-card-desc" style="margin-top:8px">Apenas administradores podem criar ou alterar essa senha.</p>`;
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = '<p class="empty-msg">Não foi possível carregar o status da senha administrativa.</p>';
+  }
+}
+
 /* ── Copiar dados de acesso ── */
 function copyAccessInfo() {
   const user = gs.currentUser;
@@ -3026,6 +3280,15 @@ document.addEventListener('keydown', e => {
   if (!ov || ov.style.display === 'none') return;
   if (e.key === 'Escape') { e.preventDefault(); _confirmModalCancel(); }
   if (e.key === 'Enter')  { e.preventDefault(); _confirmModalConfirm(); }
+});
+
+/* Funciona com o foco em qualquer elemento dentro do modal (input, botão do
+   olho etc.) — não só quando o cursor está no campo de senha. */
+document.addEventListener('keydown', e => {
+  const ov = elid('admin-pin-overlay');
+  if (!ov || ov.style.display === 'none') return;
+  if (e.key === 'Escape') { e.preventDefault(); closeAdminPinModal(); }
+  if (e.key === 'Enter')  { e.preventDefault(); submitAdminPin(); }
 });
 
 function show(id, msg) {
@@ -3141,6 +3404,8 @@ const _FRIENDLY_ACTIONS = {
   update_user_role:       'Cargo do usuário alterado',
   deactivate_user:        'Conta desativada',
   activate_user:          'Conta ativada',
+  create_management_pin:  'Senha administrativa criada',
+  change_management_pin:  'Senha administrativa alterada',
   apply_discount:              'Desconto aplicado',
   refund_payment:              'Pagamento estornado',
   apply_courtesy:              'Cortesia aplicada',
@@ -4886,6 +5151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   getSb().auth.onAuthStateChange((_event, session) => {
+    lockAdminSections(false); // login, logout, expiração ou troca de usuário sempre bloqueiam de novo
     if (session?.user) {
       gs.currentUser = session.user;
       showView('dashboard');
