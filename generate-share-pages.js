@@ -139,11 +139,14 @@ function buildShareHtml(p) {
 
   const noImageProducts = [];
   const generatedFiles  = new Set();
+  const slugOwners      = new Map(); // slug -> [nomes de produtos que geraram esse slug]
   let count = 0;
 
   for (const p of products) {
     const { slug, html, hasImage } = buildShareHtml(p);
     if (!hasImage) noImageProducts.push(p.name);
+    if (!slugOwners.has(slug)) slugOwners.set(slug, []);
+    slugOwners.get(slug).push(p.name);
     fs.writeFileSync(path.join(shareDir, `${slug}.html`), html, 'utf8');
     generatedFiles.add(`${slug}.html`);
     console.log(`  ✓ share/${slug}.html`);
@@ -155,6 +158,18 @@ function buildShareHtml(p) {
   if (noImageProducts.length) {
     console.log(`\n⚠️  ${noImageProducts.length} produto(s) sem image_url — página gerada sem og:image:`);
     noImageProducts.forEach((n) => console.log(`   - ${n}`));
+  }
+
+  /* Slug não é uma coluna persistida — é sempre slugify(name). Se dois
+     produtos ativos geram o mesmo slug (nome igual/duplicado, ou nomes
+     diferentes que colidem depois de normalizados), o último processado
+     sobrescreve o arquivo do outro silenciosamente. Nunca deve passar batido. */
+  const collisions = [...slugOwners.entries()].filter(([, names]) => names.length > 1);
+  if (collisions.length) {
+    console.log(`\n🚨 ${collisions.length} colisão(ões) de slug — um produto sobrescreveu a página do outro:`);
+    collisions.forEach(([slug, names]) => {
+      console.log(`   - share/${slug}.html ← gerado por: ${names.join(' | ')} (só o último desses ficou com a página)`);
+    });
   }
 
   /* Páginas antigas sem produto ativo correspondente — só relatório, nunca
