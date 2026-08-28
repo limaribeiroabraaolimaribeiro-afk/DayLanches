@@ -1635,6 +1635,14 @@ async function checkForNewOrders() {
         if (gs.autoPrintEnabled) {
           newOnes.forEach(o => {
             if (o.status === 'cancelado') return;
+            /* Mesas de Balcão: a impressão automática é responsabilidade
+               EXCLUSIVA do Print Agent (protocolo printed_at/
+               printed_items_count). O navegador nunca imprime sozinho um
+               pedido de mesa — senão vira impressão duplicada (Gestão +
+               Print Agent) da mesma comanda inicial. Som/toast acima já
+               avisaram a Dayane; o Print Agent cuida da impressão física. */
+            const isBalcaoTable = o.order_source === 'balcao' && !!o.table_number;
+            if (isBalcaoTable) return;
             const ok = printOrderReceipt(o.id);
             if (!ok) toast('Clique em "Imprimir comanda" para imprimir este pedido.', true);
           });
@@ -1687,6 +1695,19 @@ async function markOrderPrinted(o) {
   const already = gs.printedOrderIds.has(o.id);
   gs.printedOrderIds.add(o.id);
   if (!already && gs.section === 'pedidos') renderOrders();
+
+  /* Mesas de Balcão usam o protocolo de impressão incremental do Print
+     Agent (printed_at/printed_items_count são propriedade exclusiva dele —
+     só avançam depois de uma impressão física confirmada). A impressão
+     manual daqui (botão "Imprimir"/"Reimprimir" em Pedidos, e o auto-print
+     de pedido novo) continua abrindo a janela de impressão do navegador
+     normalmente, mas NUNCA deve escrever esses dois campos para uma mesa —
+     senão o Worker passa a achar que um adicional pendente já chegou à
+     cozinha sem isso ter realmente acontecido (bug real: itens adicionados
+     deixam de imprimir depois que alguém clica em "Reimprimir"). */
+  const isBalcaoTable = o.order_source === 'balcao' && !!o.table_number;
+  if (isBalcaoTable) return;
+
   try {
     const nowIso = new Date().toISOString();
     const items = Array.isArray(o.items) ? o.items : [];
@@ -5821,6 +5842,26 @@ async function pdvConfirmAddToTable() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adicionando...'; }
 
   try {
+    /* Releitura fresca imediatamente antes de mesclar — evita lost update
+       quando o Garçom (ou outra aba do Balcão) adicionou algo nesta mesma
+       mesa depois que esta tela carregou pdv.activeTableOrder. Mesmo
+       padrão já usado em gcSubmitAddToExisting() no Garçom: nunca mescla
+       em cima do estado antigo mantido só em memória. */
+    const { data: freshOrder, error: fetchErr } = await getSb().from('orders').select('*').eq('id', order.id).single();
+    if (fetchErr) {
+      console.error('[PDV] Erro ao reler pedido antes de mesclar:', fetchErr);
+      toast('Erro ao adicionar itens: ' + (fetchErr.message || 'tente novamente.'), true);
+      return;
+    }
+
+    if (!pdvIsOpenTableOrder(freshOrder)) {
+      toast('Esta mesa não está mais com comanda aberta. Recarregando...', true);
+      pdv.addCart = [];
+      await loadOrders();
+      pdvBackToMesaGrid();
+      return;
+    }
+
     const newItems = pdv.addCart.map(c => ({
       name: c.name,
       qty: c.qty,
@@ -5830,19 +5871,21 @@ async function pdvConfirmAddToTable() {
       options: c.options || [],
     }));
 
-    const existingItems = Array.isArray(order.items) ? order.items : [];
+    const existingItems = Array.isArray(freshOrder.items) ? freshOrder.items : [];
     const mergedItems = [...existingItems, ...newItems]; // só anexa — nunca reordena/edita
     const subtotal = mergedItems.reduce((s, i) => s + (i.total || 0), 0);
     /* Preserva desconto/cortesia já aplicados em Pedidos (applyDiscount/
-       applyCourtesy alteram `total` sem tocar `items`) */
-    const discount = Number(order.discount_amount || 0);
-    const courtesy = Number(order.courtesy_amount || 0);
+       applyCourtesy alteram `total` sem tocar `items`) — e NUNCA toca
+       printed_at/printed_items_count: esses campos continuam sendo
+       propriedade exclusiva do protocolo do Print Agent. */
+    const discount = Number(freshOrder.discount_amount || 0);
+    const courtesy = Number(freshOrder.courtesy_amount || 0);
     const total = Math.max(0, subtotal - discount - courtesy);
     const now = new Date().toISOString();
 
     const { data, error } = await getSb().from('orders')
       .update({ items: mergedItems, subtotal, total, updated_at: now })
-      .eq('id', order.id)
+      .eq('id', freshOrder.id)
       .select('*')
       .single();
 
@@ -5852,7 +5895,7 @@ async function pdvConfirmAddToTable() {
       return;
     }
 
-    const idx = gs.orders.findIndex(o => o.id === order.id);
+    const idx = gs.orders.findIndex(o => o.id === freshOrder.id);
     if (idx !== -1) gs.orders[idx] = data;
     pdv.activeTableOrder = data;
     /* orders é a única fonte de verdade em memória; mantém a tela Pedidos
