@@ -1,0 +1,11 @@
+{
+  "name": "day-lanches-tests",
+  "private": true,
+  "description": "Suíte de testes local (Playwright) para gestao.html. Não faz parte do site publicado — nada aqui é servido em produção.",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

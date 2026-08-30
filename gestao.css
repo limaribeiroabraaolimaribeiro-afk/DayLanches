@@ -256,6 +256,32 @@ a { text-decoration: none; color: inherit; }
   color: var(--danger);
 }
 
+/* Botão "Bloquear áreas administrativas" no cabeçalho — mesma forma dos
+   demais pills do header (.btn-sound/.btn-close-store), só que sempre em
+   destaque (âmbar) porque só aparece quando há algo pra bloquear de fato:
+   JS alterna display:none/inline-flex via _syncAdminLockBtn(). */
+.btn-admin-lock {
+  background: #FEF3C7;
+  border-color: #F59E0B;
+  color: #B45309;
+}
+.btn-admin-lock:hover { border-color: #B45309; color: #B45309; }
+
+/* ── Configurações > Segurança: tempo de bloqueio automático ── */
+.admin-lock-config {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.admin-lock-config label {
+  display: block;
+  font-size: .85rem; font-weight: 600; color: var(--text);
+  margin-bottom: 6px;
+}
+.admin-lock-config select {
+  max-width: 220px;
+}
+
 .dash-user {
   display: flex; align-items: center; gap: 6px;
   font-size: .82rem; color: var(--text-med);

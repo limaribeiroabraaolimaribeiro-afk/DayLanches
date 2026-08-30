@@ -23,6 +23,7 @@ function getSb() {
 const gs = {
   section: 'produtos',
   currentUser: null,
+  _lastAuthUid: null, // último auth.uid() visto em onAuthStateChange — distingue refresh de token de troca de usuário
   products: [],
   orders: [],
   orderFilter: 'all',
@@ -44,6 +45,7 @@ const gs = {
   /* Segunda camada de segurança — áreas administrativas (em memória, nunca persistido) */
   adminSectionsUnlocked: false,
   adminUnlockExpiresAt: 0,
+  adminLockMinutes: 30, // sobrescrito pelo valor salvo no banco assim que get_management_pin_state() responde
   pendingSection: null,
   pinAttemptInFlight: false,
   pinFailCount: 0,
@@ -174,7 +176,9 @@ function showView(name) {
    sem passar por este guard antes.
 ══════════════════════════════════════ */
 const PROTECTED_SECTIONS = new Set(['vendas', 'relatorios', 'config', 'despesas', 'estoque', 'acessos']);
-const ADMIN_UNLOCK_MS = 15 * 60 * 1000; // 15 minutos
+const ADMIN_LOCK_MINUTES_OPTIONS = [15, 30, 60, 120];
+const DEFAULT_ADMIN_LOCK_MINUTES = 30; // mesmo default do banco (management_pin.auto_lock_minutes)
+const ADMIN_ACTIVITY_THROTTLE_MS = 4000; // evita recalcular a expiração a cada pixel de mouse/tecla
 
 function isAdminUnlocked() {
   return gs.adminSectionsUnlocked === true && Date.now() < gs.adminUnlockExpiresAt;
@@ -182,13 +186,14 @@ function isAdminUnlocked() {
 
 function unlockAdminSections() {
   gs.adminSectionsUnlocked = true;
-  gs.adminUnlockExpiresAt = Date.now() + ADMIN_UNLOCK_MS;
+  gs.adminUnlockExpiresAt = Date.now() + gs.adminLockMinutes * 60 * 1000;
   gs.pinFailCount = 0;
   gs.pinCooldownUntil = 0;
+  _syncAdminLockBtn();
 }
 
 function renewAdminUnlock() {
-  if (gs.adminSectionsUnlocked) gs.adminUnlockExpiresAt = Date.now() + ADMIN_UNLOCK_MS;
+  if (gs.adminSectionsUnlocked) gs.adminUnlockExpiresAt = Date.now() + gs.adminLockMinutes * 60 * 1000;
 }
 
 /* redirectSafe: se true e a section atual for protegida, navega de volta
@@ -199,6 +204,7 @@ function lockAdminSections(redirectSafe) {
   gs.adminSectionsUnlocked = false;
   gs.adminUnlockExpiresAt = 0;
   gs.pendingSection = null;
+  _syncAdminLockBtn();
   if (redirectSafe && PROTECTED_SECTIONS.has(gs.section)) _activateSection('pedidos');
 }
 
@@ -207,12 +213,77 @@ function lockAdminSectionsManually() {
   toast('Áreas administrativas bloqueadas.');
 }
 
+/* Botão de bloqueio manual no cabeçalho: só faz sentido mostrar enquanto
+   houver algo pra bloquear (mesma ação lógica de lockAdminSectionsManually,
+   só existe UM botão na UI — ver #btn-admin-lock em gestao.html). */
+function _syncAdminLockBtn() {
+  const btn = elid('btn-admin-lock');
+  if (btn) btn.style.display = gs.adminSectionsUnlocked ? 'inline-flex' : 'none';
+}
+
+/* O Balcão troca o .dash-header inteiro por um cabeçalho próprio em tela
+   cheia (.pdv-left-header) — body.is-balcao esconde o primeiro com
+   display:none!important. Sem isto, #btn-admin-lock ficaria inacessível
+   sempre que alguém estivesse operando o Balcão com as áreas
+   administrativas destravadas. Em vez de duplicar o botão (dois ids, dois
+   listeners), MOVE o mesmo elemento de um cabeçalho pro outro com
+   insertBefore — nunca cloneNode, nunca um segundo #btn-admin-lock. */
+function _placeAdminLockBtn(sectionName) {
+  const btn = elid('btn-admin-lock');
+  if (!btn) return;
+  if (sectionName === 'balcao') {
+    const pdvHeader = document.querySelector('.pdv-left-header');
+    if (pdvHeader && btn.parentElement !== pdvHeader) {
+      pdvHeader.insertBefore(btn, pdvHeader.querySelector('.pdv-user'));
+    }
+  } else {
+    const dashHeader = document.querySelector('.dash-header');
+    if (dashHeader && btn.parentElement !== dashHeader) {
+      dashHeader.insertBefore(btn, dashHeader.querySelector('.dash-user'));
+    }
+  }
+}
+
 /* Verifica a cada 30s se o desbloqueio expirou por inatividade — sem isso,
    quem ficasse parado numa aba protegida (ex: Relatórios aberto e a pessoa
    sai da mesa) nunca seria bloqueado, porque nada reexecutaria o guard. */
 setInterval(() => {
   if (gs.adminSectionsUnlocked && Date.now() >= gs.adminUnlockExpiresAt) lockAdminSections(true);
 }, 30000);
+
+/* Inatividade ADMINISTRATIVA: qualquer interação real enquanto uma área
+   protegida está aberta E já desbloqueada renova o prazo. Interação em
+   área livre (Produtos/Pedidos/Balcão/Caixa) nunca renova — se a pessoa
+   sair de uma área protegida e ficar operando o balcão, o desbloqueio
+   expira normalmente. Throttle local (não é debounce): a cada janela de
+   ADMIN_ACTIVITY_THROTTLE_MS, no máximo uma renovação — evento nenhum é
+   perdido de verdade porque qualquer clique/tecla seguinte dentro da
+   mesma sessão desbloqueada vai cair numa janela futura e renovar de novo. */
+let _lastAdminActivityRenewAt = 0;
+function _onAdminActivity() {
+  if (!gs.adminSectionsUnlocked || !PROTECTED_SECTIONS.has(gs.section)) return;
+  const now = Date.now();
+  if (now - _lastAdminActivityRenewAt < ADMIN_ACTIVITY_THROTTLE_MS) return;
+  _lastAdminActivityRenewAt = now;
+  renewAdminUnlock();
+}
+['click', 'keydown', 'input', 'change', 'pointerdown'].forEach(evt =>
+  document.addEventListener(evt, _onAdminActivity, { capture: true, passive: true })
+);
+
+/* Busca is_configured/can_manage/auto_lock_minutes sempre fresco no servidor
+   (nunca cacheado em gs entre chamadas) e, de quebra, mantém gs.adminLockMinutes
+   atualizado — é o único lugar que lê esse RPC, os 3 chamadores (guard de
+   navegação, troca de PIN e card de status) passam por aqui. */
+async function fetchManagementPinState() {
+  const { data, error } = await getSb().rpc('get_management_pin_state');
+  if (error) throw error;
+  const state = Array.isArray(data) ? data[0] : data;
+  gs.adminLockMinutes = ADMIN_LOCK_MINUTES_OPTIONS.includes(state?.auto_lock_minutes)
+    ? state.auto_lock_minutes
+    : DEFAULT_ADMIN_LOCK_MINUTES;
+  return state;
+}
 
 async function showSection(name) {
   if (!PROTECTED_SECTIONS.has(name)) { _activateSection(name); return; }
@@ -227,9 +298,7 @@ async function showSection(name) {
 
   let state;
   try {
-    const { data, error } = await getSb().rpc('get_management_pin_state');
-    if (error) throw error;
-    state = Array.isArray(data) ? data[0] : data;
+    state = await fetchManagementPinState();
   } catch (e) {
     console.error('[Gestão] Erro ao verificar senha administrativa:', e);
     toast('Não foi possível verificar a senha administrativa. Tente novamente.', true);
@@ -261,6 +330,7 @@ function _activateSection(name) {
   const titles = { produtos:'Produtos', pedidos:'Pedidos', vendas:'Vendas', balcao:'Balcão', caixa:'Caixa', despesas:'Despesas', estoque:'Estoque', relatorios:'Relatórios', config:'Configurações', acessos:'Acessos' };
   elid('dash-title').textContent = titles[name] || name;
   document.body.classList.toggle('is-balcao', name === 'balcao');
+  _placeAdminLockBtn(name);
   gs.section = name;
   if (name === 'vendas')      renderSales();
   if (name === 'config')      { loadConfig(); waCheckStatus(); renderAdminPinStatusCard(); }
@@ -3143,9 +3213,7 @@ async function submitAdminPin() {
 async function openChangeManagementPinModal() {
   let state;
   try {
-    const { data, error } = await getSb().rpc('get_management_pin_state');
-    if (error) throw error;
-    state = Array.isArray(data) ? data[0] : data;
+    state = await fetchManagementPinState();
   } catch (e) {
     toast('Não foi possível verificar permissões.', true);
     return;
@@ -3165,9 +3233,7 @@ async function renderAdminPinStatusCard() {
   box.innerHTML = '<p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p>';
 
   try {
-    const { data, error } = await getSb().rpc('get_management_pin_state');
-    if (error) throw error;
-    const state = Array.isArray(data) ? data[0] : data;
+    const state = await fetchManagementPinState();
     const configured = !!state?.is_configured;
     const canManage = !!state?.can_manage;
 
@@ -3179,12 +3245,49 @@ async function renderAdminPinStatusCard() {
       html += `<div class="g-card-actions" style="justify-content:flex-start;margin-top:10px">
         <button class="btn-secondary" onclick="openChangeManagementPinModal()"><i class="fas fa-key"></i> ${configured ? 'Alterar senha administrativa' : 'Criar senha administrativa'}</button>
       </div>`;
+      html += `<div class="admin-lock-config">
+        <label for="admin-lock-minutes-select">Bloqueio automático</label>
+        <select id="admin-lock-minutes-select" class="form-input" onchange="saveAdminLockMinutes(this)">
+          <option value="15"${gs.adminLockMinutes === 15 ? ' selected' : ''}>15 minutos</option>
+          <option value="30"${gs.adminLockMinutes === 30 ? ' selected' : ''}>30 minutos</option>
+          <option value="60"${gs.adminLockMinutes === 60 ? ' selected' : ''}>1 hora</option>
+          <option value="120"${gs.adminLockMinutes === 120 ? ' selected' : ''}>2 horas</option>
+        </select>
+        <p class="g-card-desc">As áreas administrativas serão bloqueadas após esse período sem atividade.</p>
+      </div>`;
     } else {
       html += `<p class="g-card-desc" style="margin-top:8px">Apenas administradores podem criar ou alterar essa senha.</p>`;
     }
     box.innerHTML = html;
   } catch (e) {
     box.innerHTML = '<p class="empty-msg">Não foi possível carregar o status da senha administrativa.</p>';
+  }
+}
+
+/* Só admin/owner ativo consegue de fato alterar (RPC é a autoridade — o
+   select só aparece pra quem já passou por can_manage no card acima, mas
+   quem decide de verdade é set_management_pin_auto_lock() no servidor). */
+async function saveAdminLockMinutes(selectEl) {
+  const minutes = parseInt(selectEl.value, 10);
+  const previous = gs.adminLockMinutes;
+  selectEl.disabled = true;
+
+  try {
+    const { data, error } = await getSb().rpc('set_management_pin_auto_lock', { input_minutes: minutes });
+    if (error || data !== true) throw error || new Error('not_saved');
+
+    gs.adminLockMinutes = minutes;
+    /* Sessão administrativa já desbloqueada: recalcula a expiração a partir
+       de AGORA com o novo tempo — não espera a próxima interação. */
+    if (gs.adminSectionsUnlocked) gs.adminUnlockExpiresAt = Date.now() + minutes * 60 * 1000;
+
+    toast(`Bloqueio automático definido para ${minutes >= 60 ? (minutes / 60) + ' hora(s)' : minutes + ' minutos'}.`);
+    logAuditAction('update_management_pin_auto_lock', 'security', null, `${minutes} min`);
+  } catch (e) {
+    toast('Não foi possível salvar. Apenas administradores podem alterar esse tempo.', true);
+    selectEl.value = String(previous);
+  } finally {
+    selectEl.disabled = false;
   }
 }
 
@@ -3406,6 +3509,7 @@ const _FRIENDLY_ACTIONS = {
   activate_user:          'Conta ativada',
   create_management_pin:  'Senha administrativa criada',
   change_management_pin:  'Senha administrativa alterada',
+  update_management_pin_auto_lock: 'Tempo de bloqueio automático alterado',
   apply_discount:              'Desconto aplicado',
   refund_payment:              'Pagamento estornado',
   apply_courtesy:              'Cortesia aplicada',
@@ -5151,7 +5255,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   getSb().auth.onAuthStateChange((_event, session) => {
-    lockAdminSections(false); // login, logout, expiração ou troca de usuário sempre bloqueiam de novo
+    /* O Supabase dispara TOKEN_REFRESHED periodicamente pro MESMO usuário
+       (renovação silenciosa do JWT) — isso não é troca de usuário nem logout,
+       então não deve derrubar uma sessão administrativa em uso. Qualquer outro
+       evento com um auth.uid() diferente do último visto (login inicial,
+       SIGNED_OUT, troca real de usuário) bloqueia, como sempre bloqueou. */
+    const newUid = session?.user?.id || null;
+    const isSameUserTokenRefresh = _event === 'TOKEN_REFRESHED' && newUid && newUid === gs._lastAuthUid;
+    if (!isSameUserTokenRefresh) lockAdminSections(false);
+    gs._lastAuthUid = newUid;
+
     if (session?.user) {
       gs.currentUser = session.user;
       showView('dashboard');

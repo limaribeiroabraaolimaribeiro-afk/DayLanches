@@ -1,3 +1,12 @@
+# Testes locais (Playwright) — ver tests/ e package.json na raiz.
+# package-lock.json É versionado de propósito (fixa as versões exatas das
+# devDependencies) — só os artefatos GERADOS por rodar os testes ficam de fora.
+/node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+*.tmp
+
 worker/.wrangler/
 print-agent/node_modules/
 print-agent/dist*/

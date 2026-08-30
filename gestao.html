@@ -122,6 +122,9 @@
       <button type="button" class="btn-close-store js-close-store-btn" onclick="pdvOpenCloseStoreModal()" title="Fechar loja hoje">
         <i class="fas fa-store-slash"></i><span class="btn-sound-label">Fechar loja hoje</span>
       </button>
+      <button type="button" id="btn-admin-lock" class="btn-close-store btn-admin-lock" onclick="lockAdminSectionsManually()" title="Bloquear áreas administrativas" style="display:none">
+        <i class="fas fa-lock"></i><span class="btn-sound-label">Bloquear áreas administrativas</span>
+      </button>
       <span class="dash-user"><i class="fas fa-user-circle"></i> <span id="user-display">—</span></span>
     </header>
 
@@ -743,6 +746,15 @@
           </div>
         </div>
 
+        <!-- Card: Segurança — senha administrativa (2ª camada) e tempo de bloqueio -->
+        <div class="g-card">
+          <div class="g-card-head">
+            <h2 class="g-card-title"><i class="fas fa-user-lock"></i> Senha administrativa</h2>
+          </div>
+          <p class="g-card-desc">Segunda camada de segurança exigida para abrir Vendas, Relatórios, Configurações, Despesas, Estoque e Acessos — além do login normal.</p>
+          <div id="admin-pin-status-box"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
+        </div>
+
       </div>
     </section>
 
@@ -758,8 +770,8 @@
           <div class="g-card-actions acc-actions">
             <button class="btn-secondary" onclick="copyAccessInfo()"><i class="fas fa-copy"></i> Copiar dados de acesso</button>
             <button class="btn-primary" onclick="openChangePasswordModal()"><i class="fas fa-key"></i> Alterar senha</button>
-            <button class="btn-secondary" onclick="lockAdminSectionsManually()"><i class="fas fa-lock"></i> Bloquear áreas administrativas</button>
           </div>
+          <p class="g-card-desc" style="margin-top:8px">O botão <i class="fas fa-lock"></i> Bloquear áreas administrativas fica sempre visível no topo enquanto as áreas administrativas estiverem desbloqueadas.</p>
         </div>
 
         <div class="g-card">
@@ -794,21 +806,6 @@
           </div>
 
           <div id="pa-devices-list" style="margin-top:18px"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
-        </div>
-
-        <div class="g-card">
-          <div class="g-card-head">
-            <h2 class="g-card-title">Segurança</h2>
-          </div>
-          <p class="g-card-desc">Por segurança, altere a senha periodicamente e não compartilhe o acesso com pessoas não autorizadas.</p>
-        </div>
-
-        <div class="g-card">
-          <div class="g-card-head">
-            <h2 class="g-card-title"><i class="fas fa-user-lock"></i> Senha administrativa</h2>
-          </div>
-          <p class="g-card-desc">Segunda camada de segurança exigida para abrir Vendas, Relatórios, Configurações, Despesas, Estoque e Acessos — além do login normal.</p>
-          <div id="admin-pin-status-box"><p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p></div>
         </div>
       </div>
     </section>
