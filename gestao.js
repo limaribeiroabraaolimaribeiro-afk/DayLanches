@@ -50,6 +50,13 @@ const gs = {
   pinAttemptInFlight: false,
   pinFailCount: 0,
   pinCooldownUntil: 0,
+
+  /* true só depois que get_management_pin_state() confirmar bypass_pin=true
+     pro auth.uid() atual (role='owner' ativo) — nunca setado por adivinhação
+     do cliente. Sem expiração/timer (owner não tem segunda camada pra si
+     mesmo); resetado a cada troca real de usuário/login/logout, igual ao
+     resto do estado administrativo (ver onAuthStateChange). */
+  ownerPinBypass: false,
 };
 
 /* ══════════════════════════════════════
@@ -298,6 +305,11 @@ async function fetchManagementPinState() {
 async function showSection(name) {
   if (!PROTECTED_SECTIONS.has(name)) { _activateSection(name); return; }
 
+  // Owner (role='owner' ativo) já confirmado pelo backend nesta sessão —
+  // abre direto, sem RPC, sem modal, sem temporizador (não existe segunda
+  // camada pra ele; ver bypass_pin em get_management_pin_state()).
+  if (gs.ownerPinBypass) { _activateSection(name); return; }
+
   if (isAdminUnlocked()) {
     renewAdminUnlock();
     _activateSection(name);
@@ -313,6 +325,16 @@ async function showSection(name) {
     console.error('[Gestão] Erro ao verificar senha administrativa:', e);
     toast('Não foi possível verificar a senha administrativa. Tente novamente.', true);
     gs.pendingSection = null;
+    return;
+  }
+
+  // bypass_pin só vem true quando o backend cruzou auth.uid() com
+  // profiles.role='owner' ativo (nunca calculado a partir de dado do
+  // cliente) — a partir daqui fica marcado pra sessão inteira, sem prazo.
+  if (state?.bypass_pin) {
+    gs.ownerPinBypass = true;
+    gs.pendingSection = null;
+    _activateSection(name);
     return;
   }
 
@@ -5463,7 +5485,13 @@ document.addEventListener('DOMContentLoaded', () => {
        SIGNED_OUT, troca real de usuário) bloqueia, como sempre bloqueou. */
     const newUid = session?.user?.id || null;
     const isSameUserTokenRefresh = _event === 'TOKEN_REFRESHED' && newUid && newUid === gs._lastAuthUid;
-    if (!isSameUserTokenRefresh) lockAdminSections(false);
+    if (!isSameUserTokenRefresh) {
+      lockAdminSections(false);
+      // Owner bypass é por sessão/identidade — troca real de usuário (ou
+      // logout) sempre revalida do zero na próxima navegação protegida,
+      // nunca herda o bypass de quem estava logado antes.
+      gs.ownerPinBypass = false;
+    }
     gs._lastAuthUid = newUid;
 
     if (session?.user) {

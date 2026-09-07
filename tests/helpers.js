@@ -50,13 +50,22 @@ async function loginAs(page, user, event = 'SIGNED_IN') {
   await page.waitForSelector('#view-dashboard', { state: 'visible' });
 }
 
-async function setPinState(page, { isConfigured = true, canManage = true, autoLockMinutes = 30 } = {}) {
-  await page.evaluate(({ isConfigured, canManage, autoLockMinutes }) => {
+async function setPinState(page, { isConfigured = true, canManage = true, autoLockMinutes = 30, bypassPin = false } = {}) {
+  await page.evaluate(({ isConfigured, canManage, autoLockMinutes, bypassPin }) => {
     window.__testAuth.setRpcResponse('get_management_pin_state', () => ({
-      data: [{ is_configured: isConfigured, can_manage: canManage, auto_lock_minutes: autoLockMinutes }],
+      data: [{ is_configured: isConfigured, can_manage: canManage, auto_lock_minutes: autoLockMinutes, bypass_pin: bypassPin }],
       error: null,
     }));
-  }, { isConfigured, canManage, autoLockMinutes });
+  }, { isConfigured, canManage, autoLockMinutes, bypassPin });
+}
+
+function ownerUser(overrides = {}) {
+  return {
+    id: 'uid-owner-1',
+    email: 'abraao@daylanches.com.br',
+    user_metadata: { name: 'Abraão', role: 'owner' },
+    ...overrides,
+  };
 }
 
 const PROTECTED = ['vendas', 'relatorios', 'config', 'despesas', 'estoque', 'acessos'];
@@ -74,4 +83,4 @@ async function unlockViaPin(page, sectionName = 'vendas') {
   await page.waitForFunction((name) => document.getElementById(`section-${name}`)?.classList.contains('active'), sectionName);
 }
 
-module.exports = { setupMockedPage, adminUser, loginAs, setPinState, isPinModalOpen, unlockViaPin, PROTECTED, FREE };
+module.exports = { setupMockedPage, adminUser, ownerUser, loginAs, setPinState, isPinModalOpen, unlockViaPin, PROTECTED, FREE };
