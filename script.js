@@ -3272,12 +3272,11 @@ function updateStoreStatus() {
     .map(r => `${r.label} das ${r.timeLabel.replace(' – ', ' às ')}`)
     .join('; ');
 
-  /* Abertura excepcional ainda não começou ("antes do horário") é uma
-     notícia positiva — a loja VAI abrir hoje — não pode herdar o vermelho
-     de "fechada" só porque isOpen ainda é false. Usa uma classe própria
-     (mesma paleta verde de "open", ver style.css) em vez do estado binário
-     open/closed que bastava antes da abertura excepcional existir. */
-  const statusClass = isOpen ? 'open' : (manualOpen && manualOpenPhase === 'before' ? 'manual-open' : 'closed');
+  /* A cor representa o estado REAL da loja agora, não se a notícia é boa ou
+     ruim — "antes do horário" da abertura excepcional a loja ainda está
+     fechada de verdade, então continua vermelho (closed) até isOpen virar
+     true. Só o texto muda pra deixar claro que existe atendimento hoje. */
+  const statusClass = isOpen ? 'open' : 'closed';
 
   if (banner) {
     banner.style.display = 'flex';

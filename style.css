@@ -2233,11 +2233,7 @@ a { text-decoration: none; color: inherit; }
   border-color: #FECACA;
   color: #B91C1C;
 }
-/* Abertura excepcional antes do horário: a loja ainda não abriu, mas é uma
-   notícia boa (vai abrir hoje) — mesma paleta verde de "open", não o
-   vermelho de "closed". */
-.store-banner.open,
-.store-banner.manual-open {
+.store-banner.open {
   background: var(--success-bg);
   border-color: #BBF7D0;
   color: var(--success-dark);
@@ -2307,12 +2303,10 @@ a { text-decoration: none; color: inherit; }
   font-size: .85rem; font-weight: 700;
   border: 1.5px solid;
 }
-.menu-status-badge.open,
-.menu-status-badge.manual-open { background: var(--success-bg); border-color: #BBF7D0; color: var(--success-dark); }
+.menu-status-badge.open   { background: var(--success-bg); border-color: #BBF7D0; color: var(--success-dark); }
 .menu-status-badge.closed { background: #FEF2F2; border-color: #FECACA; color: #B91C1C; }
 .menu-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .menu-status-badge.open   .menu-status-dot { background: var(--success); animation: pulse-green 1.5s infinite; }
-.menu-status-badge.manual-open .menu-status-dot { background: var(--success); }
 .menu-status-badge.closed .menu-status-dot { background: #EF4444; }
 
 @keyframes pulse-green {

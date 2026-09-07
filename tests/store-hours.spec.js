@@ -175,53 +175,58 @@ test.describe('isStoreOpenNow() — abertura manual excepcional ("Abrir loja hoj
 
 /* ══════════════════════════════════════════════════════════
    updateStoreStatus() — banner do cardápio: cor e mensagem personalizada
-   Bug relatado: abertura excepcional "antes do horário" herdava o vermelho
-   de "fechada" (banner.className só conhecia open/closed) e o texto usava
-   `Atendimento das ${from} às ${to}.` hardcoded, ignorando manual_open_message
-   mesmo quando preenchido no Gestão.
-══════════════════════════════════════════════════════════ */
+   A cor representa o estado REAL da loja agora, não se a notícia é boa ou
+   ruim: "antes do horário" da abertura excepcional a loja ainda está
+   fechada de verdade, então o banner/badge continuam vermelhos (closed) —
+   só o texto muda pra deixar claro que existe atendimento hoje. Isso foi
+   corrigido depois de uma tentativa anterior (revertida) que usava uma
+   classe verde "manual-open" pra esse estado, o que dava a entender que a
+   loja já estava aberta quando não estava.
+   O texto SEGUE usando manual_open_message (quando preenchido no Gestão)
+   no lugar do texto fixo de horário — essa parte da correção anterior foi
+   mantida. */
 async function renderBanner(page, cfg) {
   return page.evaluate((c) => {
     storeConfig = c;
     updateStoreStatus();
     const banner = document.getElementById('store-status-banner');
     const badge  = document.getElementById('menu-status-badge');
+    const badgeText = document.getElementById('menu-status-text');
     return {
       bannerClass: banner?.className || '',
       bannerText:  banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
       badgeClass:  badge?.className || '',
+      badgeText:   badgeText?.textContent || '',
     };
   }, cfg);
 }
 
 test.describe('updateStoreStatus() — banner do cardápio (abertura manual excepcional)', () => {
-  // 1 — antes do horário usa estilo VERDE, não vermelho
-  test('antes do horário: banner e badge usam a classe verde "manual-open", não "closed"', async ({ page }) => {
-    await setupStorePage(page, '2026-01-05T14:00:00-03:00'); // segunda, normalmente fechada
+  // 1 — antes do horário: a loja AINDA ESTÁ FECHADA, banner/badge continuam vermelhos
+  test('antes do horário: banner e badge continuam vermelhos ("closed"), não verdes', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T17:00:00-03:00'); // segunda, normalmente fechada
     const r = await renderBanner(page, {
       manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
     });
-    expect(r.bannerClass).toBe('store-banner manual-open');
-    expect(r.bannerClass).not.toContain('closed');
-    expect(r.badgeClass).toContain('manual-open');
-    expect(r.badgeClass).not.toContain('closed');
-    expect(r.bannerText).toContain('Abrimos hoje excepcionalmente');
+    expect(r.bannerClass).toBe('store-banner closed');
+    expect(r.badgeClass).toBe('menu-status-badge closed');
+    expect(r.bannerText).toMatch(/Abri(mos|remos) hoje excepcionalmente/);
   });
 
   // 2 — manual_open_message aparece ANTES do horário, no lugar do texto hardcoded
-  test('antes do horário: manual_open_message aparece no banner (não o texto fixo de horário)', async ({ page }) => {
-    await setupStorePage(page, '2026-01-05T14:00:00-03:00');
+  test('antes do horário: manual_open_message aparece no banner, e o estado continua vermelho', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T17:00:00-03:00');
     const customMsg = 'Hoje tem DayLanches! 🍔 Estamos atendendo normalmente das 17:30 às 23:00.';
     const r = await renderBanner(page, {
       manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
       manual_open_message: customMsg,
     });
     expect(r.bannerText).toContain(customMsg);
-    expect(r.bannerClass).toBe('store-banner manual-open');
+    expect(r.bannerClass).toBe('store-banner closed');
   });
 
-  // 3 — manual_open_message aparece DURANTE o horário
-  test('durante o horário: manual_open_message aparece no banner (não "Atendimento hoje até às ...")', async ({ page }) => {
+  // 3 — manual_open_message aparece DURANTE o horário, e o estado fica verde
+  test('durante o horário: manual_open_message aparece no banner (não "Atendimento hoje até às ...") e o estado fica verde', async ({ page }) => {
     await setupStorePage(page, '2026-01-05T20:00:00-03:00');
     const customMsg = 'Hoje tem DayLanches! 🍔 Estamos atendendo normalmente das 17:30 às 23:00.';
     const r = await renderBanner(page, {
@@ -231,6 +236,7 @@ test.describe('updateStoreStatus() — banner do cardápio (abertura manual exce
     expect(r.bannerText).toContain(customMsg);
     expect(r.bannerText).toContain('Estamos abertos agora');
     expect(r.bannerClass).toBe('store-banner open');
+    expect(r.badgeClass).toBe('menu-status-badge open');
   });
 
   // 4 — sem mensagem personalizada, usa o fallback com horário (antes e durante)
@@ -249,12 +255,14 @@ test.describe('updateStoreStatus() — banner do cardápio (abertura manual exce
   });
 
   // 5 — depois do horário não reaproveita manual_open_message (senão soaria como se ainda estivesse aberta)
-  test('depois do horário: não exibe manual_open_message nem qualquer texto de "aberta" — só "Encerramos o atendimento de hoje"', async ({ page }) => {
+  test('depois do horário: banner/badge voltam a vermelho e não exibem manual_open_message nem texto de "aberta"', async ({ page }) => {
     await setupStorePage(page, '2026-01-05T23:30:00-03:00');
     const r = await renderBanner(page, {
       manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
       manual_open_message: 'Estamos atendendo normalmente hoje!',
     });
+    expect(r.bannerClass).toBe('store-banner closed');
+    expect(r.badgeClass).toBe('menu-status-badge closed');
     expect(r.bannerText).toContain('Encerramos o atendimento de hoje');
     expect(r.bannerText).not.toContain('Estamos atendendo normalmente hoje!');
     expect(r.bannerText).not.toMatch(/abertos|abrimos/i);
