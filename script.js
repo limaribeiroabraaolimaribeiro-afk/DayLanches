@@ -3139,9 +3139,14 @@ function getSaoPauloDateISO(date) {
 
 /* Retorna o status de funcionamento agora (horário de Brasília), com base no
    schedule informado ou, se omitido, no horário salvo em store_settings.
-   Fechamento manual de hoje (Gestão → "Fechar loja hoje") tem prioridade
-   sobre o horário semanal normal — não altera/substitui o weekMap, só força
-   isOpen=false quando manual_closed_date bate com o dia de hoje. */
+   Prioridade (Gestão → "Fechar loja hoje" / "Abrir loja hoje"), maior pra
+   menor:
+     1) manual_closed_date de hoje       → loja fechada, sempre.
+     2) manual_open_date de hoje válido  → usa manual_open_from/to no lugar
+                                            do horário semanal só por hoje.
+     3) horário semanal (weekMap)        → comportamento de sempre.
+   Nenhum dos dois casos manuais altera/substitui o weekMap — só mudam como
+   `isOpen` é calculado para o dia de hoje. */
 function isStoreOpenNow(scheduleText) {
   const weekMap = (scheduleText !== undefined ? buildWeekMap(scheduleText) : null) || getWeekMap();
 
@@ -3159,24 +3164,45 @@ function isStoreOpenNow(scheduleText) {
   const hour    = Number(parts.find(p => p.type === 'hour')?.value   ?? 0);
   const minute  = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
   const cur     = hour * 60 + minute;
+  const todayISO = getSaoPauloDateISO(now);
 
   const today = weekMap[weekday];
   const scheduleOpen = !!(today.open && today.from != null && today.to != null && cur >= today.from && cur < today.to);
 
   const manualClosedDate = storeConfig?.manual_closed_date || null;
-  const manualClosed = !!manualClosedDate && manualClosedDate === getSaoPauloDateISO(now);
+  const manualClosed = !!manualClosedDate && manualClosedDate === todayISO;
   const manualClosedMessage = manualClosed ? (storeConfig?.manual_closed_message || '').trim() : '';
 
-  const isOpen = manualClosed ? false : scheduleOpen;
+  /* Abertura excepcional só vale se: não houver fechamento manual hoje
+     (fechamento sempre vence — ver requisito de prioridade), a data bater
+     com hoje (America/Sao_Paulo) e os dois horários existirem e formarem um
+     intervalo válido (fim depois do início — este projeto não tem suporte a
+     virada de meia-noite em horário nenhum, então não inventamos isso aqui). */
+  const manualOpenDate = storeConfig?.manual_open_date || null;
+  const manualOpenFromMin = storeConfig?.manual_open_from != null ? toMinutes(storeConfig.manual_open_from) : null;
+  const manualOpenToMin   = storeConfig?.manual_open_to   != null ? toMinutes(storeConfig.manual_open_to)   : null;
+  const manualOpen = !manualClosed
+    && !!manualOpenDate && manualOpenDate === todayISO
+    && manualOpenFromMin != null && manualOpenToMin != null && manualOpenToMin > manualOpenFromMin;
+  const manualOpenMessage = manualOpen ? (storeConfig?.manual_open_message || '').trim() : '';
+  const manualOpenPhase = !manualOpen ? null : (cur < manualOpenFromMin ? 'before' : (cur < manualOpenToMin ? 'during' : 'after'));
+
+  const isOpen = manualClosed ? false : (manualOpen ? manualOpenPhase === 'during' : scheduleOpen);
 
   return {
     isOpen,
     manualClosed,
     manualClosedMessage,
+    manualOpen,
+    manualOpenMessage,
+    manualOpenPhase,
+    manualOpenFrom: manualOpen ? formatMinutes(manualOpenFromMin) : null,
+    manualOpenTo:   manualOpen ? formatMinutes(manualOpenToMin)   : null,
+    manualOpenTime: manualOpen ? `${formatMinutes(manualOpenFromMin)} às ${formatMinutes(manualOpenToMin)}` : null,
     todayLabel: WEEKDAY_NAMES[weekday],
     openTime:   today.from != null ? formatMinutes(today.from) : null,
     closeTime:  today.to   != null ? formatMinutes(today.to)   : null,
-    message:    isOpen ? 'Aberto agora' : (manualClosed ? 'Fechado hoje' : 'Fechado agora'),
+    message:    isOpen ? 'Aberto agora' : (manualClosed ? 'Fechado hoje' : (manualOpen ? (manualOpenPhase === 'before' ? 'Abre hoje mais tarde' : 'Fechado hoje') : 'Fechado agora')),
     weekMap,
     weekday,
   };
@@ -3232,7 +3258,7 @@ function getStoreStatus() {
 
 function updateStoreStatus() {
   const status = isStoreOpenNow();
-  const { isOpen, manualClosed, manualClosedMessage, weekMap, closeTime } = status;
+  const { isOpen, manualClosed, manualClosedMessage, manualOpen, manualOpenPhase, manualOpenFrom, manualOpenTo, weekMap, closeTime } = status;
 
   const banner  = el('store-status-banner');
   const badge   = el('menu-status-badge');
@@ -3249,7 +3275,13 @@ function updateStoreStatus() {
   if (banner) {
     banner.style.display = 'flex';
     banner.className = 'store-banner ' + (isOpen ? 'open' : 'closed');
-    if (isOpen) {
+    if (isOpen && manualOpen) {
+      banner.innerHTML = `<i class="fas fa-circle-check store-banner-ico"></i>
+         <div class="store-banner-text">
+           <strong>Estamos abertos agora</strong>
+           <span>Atendimento hoje até às ${manualOpenTo}.</span>
+         </div>`;
+    } else if (isOpen) {
       banner.innerHTML = `<i class="fas fa-circle-check store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Estamos abertos agora</strong>
@@ -3260,6 +3292,17 @@ function updateStoreStatus() {
          <div class="store-banner-text">
            <strong>Loja fechada hoje</strong>
            <span>${esc(manualClosedMessage || MANUAL_CLOSED_DEFAULT_MESSAGE)}</span>
+         </div>`;
+    } else if (manualOpen && manualOpenPhase === 'before') {
+      banner.innerHTML = `<i class="fas fa-store store-banner-ico"></i>
+         <div class="store-banner-text">
+           <strong>Abrimos hoje excepcionalmente</strong>
+           <span>Atendimento das ${manualOpenFrom} às ${manualOpenTo}.</span>
+         </div>`;
+    } else if (manualOpen) {
+      banner.innerHTML = `<i class="fas fa-store-slash store-banner-ico"></i>
+         <div class="store-banner-text">
+           <strong>Encerramos o atendimento de hoje</strong>
          </div>`;
     } else {
       banner.innerHTML = `<i class="fas fa-clock store-banner-ico"></i>

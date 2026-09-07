@@ -122,6 +122,9 @@
       <button type="button" class="btn-close-store js-close-store-btn" onclick="pdvOpenCloseStoreModal()" title="Fechar loja hoje">
         <i class="fas fa-store-slash"></i><span class="btn-sound-label">Fechar loja hoje</span>
       </button>
+      <button type="button" class="btn-close-store js-open-store-btn" onclick="pdvOpenOpenStoreModal()" title="Abrir loja hoje">
+        <i class="fas fa-store"></i><span class="btn-sound-label">Abrir loja hoje</span>
+      </button>
       <button type="button" id="btn-admin-lock" class="btn-close-store btn-admin-lock" onclick="lockAdminSectionsManually()" title="Bloquear áreas administrativas" style="display:none">
         <i class="fas fa-lock"></i><span class="btn-sound-label">Bloquear áreas administrativas</span>
       </button>
@@ -279,6 +282,9 @@
             </button>
             <button type="button" class="btn-close-store js-close-store-btn" onclick="pdvOpenCloseStoreModal()" title="Fechar loja hoje">
               <i class="fas fa-store-slash"></i><span class="btn-sound-label">Fechar loja hoje</span>
+            </button>
+            <button type="button" class="btn-close-store js-open-store-btn" onclick="pdvOpenOpenStoreModal()" title="Abrir loja hoje">
+              <i class="fas fa-store"></i><span class="btn-sound-label">Abrir loja hoje</span>
             </button>
             <span class="dash-user pdv-user"><i class="fas fa-user-circle"></i> <span id="pdv-user-display">—</span></span>
           </div>
@@ -568,6 +574,7 @@
             <h2 class="g-card-title">Informações da loja</h2>
             <p class="g-card-desc">Dados exibidos para os clientes no site.</p>
           </div>
+          <div id="store-today-status" style="margin-bottom:12px"></div>
           <form id="form-config" onsubmit="handleSaveConfig(event)">
             <div class="form-row">
               <div class="form-group"><label class="form-label">WhatsApp da loja</label>      <input id="cfg-wa"     class="form-input" placeholder="(47) 99155-9926" inputmode="numeric"></div>

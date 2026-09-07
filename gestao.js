@@ -120,9 +120,19 @@ async function handleCreateAccount(e) {
     });
     if (error) throw error;
     if (data.user) {
+      /* upsert (não insert): alguns projetos Supabase têm um trigger em
+         auth.users que já cria a linha de profiles sozinho no signUp
+         (criado direto no painel, não versionado neste repo). Se isso
+         acontecer, um INSERT aqui colide na PK e falha; como o catch
+         antigo engolia esse erro em silêncio, a conta ficava com o role
+         que o trigger tivesse usado (nunca 'owner') — e essa é justamente
+         a conta que devia poder configurar o PIN administrativo e abrir
+         Vendas/Relatórios/Configurações/Despesas/Estoque/Acessos. upsert
+         garante que role='owner' vale de verdade pra quem acabou de criar
+         a conta pelo código de ativação, não importa se a linha já existia. */
       try {
-        await getSb().from('profiles').insert({ id: data.user.id, name, email, role: 'owner' });
-      } catch(_) { /* perfil é opcional */ }
+        await getSb().from('profiles').upsert({ id: data.user.id, name, email, role: 'owner' });
+      } catch(_) { /* perfil é opcional — proteção só de PIN via RPC, não trava o cadastro */ }
     }
 
     try {
@@ -2673,10 +2683,10 @@ function isStoreManuallyClosedToday() {
 async function pdvSyncCloseStoreState() {
   try {
     const { data, error } = await getSb().from('store_settings')
-      .select('manual_closed_date, manual_closed_message, manual_closed_at')
+      .select('manual_closed_date, manual_closed_message, manual_closed_at, manual_open_date, manual_open_from, manual_open_to, manual_open_message, manual_open_at')
       .eq('id', 'store').single();
     if (!error && data) gs.storeConfig = { ...(gs.storeConfig || {}), ...data };
-  } catch (e) { console.warn('Erro ao carregar estado de fechamento manual:', e); }
+  } catch (e) { console.warn('Erro ao carregar estado de fechamento/abertura manual:', e); }
   pdvRenderCloseStoreButtons();
 }
 
@@ -2688,6 +2698,12 @@ function pdvRenderCloseStoreButtons() {
     const label = btn.querySelector('.btn-sound-label');
     if (label) label.textContent = closedToday ? 'Loja fechada hoje' : 'Fechar loja hoje';
   });
+  /* Os dois botões (fechar/abrir) sempre refletem o mesmo storeConfig, então
+     ficam sincronizados numa única função — evita esquecer de atualizar um
+     deles depois de qualquer ação (fechar, reabrir, abrir excepcionalmente,
+     cancelar abertura). */
+  pdvRenderOpenStoreButtons();
+  renderStoreTodayStatus();
 }
 
 function pdvOpenCloseStoreModal() {
@@ -2724,15 +2740,29 @@ function pdvOpenReopenStoreModal() {
 
 async function pdvCloseStoreToday(message) {
   const todayISO = getSaoPauloDateISO();
+  /* Fechamento manual sempre tem prioridade sobre uma abertura excepcional
+     do mesmo dia (isStoreOpenNow() em script.js já garante isso na leitura),
+     mas deixar os dois configurados ao mesmo tempo é um estado confuso pra
+     reler depois — por isso fechar hoje também limpa a abertura excepcional
+     de hoje, numa única chamada .update() (atômica: um UPDATE só). */
   const { error } = await getSb().from('store_settings').update({
     manual_closed_date: todayISO,
     manual_closed_message: message || null,
     manual_closed_at: new Date().toISOString(),
+    manual_open_date: null,
+    manual_open_from: null,
+    manual_open_to: null,
+    manual_open_message: null,
+    manual_open_at: null,
   }).eq('id', 'store');
   if (error) { toast('Erro ao fechar a loja: ' + error.message, true); return; }
-  gs.storeConfig = { ...(gs.storeConfig || {}), manual_closed_date: todayISO, manual_closed_message: message || null };
+  gs.storeConfig = {
+    ...(gs.storeConfig || {}),
+    manual_closed_date: todayISO, manual_closed_message: message || null,
+    manual_open_date: null, manual_open_from: null, manual_open_to: null, manual_open_message: null,
+  };
   pdvRenderCloseStoreButtons();
-  toast('Loja fechada para hoje.');
+  toast('Loja fechada manualmente para hoje.');
   logAuditAction('close_store_manual', 'config', 'store', 'Fechamento manual da loja', null, { date: todayISO, message: message || '' });
 }
 
@@ -2747,6 +2777,175 @@ async function pdvReopenStoreToday() {
   pdvRenderCloseStoreButtons();
   toast('Loja reaberta.');
   logAuditAction('reopen_store_manual', 'config', 'store', 'Reabertura manual da loja', null, {});
+}
+
+/* ══════════════════════════════════════════════════════════
+   ABERTURA MANUAL EXCEPCIONAL — "Abrir loja hoje"
+   Contraparte de "Fechar loja hoje": permite abrir a loja hoje num horário
+   diferente/além do horário semanal normal (ex.: dia que normalmente
+   estaria fechado pela programação semanal), SEM alterar o horário semanal
+   salvo em store_settings.schedule. Só vale para o dia de hoje (America/
+   Sao_Paulo) — segue o mesmo padrão de manual_closed_date acima: nenhuma
+   rotina de limpeza é necessária, a comparação de data já garante que perde
+   efeito sozinho no dia seguinte.
+══════════════════════════════════════════════════════════ */
+function isStoreManuallyOpenToday() {
+  const d = gs.storeConfig?.manual_open_date;
+  return !!d && d === getSaoPauloDateISO()
+    && !!gs.storeConfig?.manual_open_from && !!gs.storeConfig?.manual_open_to;
+}
+
+function pdvRenderOpenStoreButtons() {
+  const openToday = isStoreManuallyOpenToday();
+  document.querySelectorAll('.js-open-store-btn').forEach(btn => {
+    btn.classList.toggle('is-open-exception', openToday);
+    const label = btn.querySelector('.btn-sound-label');
+    if (openToday) {
+      const from = toMinutes(gs.storeConfig.manual_open_from);
+      const to   = toMinutes(gs.storeConfig.manual_open_to);
+      const range = `${formatMinutes(from)} às ${formatMinutes(to)}`;
+      btn.title = `Loja aberta excepcionalmente hoje (${range}) — clique para cancelar`;
+      if (label) label.textContent = 'Cancelar abertura de hoje';
+    } else {
+      btn.title = 'Abrir loja hoje';
+      if (label) label.textContent = 'Abrir loja hoje';
+    }
+  });
+}
+
+function pdvOpenOpenStoreModal() {
+  if (isStoreManuallyOpenToday()) { pdvOpenCancelOpenStoreModal(); return; }
+
+  /* Prioridade do fechamento manual (item 8): deixar "abrir hoje" gravar em
+     cima de um "fechar hoje" já ativo criaria um estado onde a loja fica
+     configurada como aberta excepcionalmente, mas isStoreOpenNow() a trata
+     como fechada mesmo assim (fechamento sempre vence) — confuso e
+     silenciosamente sem efeito nenhum. Mais seguro impedir a ação aqui e
+     pedir pra reabrir primeiro, do que fingir que "abrir hoje" funcionou. */
+  if (isStoreManuallyClosedToday()) {
+    toast('A loja está fechada manualmente hoje. Reabra a loja (botão "Loja fechada hoje") antes de configurar uma abertura excepcional.', true);
+    return;
+  }
+
+  const message = `
+    <p>A loja passa a atender hoje no horário abaixo, além/no lugar do horário semanal normal — sem alterar o horário semanal salvo em Configurações.</p>
+    <div class="form-row" style="margin-top:10px">
+      <div class="form-group"><label class="form-label">Horário de abertura</label><input type="time" id="open-store-from" class="form-input" placeholder="17:30"></div>
+      <div class="form-group"><label class="form-label">Horário de fechamento</label><input type="time" id="open-store-to" class="form-input" placeholder="23:00"></div>
+    </div>
+    <label class="pdv-section-label" style="display:block;margin-top:10px">Mensagem opcional</label>
+    <textarea id="open-store-note" maxlength="${MANUAL_CLOSE_MAX_LEN}" rows="3"
+      style="width:100%;resize:vertical;padding:8px;border-radius:8px;border:1.5px solid var(--border);font:inherit"
+      placeholder="Ex.: Hoje estaremos atendendo normalmente."></textarea>`;
+
+  showConfirmModal({
+    title: 'Abrir loja hoje',
+    message,
+    confirmText: 'Abrir loja hoje',
+    cancelText: 'Cancelar',
+  }).then(async (ok) => {
+    if (!ok) return;
+    const from = elid('open-store-from')?.value || '';
+    const to   = elid('open-store-to')?.value || '';
+    const note = (elid('open-store-note')?.value || '').trim().slice(0, MANUAL_CLOSE_MAX_LEN);
+    await pdvSetStoreOpenToday(from, to, note);
+  });
+}
+
+function pdvOpenCancelOpenStoreModal() {
+  showConfirmModal({
+    title: 'Cancelar abertura de hoje',
+    message: '<p>A loja volta a seguir apenas o horário semanal normal de funcionamento imediatamente.</p>',
+    confirmText: 'Cancelar abertura de hoje',
+    cancelText: 'Voltar',
+  }).then(async (ok) => { if (ok) await pdvCancelStoreOpenToday(); });
+}
+
+async function pdvSetStoreOpenToday(fromRaw, toRaw, message) {
+  if (!fromRaw) { toast('Informe o horário de abertura.', true); return; }
+  if (!toRaw)   { toast('Informe o horário de fechamento.', true); return; }
+  const from = toMinutes(fromRaw);
+  const to   = toMinutes(toRaw);
+  if (to <= from) { toast('O horário de fechamento deve ser depois do horário de abertura.', true); return; }
+
+  const todayISO = getSaoPauloDateISO();
+  const { error } = await getSb().from('store_settings').update({
+    manual_open_date: todayISO,
+    manual_open_from: fromRaw,
+    manual_open_to: toRaw,
+    manual_open_message: message || null,
+    manual_open_at: new Date().toISOString(),
+  }).eq('id', 'store');
+  if (error) { toast('Erro ao configurar abertura excepcional: ' + error.message, true); return; }
+
+  gs.storeConfig = {
+    ...(gs.storeConfig || {}),
+    manual_open_date: todayISO, manual_open_from: fromRaw, manual_open_to: toRaw, manual_open_message: message || null,
+  };
+  pdvRenderCloseStoreButtons();
+  toast(`Loja configurada para abrir hoje das ${formatMinutes(from)} às ${formatMinutes(to)}.`);
+  logAuditAction('open_store_manual', 'config', 'store', 'Abertura manual excepcional da loja', null,
+    { date: todayISO, from: fromRaw, to: toRaw, message: message || '' });
+}
+
+async function pdvCancelStoreOpenToday() {
+  const { error } = await getSb().from('store_settings').update({
+    manual_open_date: null,
+    manual_open_from: null,
+    manual_open_to: null,
+    manual_open_message: null,
+    manual_open_at: null,
+  }).eq('id', 'store');
+  if (error) { toast('Erro ao cancelar a abertura excepcional: ' + error.message, true); return; }
+  gs.storeConfig = { ...(gs.storeConfig || {}), manual_open_date: null, manual_open_from: null, manual_open_to: null, manual_open_message: null };
+  pdvRenderCloseStoreButtons();
+  toast('Abertura excepcional de hoje cancelada.');
+  logAuditAction('cancel_open_store_manual', 'config', 'store', 'Cancelamento da abertura manual excepcional', null, {});
+}
+
+/* Horário de hoje (America/Sao_Paulo) segundo o schedule semanal salvo —
+   mesma lógica de isStoreOpenNow() em script.js, mas script.js não é
+   carregado em gestao.html (gestao.js já duplica buildWeekMap/toMinutes/etc
+   acima pelo mesmo motivo). Usado só pelo card de status abaixo. */
+function isOpenByWeeklyScheduleNow() {
+  const raw = typeof gs.storeConfig?.schedule === 'string' ? gs.storeConfig.schedule : (gs.storeConfig?.schedule?.text || '');
+  const weekMap = buildWeekMap(raw) || buildWeekMap(FALLBACK_SCHEDULE_TEXT);
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now);
+  const DAY_MAP = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
+  const weekday = DAY_MAP[parts.find(p => p.type === 'weekday')?.value] ?? 0;
+  const cur = Number(parts.find(p => p.type === 'hour')?.value ?? 0) * 60 + Number(parts.find(p => p.type === 'minute')?.value ?? 0);
+  const today = weekMap[weekday];
+  return !!(today.open && today.from != null && today.to != null && cur >= today.from && cur < today.to);
+}
+
+/* Card "Funcionamento da loja hoje" em Configurações (item 14 do pedido) —
+   estado atual em texto simples, sempre recalculado (nunca cacheado), pra
+   refletir na hora qualquer ação de fechar/abrir/cancelar/reabrir. */
+function renderStoreTodayStatus() {
+  const box = elid('store-today-status');
+  if (!box) return;
+
+  if (isStoreManuallyClosedToday()) {
+    const msg = gs.storeConfig?.manual_closed_message;
+    box.innerHTML = `<p class="g-card-desc"><i class="fas fa-store-slash" style="color:var(--danger)"></i> <strong>Fechada manualmente hoje.</strong>${msg ? ' ' + esc(msg) : ''}</p>`;
+    return;
+  }
+
+  if (isStoreManuallyOpenToday()) {
+    const from = formatMinutes(toMinutes(gs.storeConfig.manual_open_from));
+    const to   = formatMinutes(toMinutes(gs.storeConfig.manual_open_to));
+    const msg  = gs.storeConfig?.manual_open_message;
+    box.innerHTML = `<p class="g-card-desc"><i class="fas fa-store" style="color:var(--success)"></i> <strong>Aberta excepcionalmente hoje.</strong> Hoje: ${from} às ${to}.${msg ? ' ' + esc(msg) : ''}</p>`;
+    return;
+  }
+
+  const openNow = isOpenByWeeklyScheduleNow();
+  box.innerHTML = openNow
+    ? `<p class="g-card-desc"><i class="fas fa-circle-check" style="color:var(--success)"></i> <strong>Aberta pelo horário semanal.</strong></p>`
+    : `<p class="g-card-desc"><i class="fas fa-clock"></i> <strong>Fechada pelo horário semanal.</strong></p>`;
 }
 
 function normalizeWhatsApp(raw) {
@@ -3480,6 +3679,8 @@ const _FRIENDLY_ACTIONS = {
   update_store_config:    'Configurações da loja alteradas',
   close_store_manual:     'Loja fechada manualmente por hoje',
   reopen_store_manual:    'Loja reaberta manualmente',
+  open_store_manual:      'Loja aberta excepcionalmente por hoje',
+  cancel_open_store_manual: 'Abertura excepcional de hoje cancelada',
   save_location:          'Localização da loja atualizada',
   update_location:        'Localização da loja atualizada',
   export_report:          'Exportação realizada',

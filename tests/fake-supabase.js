@@ -44,24 +44,45 @@
     },
   };
 
-  function makeQueryBuilder() {
+  // Resposta default por tabela (data=[]/error=null, igual o builder sempre
+  // devolveu) — sobrescrita por teste via window.__testAuth.setTableResponse().
+  // Não muda nada do comportamento já existente enquanto nenhum teste chamar
+  // isso: toda tabela sem handler registrado continua caindo no default.
+  state.tableResponses = {};
+  state.fromCalls = [];
+
+  function makeQueryBuilder(table) {
     // Builder genérico: qualquer método de encadeamento (.select/.eq/...)
-    // devolve o próprio builder, e o await final resolve sempre a mesma
-    // resposta — suficiente pra tudo que gestao.js faz fora do PIN
-    // (produtos/pedidos/config), que já trata data=[]/null com fallback.
-    const result = { data: [], error: null };
+    // devolve o próprio builder e acumula filtros/payload; o await final
+    // resolve a resposta registrada pra esta tabela (setTableResponse) ou,
+    // por padrão, {data: [], error: null} — suficiente pra tudo que
+    // gestao.js faz fora do PIN (produtos/pedidos/config), que já trata
+    // data=[]/null com fallback.
+    let method = 'select';
+    let payload = null;
+    const filters = {};
     const builder = {
       select: () => builder,
       order: () => builder,
       limit: () => builder,
-      eq: () => builder,
+      eq: (col, val) => { filters[col] = val; return builder; },
       single: () => builder,
-      insert: () => builder,
-      update: () => builder,
-      upsert: () => builder,
-      delete: () => builder,
-      then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
-      catch: (reject) => Promise.resolve(result).catch(reject),
+      insert: (data) => { method = 'insert'; payload = data; return builder; },
+      update: (data) => { method = 'update'; payload = data; return builder; },
+      upsert: (data) => { method = 'upsert'; payload = data; return builder; },
+      delete: () => { method = 'delete'; return builder; },
+      then: (resolve, reject) => {
+        const call = { table, method, payload, filters: { ...filters } };
+        state.fromCalls.push(call);
+        const handler = state.tableResponses[table];
+        const result = handler ? handler(call) : { data: [], error: null };
+        return Promise.resolve(result).then(resolve, reject);
+      },
+      catch: (reject) => {
+        const handler = state.tableResponses[table];
+        const result = handler ? handler({ table, method, payload, filters: { ...filters } }) : { data: [], error: null };
+        return Promise.resolve(result).catch(reject);
+      },
     };
     return builder;
   }
@@ -76,6 +97,8 @@
     setRpcResponse(name, fn) { state.rpcResponses[name] = fn; },
     getRpcCalls: () => state.rpcCalls.slice(),
     getSession: () => state.session,
+    setTableResponse(table, fn) { state.tableResponses[table] = fn; },
+    getFromCalls: () => state.fromCalls.slice(),
   };
 
   window.supabaseClient = {
@@ -105,6 +128,6 @@
       const result = handler ? handler(params) : { data: null, error: { message: 'rpc_not_mocked: ' + name } };
       return Promise.resolve(result);
     },
-    from() { return makeQueryBuilder(); },
+    from(table) { return makeQueryBuilder(table); },
   };
 })();

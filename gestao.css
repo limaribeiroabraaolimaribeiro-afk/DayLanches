@@ -256,6 +256,14 @@ a { text-decoration: none; color: inherit; }
   color: var(--danger);
 }
 
+/* Botão "Abrir loja hoje" — mesma forma acima, mas em verde quando existe
+   abertura excepcional ativa hoje (vira "Cancelar abertura de hoje"). */
+.btn-close-store.is-open-exception {
+  background: var(--success-bg);
+  border-color: var(--success);
+  color: #16A34A;
+}
+
 /* Botão "Bloquear áreas administrativas" no cabeçalho — mesma forma dos
    demais pills do header (.btn-sound/.btn-close-store), só que sempre em
    destaque (âmbar) porque só aparece quando há algo pra bloquear de fato:
