@@ -3258,7 +3258,7 @@ function getStoreStatus() {
 
 function updateStoreStatus() {
   const status = isStoreOpenNow();
-  const { isOpen, manualClosed, manualClosedMessage, manualOpen, manualOpenPhase, manualOpenFrom, manualOpenTo, weekMap, closeTime } = status;
+  const { isOpen, manualClosed, manualClosedMessage, manualOpen, manualOpenMessage, manualOpenPhase, manualOpenFrom, manualOpenTo, weekMap, closeTime } = status;
 
   const banner  = el('store-status-banner');
   const badge   = el('menu-status-badge');
@@ -3272,14 +3272,21 @@ function updateStoreStatus() {
     .map(r => `${r.label} das ${r.timeLabel.replace(' – ', ' às ')}`)
     .join('; ');
 
+  /* Abertura excepcional ainda não começou ("antes do horário") é uma
+     notícia positiva — a loja VAI abrir hoje — não pode herdar o vermelho
+     de "fechada" só porque isOpen ainda é false. Usa uma classe própria
+     (mesma paleta verde de "open", ver style.css) em vez do estado binário
+     open/closed que bastava antes da abertura excepcional existir. */
+  const statusClass = isOpen ? 'open' : (manualOpen && manualOpenPhase === 'before' ? 'manual-open' : 'closed');
+
   if (banner) {
     banner.style.display = 'flex';
-    banner.className = 'store-banner ' + (isOpen ? 'open' : 'closed');
+    banner.className = 'store-banner ' + statusClass;
     if (isOpen && manualOpen) {
       banner.innerHTML = `<i class="fas fa-circle-check store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Estamos abertos agora</strong>
-           <span>Atendimento hoje até às ${manualOpenTo}.</span>
+           <span>${esc(manualOpenMessage || `Atendimento hoje até às ${manualOpenTo}.`)}</span>
          </div>`;
     } else if (isOpen) {
       banner.innerHTML = `<i class="fas fa-circle-check store-banner-ico"></i>
@@ -3297,9 +3304,12 @@ function updateStoreStatus() {
       banner.innerHTML = `<i class="fas fa-store store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Abrimos hoje excepcionalmente</strong>
-           <span>Atendimento das ${manualOpenFrom} às ${manualOpenTo}.</span>
+           <span>${esc(manualOpenMessage || `Atendimento das ${manualOpenFrom} às ${manualOpenTo}.`)}</span>
          </div>`;
     } else if (manualOpen) {
+      // Depois do horário: a abertura excepcional já encerrou de verdade —
+      // nunca reaproveitar manualOpenMessage aqui, senão uma mensagem como
+      // "Estamos atendendo normalmente" ficaria enganosa com a loja fechada.
       banner.innerHTML = `<i class="fas fa-store-slash store-banner-ico"></i>
          <div class="store-banner-text">
            <strong>Encerramos o atendimento de hoje</strong>
@@ -3314,7 +3324,7 @@ function updateStoreStatus() {
   }
 
   if (badge && txt) {
-    badge.className = 'menu-status-badge ' + (isOpen ? 'open' : 'closed');
+    badge.className = 'menu-status-badge ' + statusClass;
     txt.textContent = status.message;
   }
 

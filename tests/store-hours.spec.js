@@ -172,3 +172,118 @@ test.describe('isStoreOpenNow() — abertura manual excepcional ("Abrir loja hoj
     expect(status.isOpen).toBe(false);
   });
 });
+
+/* ══════════════════════════════════════════════════════════
+   updateStoreStatus() — banner do cardápio: cor e mensagem personalizada
+   Bug relatado: abertura excepcional "antes do horário" herdava o vermelho
+   de "fechada" (banner.className só conhecia open/closed) e o texto usava
+   `Atendimento das ${from} às ${to}.` hardcoded, ignorando manual_open_message
+   mesmo quando preenchido no Gestão.
+══════════════════════════════════════════════════════════ */
+async function renderBanner(page, cfg) {
+  return page.evaluate((c) => {
+    storeConfig = c;
+    updateStoreStatus();
+    const banner = document.getElementById('store-status-banner');
+    const badge  = document.getElementById('menu-status-badge');
+    return {
+      bannerClass: banner?.className || '',
+      bannerText:  banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      badgeClass:  badge?.className || '',
+    };
+  }, cfg);
+}
+
+test.describe('updateStoreStatus() — banner do cardápio (abertura manual excepcional)', () => {
+  // 1 — antes do horário usa estilo VERDE, não vermelho
+  test('antes do horário: banner e badge usam a classe verde "manual-open", não "closed"', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T14:00:00-03:00'); // segunda, normalmente fechada
+    const r = await renderBanner(page, {
+      manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
+    });
+    expect(r.bannerClass).toBe('store-banner manual-open');
+    expect(r.bannerClass).not.toContain('closed');
+    expect(r.badgeClass).toContain('manual-open');
+    expect(r.badgeClass).not.toContain('closed');
+    expect(r.bannerText).toContain('Abrimos hoje excepcionalmente');
+  });
+
+  // 2 — manual_open_message aparece ANTES do horário, no lugar do texto hardcoded
+  test('antes do horário: manual_open_message aparece no banner (não o texto fixo de horário)', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T14:00:00-03:00');
+    const customMsg = 'Hoje tem DayLanches! 🍔 Estamos atendendo normalmente das 17:30 às 23:00.';
+    const r = await renderBanner(page, {
+      manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
+      manual_open_message: customMsg,
+    });
+    expect(r.bannerText).toContain(customMsg);
+    expect(r.bannerClass).toBe('store-banner manual-open');
+  });
+
+  // 3 — manual_open_message aparece DURANTE o horário
+  test('durante o horário: manual_open_message aparece no banner (não "Atendimento hoje até às ...")', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T20:00:00-03:00');
+    const customMsg = 'Hoje tem DayLanches! 🍔 Estamos atendendo normalmente das 17:30 às 23:00.';
+    const r = await renderBanner(page, {
+      manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
+      manual_open_message: customMsg,
+    });
+    expect(r.bannerText).toContain(customMsg);
+    expect(r.bannerText).toContain('Estamos abertos agora');
+    expect(r.bannerClass).toBe('store-banner open');
+  });
+
+  // 4 — sem mensagem personalizada, usa o fallback com horário (antes e durante)
+  test('sem manual_open_message: usa fallback "Atendimento das X às Y." (antes) e "Atendimento hoje até às Y." (durante)', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T14:00:00-03:00');
+    const before = await renderBanner(page, {
+      manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
+    });
+    expect(before.bannerText).toContain('Atendimento das 17:30 às 23:00.');
+
+    await setupStorePage(page, '2026-01-05T20:00:00-03:00'); // reinstala o clock em outro horário do mesmo dia
+    const during = await renderBanner(page, {
+      manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
+    });
+    expect(during.bannerText).toContain('Atendimento hoje até às 23:00.');
+  });
+
+  // 5 — depois do horário não reaproveita manual_open_message (senão soaria como se ainda estivesse aberta)
+  test('depois do horário: não exibe manual_open_message nem qualquer texto de "aberta" — só "Encerramos o atendimento de hoje"', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T23:30:00-03:00');
+    const r = await renderBanner(page, {
+      manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
+      manual_open_message: 'Estamos atendendo normalmente hoje!',
+    });
+    expect(r.bannerText).toContain('Encerramos o atendimento de hoje');
+    expect(r.bannerText).not.toContain('Estamos atendendo normalmente hoje!');
+    expect(r.bannerText).not.toMatch(/abertos|abrimos/i);
+  });
+
+  // 6 — fechamento manual continua vermelho e com prioridade sobre a abertura excepcional
+  test('fechamento manual (mesmo com abertura excepcional configurada) continua com classe "closed" (vermelho)', async ({ page }) => {
+    await setupStorePage(page, '2026-01-05T20:00:00-03:00'); // dentro da janela de abertura manual
+    const r = await renderBanner(page, {
+      manual_closed_date: '2026-01-05', manual_closed_message: 'Sem atendimento hoje.',
+      manual_open_date: '2026-01-05', manual_open_from: '17:30:00', manual_open_to: '23:00:00',
+      manual_open_message: 'Estamos atendendo normalmente hoje!',
+    });
+    expect(r.bannerClass).toBe('store-banner closed');
+    expect(r.bannerText).toContain('Loja fechada hoje');
+    expect(r.bannerText).toContain('Sem atendimento hoje.');
+    expect(r.bannerText).not.toContain('Estamos atendendo normalmente hoje!');
+  });
+
+  // 7 — horário semanal normal continua funcionando (sem nenhum campo manual)
+  test('horário semanal normal: quarta 18:00 aberto (verde/open), segunda 18:00 fechado (vermelho/closed)', async ({ page }) => {
+    await setupStorePage(page, '2026-01-07T18:00:00-03:00'); // quarta
+    const open = await renderBanner(page, {});
+    expect(open.bannerClass).toBe('store-banner open');
+    expect(open.bannerText).toContain('Estamos abertos agora');
+
+    await setupStorePage(page, '2026-01-05T18:00:00-03:00'); // segunda
+    const closed = await renderBanner(page, {});
+    expect(closed.bannerClass).toBe('store-banner closed');
+    expect(closed.bannerText).toContain('Estamos fechados no momento');
+  });
+});
