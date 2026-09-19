@@ -3436,12 +3436,6 @@ function handleCardImgError(img, icon) {
 /* ──────────────────────────────────────────
    16. INICIALIZAÇÃO
 ────────────────────────────────────────── */
-// Limpa também o nome quando o navegador restaura a página pelo histórico.
-window.addEventListener('pageshow', () => {
-  el('f-name').value = '';
-  state.form.name = '';
-});
-
 document.addEventListener('DOMContentLoaded', async () => {
   el('f-name').value = '';
   await loadProductsFromDatabase();

@@ -66,22 +66,23 @@ test('D/E: nome informado chega ao estado e ao pedido', async ({ page }) => {
     .toEqual(['João da Silva', 'João da Silva']);
 });
 
-test('F: novo acesso e restauração não reutilizam nome', async ({ page, context }) => {
+test('F: novo acesso limpa nome e navegação preserva o nome do cliente', async ({ page, context }) => {
   await openCheckout(page);
   await page.locator('#f-name').fill('João da Silva');
+  await page.locator('#f-phone').fill('47984261357');
+  await page.locator('[onclick="goToPayment()"]').click();
+  expect(await page.evaluate(() => state.page)).toBe('payment');
+  await page.evaluate(() => goBack());
+  await expect(page.locator('#f-name')).toHaveValue('João da Silva');
+  expect(await page.evaluate(() => state.form.name)).toBe('João da Silva');
+  await page.locator('[onclick="goToPayment()"]').click();
+  expect(await page.evaluate(() => state.page)).toBe('payment');
+  expect(await page.evaluate(() => state.form.name)).toBe('João da Silva');
   await page.evaluate(() => {
-    state.form.name = 'João da Silva';
     localStorage.setItem('customer_name', state.form.name);
     sessionStorage.setItem('customer_name', state.form.name);
   });
   await page.reload();
-  await expect(page.locator('#f-name')).toHaveValue('');
-  expect(await page.evaluate(() => state.form.name)).toBe('');
-  await page.evaluate(() => {
-    document.getElementById('f-name').value = 'João da Silva';
-    state.form.name = 'João da Silva';
-    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
-  });
   await expect(page.locator('#f-name')).toHaveValue('');
   expect(await page.evaluate(() => state.form.name)).toBe('');
   const other = await context.newPage();
