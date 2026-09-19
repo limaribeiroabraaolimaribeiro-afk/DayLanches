@@ -1654,6 +1654,7 @@ function goToPayment() {
   if (!name) {
     errBox.style.display = 'flex';
     errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el('f-name').focus();
     return;
   }
 
@@ -3435,7 +3436,14 @@ function handleCardImgError(img, icon) {
 /* ──────────────────────────────────────────
    16. INICIALIZAÇÃO
 ────────────────────────────────────────── */
+// Limpa também o nome quando o navegador restaura a página pelo histórico.
+window.addEventListener('pageshow', () => {
+  el('f-name').value = '';
+  state.form.name = '';
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
+  el('f-name').value = '';
   await loadProductsFromDatabase();
   loadCart();
   refreshCartCount();
@@ -3456,11 +3464,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _found = findProductByAnyId(_pid);
     if (_found) setTimeout(() => openProductPage(_found.id), 300);
   }
-
-  /* Pre-fill: apenas nome para demonstração */
-  setTimeout(() => {
-    const fn = el('f-name'); if (fn && !fn.value) fn.value = 'Maria da Silva';
-  }, 200);
 
   /* Keyboard: ESC fecha telas abertas em ordem de prioridade */
   document.addEventListener('keydown', e => {
