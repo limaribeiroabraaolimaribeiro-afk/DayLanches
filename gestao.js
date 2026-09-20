@@ -5174,18 +5174,33 @@ async function toggleProfileActive(id, currentlyActive, name) {
    Tudo aqui passa por funções SECURITY DEFINER (RPC) — a Gestão nunca
    lê/grava direto nas tabelas print_agent_devices/activation_codes,
    que ficam com RLS travado e revogadas de anon/authenticated.
-   O único gate é "estar autenticado na Gestão", igual ao resto do app
-   (não existe hoje um nível "admin" real e funcional pra distinguir além disso).
+   As RPCs exigem um profile admin/owner ativo, identificado por auth.uid().
 ══════════════════════════════════════ */
 
+function paRpcErrorMessage(error, status, fallback) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  if ([status, error?.status, error?.statusCode, code].some(value => String(value) === '403') ||
+      code === '42501' || /not_authorized/i.test(message)) {
+    return 'Sua conta não tem permissão para gerenciar os computadores de impressão.';
+  }
+  if (['PGRST202', '42883', '42P01', 'PGRST205'].includes(code) ||
+      /function\b.*\bdoes not exist|could not find the function\b/i.test(message)) {
+    return 'Execute a migration SQL (add_print_agent_activation.sql) para usar esta funcionalidade.';
+  }
+  return fallback;
+}
+
 async function paGenerateCode() {
+  let rpcStatus;
   const actor = getCurrentActor();
   try {
-    const { data, error } = await getSb().rpc('generate_print_agent_activation_code', {
+    const { data, error, status } = await getSb().rpc('generate_print_agent_activation_code', {
       input_label: null,
       input_email: actor.email,
       expires_in_min: 30,
     });
+    rpcStatus = status;
     if (error) throw error;
 
     const row = Array.isArray(data) ? data[0] : data;
@@ -5201,7 +5216,7 @@ async function paGenerateCode() {
     toast('Código gerado. Válido por 30 minutos, uso único.');
   } catch (e) {
     console.error('[PrintAgent] Erro ao gerar código:', e);
-    toast('Erro ao gerar código. Execute a migration SQL (add_print_agent_activation.sql) antes de usar.', true);
+    toast(paRpcErrorMessage(e, rpcStatus, 'Não foi possível gerar o código de ativação. Tente novamente.'), true);
   }
 }
 
@@ -5217,13 +5232,17 @@ async function paCopyCode() {
 }
 
 async function loadPrintAgentDevices() {
+  let rpcStatus;
   try {
-    const { data, error } = await getSb().rpc('list_print_agent_devices');
+    const { data, error, status } = await getSb().rpc('list_print_agent_devices');
+    rpcStatus = status;
     if (error) throw error;
     renderPrintAgentDevices(data || []);
   } catch (e) {
+    console.error('[PrintAgent] Erro ao carregar dispositivos:', e);
     const el = elid('pa-devices-list');
-    if (el) el.innerHTML = '<p class="empty-msg">Execute a migration SQL (add_print_agent_activation.sql) para usar esta funcionalidade.</p>';
+    const message = paRpcErrorMessage(e, rpcStatus, 'Não foi possível carregar os computadores ativados. Tente novamente.');
+    if (el) el.innerHTML = `<p class="empty-msg">${message}</p>`;
   }
 }
 
