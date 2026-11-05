@@ -56,6 +56,7 @@ class ChatBotService extends EventEmitter {
       this.sessions[phone] = {
         last_message_at: null,
         last_menu_sent_at: null,
+        last_menu_or_choice_at: null,
         bot_paused_until: null,
         awaiting_order_number: false,
         created_at: now,
@@ -88,25 +89,26 @@ class ChatBotService extends EventEmitter {
 
     this._touchSession(phone, { last_message_at: now.toISOString() });
     const session = this._getSession(phone);
+    const choice = (body || '').trim();
+    const isMenuChoice = /^[1-5]$/.test(choice);
 
     /* Robô pausado para esse contato (human takeover) */
     if (session.bot_paused_until) {
-      if (new Date(session.bot_paused_until) > now) {
+      if (new Date(session.bot_paused_until) > now && !isMenuChoice) {
         this._log(`Mensagem de ${phone} ignorada (atendente assumiu).`, 'info');
         return null;
       }
-      /* Pausa expirou → reativar robô */
+      /* Outra escolha numerica e uma solicitacao explicita para voltar ao robo. */
       this._touchSession(phone, { bot_paused_until: null });
     }
 
     /* Expiração de sessão */
     const expireMs = (cfg.botMenuExpireHours || 12) * 3600000;
-    const expired =
-      !session.last_menu_sent_at ||
-      now - new Date(session.last_menu_sent_at) >= expireMs;
+    const lastSessionAt = session.last_menu_or_choice_at || session.last_menu_sent_at;
+    const expired = !lastSessionAt || now - new Date(lastSessionAt) >= expireMs;
 
     /* Aguardando número do pedido (opção 2 já foi escolhida) */
-    if (session.awaiting_order_number && !expired) {
+    if (session.awaiting_order_number && !expired && !isMenuChoice) {
       const orderNum = (body || '').trim().toUpperCase();
       this._touchSession(phone, { awaiting_order_number: false });
       const reply = await this._lookupOrder(orderNum);
@@ -115,17 +117,24 @@ class ChatBotService extends EventEmitter {
     }
 
     /* Sessão nova ou expirada → enviar menu */
-    if (expired) {
+    if (expired && !isMenuChoice) {
       this._touchSession(phone, {
         last_menu_sent_at: now.toISOString(),
+        last_menu_or_choice_at: now.toISOString(),
         awaiting_order_number: false,
       });
       this._log(`Menu inicial enviado para ${phone}.`, 'success');
       return { jid: from, text: MENU };
     }
 
-    /* Processar escolha do menu */
-    const choice = (body || '').trim();
+    /* Cada opcao valida substitui a anterior, inclusive enquanto aguarda
+       numero de pedido. Repetir uma opcao ou escolher outra sempre responde. */
+    if (isMenuChoice) {
+      this._touchSession(phone, {
+        last_menu_or_choice_at: now.toISOString(),
+        awaiting_order_number: false,
+      });
+    }
     let reply;
 
     switch (choice) {
