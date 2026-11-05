@@ -25,6 +25,7 @@ const config = {
   botEnabled: process.env.BOT_ENABLED !== 'false',
   botBusinessHours: process.env.BOT_BUSINESS_HOURS || 'Quarta a domingo, das 17h30 as 23h',
   botMenuExpireHours: Number(process.env.BOT_MENU_EXPIRE_HOURS || 12),
+  botMaxMessageAgeMinutes: Math.max(1, Number(process.env.BOT_MAX_MESSAGE_AGE_MINUTES || 15) || 15),
   botHandoffPauseHours: Number(process.env.BOT_HANDOFF_PAUSE_HOURS || 4),
 
   sessionsFile: process.env.SESSIONS_FILE || './data/bot-sessions.json',
