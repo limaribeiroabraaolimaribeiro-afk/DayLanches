@@ -7,6 +7,7 @@ const config = require('./config');
 const EvolutionClient = require('./evolution-client');
 const parseEvolutionMessage = require('./parse-evolution-message');
 const ChatBotService = require('./chat-bot-service');
+const { IncomingMessageGuard } = require('./incoming-message-guard');
 const makeOrderLookup = require('./order-lookup');
 
 const MAX_BODY_BYTES = 1024 * 1024; /* 1MB — mensagem de texto nao chega perto disso */
@@ -39,6 +40,10 @@ const chatBot = new ChatBotService(
 );
 
 chatBot.on('log', (msg, level) => log('BOT', `${level === 'error' ? '⚠ ' : ''}${msg}`));
+
+const incomingGuard = new IncomingMessageGuard({
+  maxAgeMs: config.botMaxMessageAgeMinutes * 60 * 1000,
+});
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -108,6 +113,14 @@ async function handleWebhook(req, res) {
     try {
       const parsed = parseEvolutionMessage(item);
       if (!parsed) continue;
+      // No reply to self, groups, or message-less notification events.
+      if (parsed.isGroup || parsed.isFromMe || !parsed.body?.trim()) continue;
+
+      const verdict = incomingGuard.check(item);
+      if (!verdict.accept) {
+        log('WHATSAPP', `Evento ignorado (${verdict.reason}) de ${EvolutionClient.jidToNumber(parsed.from)}.`);
+        continue;
+      }
 
       log('PEDIDO', `Mensagem recebida de ${EvolutionClient.jidToNumber(parsed.from)}.`);
 
