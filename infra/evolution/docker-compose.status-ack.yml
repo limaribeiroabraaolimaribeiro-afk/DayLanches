@@ -1,0 +1,10 @@
+# Habilitar somente com:
+# docker compose -f docker-compose.yml -f docker-compose.status-ack.yml up -d --build --no-deps evolution-api
+# Voltar ao upstream:
+# docker compose -f docker-compose.yml up -d --no-deps evolution-api
+services:
+  evolution-api:
+    image: daylanches/evolution-api:2.3.7-status-ack-1
+    build:
+      context: .
+      dockerfile: Dockerfile.status-ack
