@@ -1,0 +1,6 @@
+# Derivação isolada: não substitui o arquivo de composição padrão.
+# Upstream: https://github.com/evolution-foundation/evolution-api/issues/2778
+FROM evoapicloud/evolution-api:v2.3.7
+COPY patch-status-ack.cjs /tmp/patch-status-ack.cjs
+RUN node /tmp/patch-status-ack.cjs /evolution/node_modules/baileys \
+    && node --check /evolution/node_modules/baileys/lib/Socket/messages-recv.js
