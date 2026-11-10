@@ -687,6 +687,7 @@ async function loadProductsFromDatabase() {
         featured:       !!p.featured,
         hero:           !!p.hero,
         hasOptions:     withOptions.has(p.id),
+        deliveryAvailable: p.delivery_available !== false,
       }));
       console.log('Produtos carregados do Supabase:', PRODUCTS_DATA.length);
     } else {
@@ -765,6 +766,7 @@ function navigateTo(page) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   if (page === 'delivery') {
+    syncDeliveryModeForCart();
     state.geo = { lat: null, lon: null, link: '', routeLink: '', address: '', distanceKm: null, straightDistanceKm: null };
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
@@ -784,10 +786,54 @@ function goBack() {
   navigateTo(prev[state.page] || 'catalog');
 }
 
-function setDeliveryType(type) {
-  state.deliveryType = type;
+/* Produtos com "delivery_available=false" são vendidos apenas no local.
+   A checagem também é feita em um trigger do banco (pedidos de entrega). */
+function getLocalOnlyCartItems() {
+  return state.cart.filter(item => {
+    const current = findProductByAnyId(item.id);
+    return (current || item).deliveryAvailable === false;
+  });
+}
+
+function syncDeliveryModeForCart() {
+  const localOnly = getLocalOnlyCartItems();
+  const restricted = localOnly.length > 0;
+  const deliveryRadio = document.querySelector('input[name="dtype"][value="delivery"]');
+  const pickupRadio = document.querySelector('input[name="dtype"][value="pickup"]');
+  if (deliveryRadio) deliveryRadio.disabled = restricted;
+
+  if (restricted) state.deliveryType = 'pickup';
+  if (deliveryRadio) deliveryRadio.checked = state.deliveryType === 'delivery';
+  if (pickupRadio) pickupRadio.checked = state.deliveryType === 'pickup';
+
+  const note = el('delivery-local-only-note');
+  if (note) {
+    note.style.display = restricted ? 'block' : 'none';
+    if (restricted) note.textContent = '🏪 Este carrinho contém produto(s) disponível(is) apenas no local. Selecione retirada; entrega indisponível para esses itens.';
+  }
+  const option = el('opt-delivery');
+  if (option) option.style.opacity = restricted ? '.55' : '';
   const geoCard = el('geo-card');
-  if (geoCard) geoCard.style.display = type === 'pickup' ? 'none' : 'block';
+  if (geoCard) geoCard.style.display = state.deliveryType === 'pickup' ? 'none' : 'block';
+}
+
+function validateCartFulfillment() {
+  const invalid = state.deliveryType === 'delivery' ? getLocalOnlyCartItems() : [];
+  if (!invalid.length) return true;
+  showToast('O produto "' + invalid[0].name + '" é somente no local. Escolha retirada ou remova o item.');
+  syncDeliveryModeForCart();
+  navigateTo('delivery');
+  return false;
+}
+
+function setDeliveryType(type) {
+  if (type === 'delivery' && getLocalOnlyCartItems().length) {
+    showToast('Este carrinho tem produtos somente no local. Não é possível escolher entrega.');
+    syncDeliveryModeForCart();
+    return;
+  }
+  state.deliveryType = type;
+  syncDeliveryModeForCart();
   updateCartBar();
 }
 
@@ -912,6 +958,7 @@ async function blockIfManuallyClosed() {
 
 /* Fluxo InfinitePay: salva pedido → cria checkout → redireciona */
 async function handleOnlinePayment(method) {
+  if (!validateCartFulfillment()) return;
   if (state.submittingOrder) return; // trava lógica — clique/toque repetido é ignorado
   if (await blockIfManuallyClosed()) return;
 
@@ -1037,6 +1084,7 @@ async function handleOnlinePayment(method) {
 }
 
 function handleCashPayment() {
+  if (!validateCartFulfillment()) return;
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para entrega, use o botão de localização antes de continuar.');
     navigateTo('delivery');
@@ -1342,6 +1390,8 @@ function renderCartItems() {
         }
         <div class="ci-info">
           <div class="ci-name">${item.name}</div>
+          ${(findProductByAnyId(item.id) || item).deliveryAvailable === false
+            ? '<small style="color:#9a5300;font-weight:650">🏪 Somente no local — sem entrega</small>' : ''}
           <div class="ci-price">R$ ${fmt(getItemUnitPrice(item))}</div>
           ${buildCartOptionsHTML(item)}${buildCartAddonsHTML(item)}
           <div class="ci-controls">
@@ -1377,6 +1427,7 @@ function refreshCartCount() {
 }
 
 function updateCartBar() {
+  syncDeliveryModeForCart();
   const bar   = el('cart-bar');
   const waBar = el('wa-bar');
   if (!bar) return;
@@ -1418,6 +1469,7 @@ function renderProducts() {
     bebidas: '🥤 Bebidas',
     salgadinhos: '🥨 Salgadinhos',
     adicionais: '🍬 Adicionais',
+    conveniencia: '🏪 Conveniência',
   };
 
   const q = state.search.toLowerCase().trim();
@@ -1481,16 +1533,21 @@ function buildProductCard(p) {
     : `<div class="card-img-placeholder"><i class="fas ${icon}"></i><span>Foto em breve</span></div>`;
 
   const ctrlHTML = buildProductControl(p, qty);
+  const localOnlyHTML = p.deliveryAvailable === false
+    ? '<span class="badge badge-novo" style="background:#fff1db;color:#8a4200;top:8px;left:8px">Somente no local</span>'
+    : '';
 
   return `
     <div class="product-card" data-id="${p.id}" onclick="openProductPage('${p.id}')">
       <div class="card-img-wrap">
         ${imgHTML}
         ${badgeHTML}
+        ${localOnlyHTML}
       </div>
       <div class="card-body">
         <h3 class="card-name">${p.name}</h3>
         <p class="card-desc">${p.desc}</p>
+        ${p.deliveryAvailable === false ? '<p style="font-size:.78rem;color:#9a5300;font-weight:650;margin:6px 0">🏪 Sem entrega · Retirada ou consumo no local</p>' : ''}
         <div class="card-footer">
           <span class="card-price">R$ ${fmt(p.price)}</span>
           ${ctrlHTML}
@@ -1544,6 +1601,10 @@ function handleSearch(val) {
    8. CHECKOUT — ENTREGA
 ────────────────────────────────────────── */
 function goToCheckout() {
+  syncDeliveryModeForCart();
+  if (getLocalOnlyCartItems().length) {
+    showToast('Itens somente no local: a retirada será selecionada automaticamente.');
+  }
   if (state.cart.length === 0) {
     showToast('Adicione produtos ao carrinho primeiro');
     return;
@@ -1642,6 +1703,7 @@ function formatPhone(input) {
 }
 
 function goToPayment() {
+  if (!validateCartFulfillment()) return;
   const name      = document.getElementById('f-name').value.trim();
   const phoneInput = document.getElementById('f-phone');
   const phone     = phoneInput?.value.trim() || '';
@@ -1790,6 +1852,7 @@ function updateConfirmationPage() {
    13. WHATSAPP
 ────────────────────────────────────────── */
 async function sendWhatsApp() {
+  if (!validateCartFulfillment()) return false;
   if (state.submittingOrder) return false; // trava lógica — clique/toque repetido é ignorado
   if (await blockIfManuallyClosed()) return false;
   if (state.deliveryType === 'delivery' && state.geo.deliveryOutOfRange) {
@@ -1899,6 +1962,7 @@ const PP_CAT_LABELS = {
   hamburguer: '🍔 Hambúrguer', hotdog: '🌭 Hot Dogs',
   bebidas: '🥤 Bebidas', salgadinhos: '🥨 Salgadinhos',
   adicionais: '🍬 Adicionais',
+  conveniencia: '🏪 Conveniência',
 };
 
 function getPpProduct() {
@@ -2346,12 +2410,19 @@ function openProductPage(id) {
   /* Badge */
   const badgeMap = { mais: ['badge-mais','Mais pedido'], novo: ['badge-novo','Novo'], combo: ['badge-combo','3 adicionais grátis'], dest: ['badge-dest','Destaque'] };
   const slot = el('pp-badge-slot');
-  if (slot) slot.innerHTML = p.badges.length ? `<span class="badge ${badgeMap[p.badges[0]][0]}">${badgeMap[p.badges[0]][1]}</span>` : '';
+  if (slot) {
+    const normalBadge = p.badges.length ? `<span class="badge ${badgeMap[p.badges[0]][0]}">${badgeMap[p.badges[0]][1]}</span>` : '';
+    slot.innerHTML = p.deliveryAvailable === false
+      ? '<span class="badge badge-novo" style="background:#fff1db;color:#8a4200">Somente no local</span>'
+      : normalBadge;
+  }
 
   /* Textos */
   el('pp-name').textContent  = p.name;
   el('pp-price').textContent = `R$ ${fmt(p.price)}`;
-  el('pp-desc').textContent  = p.desc;
+  el('pp-desc').textContent  = p.deliveryAvailable === false
+    ? p.desc + ' · Disponível para retirada ou consumo no local. Não fazemos entrega deste produto.'
+    : p.desc;
   el('pp-cat-tag').textContent = PP_CAT_LABELS[p.cat] || p.cat;
   el('pp-qty-val').textContent = ppQty;
 
@@ -2715,6 +2786,7 @@ function buildSpResultCard(p) {
       <div class="card-body">
         <h3 class="card-name">${p.name}</h3>
         <p class="card-desc">${p.desc}</p>
+        ${p.deliveryAvailable === false ? '<p style="font-size:.78rem;color:#9a5300;font-weight:650;margin:6px 0">🏪 Sem entrega · Retirada ou consumo no local</p>' : ''}
         <div class="card-footer">
           <span class="card-price">R$ ${fmt(p.price)}</span>
           ${btnHTML}

@@ -78,6 +78,7 @@
             <button class="cat-chip" onclick="filterCat('hamburguer', this)">🍔 Hambúrguer</button>
             <button class="cat-chip" onclick="filterCat('hotdog', this)">🌭 Hot Dogs</button>
             <button class="cat-chip" onclick="filterCat('bebidas', this)">🥤 Bebidas</button>
+            <button class="cat-chip" onclick="filterCat('conveniencia', this)">🏪 Conveniência</button>
             <button class="cat-chip" onclick="filterCat('salgadinhos', this)">🥨 Salgadinhos</button>
             <button class="cat-chip" onclick="filterCat('adicionais', this)">🍬 Adicionais</button>
           </div>
@@ -186,6 +187,7 @@
             </div>
           </label>
         </div>
+        <p id="delivery-local-only-note" role="status" style="display:none;margin:12px 0 0;padding:11px 14px;border-radius:10px;background:#fff3e0;color:#804200;font-size:.84rem;font-weight:600"></p>
       </div>
 
       <div class="ck-card">
@@ -530,6 +532,7 @@
           <button class="sp-chip" onclick="searchGoCategory('hotdog')">🌭 Hot Dogs</button>
           <button class="sp-chip" onclick="searchGoCategory('porcoes')">🍟 Porções</button>
           <button class="sp-chip" onclick="searchGoCategory('bebidas')">🥤 Bebidas</button>
+          <button class="sp-chip" onclick="searchGoCategory('conveniencia')">🏪 Conveniência</button>
           <button class="sp-chip" onclick="searchGoCategory('combos')">🎁 Combos</button>
           <button class="sp-chip" onclick="searchGoCategory('artesanais')">🥩 Artesanais</button>
           <button class="sp-chip" onclick="searchGoCategory('salgadinhos')">🥨 Salgadinhos</button>
@@ -648,6 +651,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=6"></script>
-<script src="script.js?v=22"></script>
+<script src="script.js?v=23"></script>
 </body>
 </html>

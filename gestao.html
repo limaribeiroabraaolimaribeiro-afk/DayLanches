@@ -896,6 +896,7 @@
                 <option value="bebidas">Bebidas</option>
                 <option value="salgadinhos">Salgadinhos</option>
                 <option value="adicionais">Adicionais</option>
+                <option value="conveniencia">Conveniência</option>
               </select>
             </div>
             <div class="form-group">
@@ -911,6 +912,11 @@
               <p class="form-hint">O selo aparece em cima do produto no cardápio.</p>
             </div>
           </div>
+          <label class="pf-check-label" style="margin:12px 0 8px">
+            <input type="checkbox" id="p-delivery-available" checked>
+            <span>Disponível para entrega</span>
+          </label>
+          <p class="form-hint" style="margin:0 0 14px">Desmarque para produtos disponíveis somente no local. A retirada e a venda no balcão continuam permitidas.</p>
           <label class="pf-check-label">
             <input type="checkbox" id="p-active" checked>
             <span>Produto ativo — aparece no cardápio quando marcado</span>
@@ -1263,7 +1269,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=6"></script>
 <script src="products-data.js?v=1"></script>
-<script src="gestao.js?v=37"></script>
+<script src="gestao.js?v=38"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
