@@ -1,4 +1,4 @@
--- Day Lanches: caixa operacional para funcionários, financeiro exclusivo de admin/owner.
+-- Day Lanches: caixa operacional para funcionários, financeiro exclusivo da dona (role=admin).
 -- Aplicar antes de publicar a nova gestao.js. Banco é a autoridade: não confiar no PIN visual.
 -- Não altera perfis, pedidos ou lançamentos existentes.
 
@@ -21,7 +21,7 @@ as $$
     select 1 from public.profiles p
     where p.id = (select auth.uid())
       and coalesce(p.is_active, true)
-      and p.role in ('owner', 'admin')
+      and p.role = 'admin'
   );
 $$;
 
@@ -30,7 +30,7 @@ revoke all on function public.cash_can_view_financials() from public, anon;
 grant execute on function public.cash_can_operate() to authenticated;
 grant execute on function public.cash_can_view_financials() to authenticated;
 
--- Os totais históricos nunca podem ser lidos/modificados pelo login operacional.
+-- Os totais históricos só podem ser lidos pelo perfil admin (dona da loja).
 -- INSERT/UPDATE/DELETE passam exclusivamente pelas funções verificadas abaixo.
 alter table public.cash_closings enable row level security;
 drop policy if exists "Auth users manage cash_closings" on public.cash_closings;
