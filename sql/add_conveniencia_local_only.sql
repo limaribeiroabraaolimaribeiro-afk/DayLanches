@@ -46,8 +46,11 @@ begin
     end if;
 
     if not found or matched_product.id is null then
-      raise exception 'Produto indisponível no catálogo: %', coalesce(item_name, 'sem identificação')
-        using errcode = '23514';
+      -- Não interrompe vendas legadas que usam nomes/IDs de itens já removidos
+      -- do catálogo. Produtos atuais marcados sem entrega continuam bloqueados
+      -- por ID ou nome; para autenticação forte de todos os itens, é preciso
+      -- migrar também os catálogos legados para IDs estáveis.
+      continue;
     end if;
 
     if matched_product.delivery_available is false then
