@@ -73,10 +73,10 @@ test.describe('Caixa — segregação do financeiro', () => {
     await expect(page.locator('#caixa-content')).not.toContainText('Esperado no caixa');
   });
 
-  test('owner reconhecido pelo banco consulta financeiro sem PIN', async ({ page }) => {
+  test('owner técnico sem papel de dona também não consulta o caixa financeiro', async ({ page }) => {
     await loginAs(page, ownerUser());
-    await setCashState(page, { open: true, manager: true, owner: true });
+    await setCashState(page, { open: true, manager: false, owner: true });
     await page.evaluate(() => showSection('caixa'));
-    await expect(page.locator('#caixa-content')).toContainText('Esperado no caixa');
+    await expect(page.locator('#caixa-content')).not.toContainText('Esperado no caixa');
   });
 });
