@@ -4924,7 +4924,7 @@ function renderCaixaAberto(c, { canViewFinance = false, canUnlock = false } = {}
 
 async function renderCaixaHistorico(seq, bypassPin) {
   const { data, error } = await getSb().from('cash_closings')
-    .select('closed_at,opening_amount,cash_sales_total,pix_sales_total,card_sales_total,online_sales_total,expected_cash_amount,counted_cash_amount,difference_amount')
+    .select('closed_at,expected_cash_amount,counted_cash_amount,difference_amount')
     .eq('status', 'fechado').order('closed_at', { ascending: false }).limit(10);
   if (error) return;
   if (seq !== _caixaRenderSeq || gs.section !== 'caixa' ||
@@ -4933,16 +4933,13 @@ async function renderCaixaHistorico(seq, bypassPin) {
   if (!target) return;
   const rows = (data || []).map(c => {
     const d = c.closed_at ? new Date(c.closed_at).toLocaleString('pt-BR') : '—';
-    const total = Number(c.cash_sales_total || 0) + Number(c.pix_sales_total || 0) +
-      Number(c.card_sales_total || 0) + Number(c.online_sales_total || 0);
-    return `<tr><td>${esc(d)}</td><td>R$ ${fmt(total)}</td>
-      <td>R$ ${fmt(c.expected_cash_amount || 0)}</td>
+    return `<tr><td>${esc(d)}</td><td>R$ ${fmt(c.expected_cash_amount || 0)}</td>
       <td>${c.counted_cash_amount == null ? '—' : 'R$ ' + fmt(c.counted_cash_amount)}</td>
       <td>${c.difference_amount == null ? '—' : 'R$ ' + fmt(c.difference_amount)}</td></tr>`;
   }).join('');
   target.innerHTML = `<div class="g-card">
     <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-history"></i> Histórico de fechamentos (dona)</h2></div>
-    ${rows ? '<table class="rpt-table"><thead><tr><th>Fechamento</th><th>Vendas</th><th>Esperado</th><th>Contado</th><th>Diferença</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="empty-msg">Nenhum fechamento registrado.</p>'}
+    ${rows ? '<table class="rpt-table"><thead><tr><th>Fechamento</th><th>Esperado</th><th>Contado</th><th>Diferença</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="empty-msg">Nenhum fechamento registrado.</p>'}
   </div>`;
 }
 
