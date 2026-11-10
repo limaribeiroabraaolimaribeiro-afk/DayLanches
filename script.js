@@ -766,6 +766,7 @@ function navigateTo(page) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   if (page === 'delivery') {
+    syncDeliveryModeForCart();
     state.geo = { lat: null, lon: null, link: '', routeLink: '', address: '', distanceKm: null, straightDistanceKm: null };
     const btn = el('btn-geo');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-location-dot"></i> Usar minha localização atual'; btn.classList.remove('btn-geo-done'); }
@@ -785,10 +786,54 @@ function goBack() {
   navigateTo(prev[state.page] || 'catalog');
 }
 
-function setDeliveryType(type) {
-  state.deliveryType = type;
+/* Produtos com "delivery_available=false" são vendidos apenas no local.
+   A checagem também é feita em um trigger do banco (pedidos de entrega). */
+function getLocalOnlyCartItems() {
+  return state.cart.filter(item => {
+    const current = findProductByAnyId(item.id);
+    return (current || item).deliveryAvailable === false;
+  });
+}
+
+function syncDeliveryModeForCart() {
+  const localOnly = getLocalOnlyCartItems();
+  const restricted = localOnly.length > 0;
+  const deliveryRadio = document.querySelector('input[name="dtype"][value="delivery"]');
+  const pickupRadio = document.querySelector('input[name="dtype"][value="pickup"]');
+  if (deliveryRadio) deliveryRadio.disabled = restricted;
+
+  if (restricted) state.deliveryType = 'pickup';
+  if (deliveryRadio) deliveryRadio.checked = state.deliveryType === 'delivery';
+  if (pickupRadio) pickupRadio.checked = state.deliveryType === 'pickup';
+
+  const note = el('delivery-local-only-note');
+  if (note) {
+    note.style.display = restricted ? 'block' : 'none';
+    if (restricted) note.textContent = '🏪 Este carrinho contém produto(s) disponível(is) apenas no local. Selecione retirada; entrega indisponível para esses itens.';
+  }
+  const option = el('opt-delivery');
+  if (option) option.style.opacity = restricted ? '.55' : '';
   const geoCard = el('geo-card');
-  if (geoCard) geoCard.style.display = type === 'pickup' ? 'none' : 'block';
+  if (geoCard) geoCard.style.display = state.deliveryType === 'pickup' ? 'none' : 'block';
+}
+
+function validateCartFulfillment() {
+  const invalid = state.deliveryType === 'delivery' ? getLocalOnlyCartItems() : [];
+  if (!invalid.length) return true;
+  showToast('O produto "' + invalid[0].name + '" é somente no local. Escolha retirada ou remova o item.');
+  syncDeliveryModeForCart();
+  navigateTo('delivery');
+  return false;
+}
+
+function setDeliveryType(type) {
+  if (type === 'delivery' && getLocalOnlyCartItems().length) {
+    showToast('Este carrinho tem produtos somente no local. Não é possível escolher entrega.');
+    syncDeliveryModeForCart();
+    return;
+  }
+  state.deliveryType = type;
+  syncDeliveryModeForCart();
   updateCartBar();
 }
 
@@ -913,6 +958,7 @@ async function blockIfManuallyClosed() {
 
 /* Fluxo InfinitePay: salva pedido → cria checkout → redireciona */
 async function handleOnlinePayment(method) {
+  if (!validateCartFulfillment()) return;
   if (state.submittingOrder) return; // trava lógica — clique/toque repetido é ignorado
   if (await blockIfManuallyClosed()) return;
 
@@ -1038,6 +1084,7 @@ async function handleOnlinePayment(method) {
 }
 
 function handleCashPayment() {
+  if (!validateCartFulfillment()) return;
   if (state.deliveryType === 'delivery' && !state.geo.lat) {
     showToast('Para entrega, use o botão de localização antes de continuar.');
     navigateTo('delivery');
@@ -1343,6 +1390,8 @@ function renderCartItems() {
         }
         <div class="ci-info">
           <div class="ci-name">${item.name}</div>
+          ${(findProductByAnyId(item.id) || item).deliveryAvailable === false
+            ? '<small style="color:#9a5300;font-weight:650">🏪 Somente no local — sem entrega</small>' : ''}
           <div class="ci-price">R$ ${fmt(getItemUnitPrice(item))}</div>
           ${buildCartOptionsHTML(item)}${buildCartAddonsHTML(item)}
           <div class="ci-controls">
@@ -1378,6 +1427,7 @@ function refreshCartCount() {
 }
 
 function updateCartBar() {
+  syncDeliveryModeForCart();
   const bar   = el('cart-bar');
   const waBar = el('wa-bar');
   if (!bar) return;
@@ -1551,6 +1601,10 @@ function handleSearch(val) {
    8. CHECKOUT — ENTREGA
 ────────────────────────────────────────── */
 function goToCheckout() {
+  syncDeliveryModeForCart();
+  if (getLocalOnlyCartItems().length) {
+    showToast('Itens somente no local: a retirada será selecionada automaticamente.');
+  }
   if (state.cart.length === 0) {
     showToast('Adicione produtos ao carrinho primeiro');
     return;
@@ -1649,6 +1703,7 @@ function formatPhone(input) {
 }
 
 function goToPayment() {
+  if (!validateCartFulfillment()) return;
   const name      = document.getElementById('f-name').value.trim();
   const phoneInput = document.getElementById('f-phone');
   const phone     = phoneInput?.value.trim() || '';
@@ -1797,6 +1852,7 @@ function updateConfirmationPage() {
    13. WHATSAPP
 ────────────────────────────────────────── */
 async function sendWhatsApp() {
+  if (!validateCartFulfillment()) return false;
   if (state.submittingOrder) return false; // trava lógica — clique/toque repetido é ignorado
   if (await blockIfManuallyClosed()) return false;
   if (state.deliveryType === 'delivery' && state.geo.deliveryOutOfRange) {
