@@ -223,6 +223,7 @@ function lockAdminSections(redirectSafe) {
   gs.pendingSection = null;
   _syncAdminLockBtn();
   if (redirectSafe && PROTECTED_SECTIONS.has(gs.section)) _activateSection('pedidos');
+  if (gs.section === 'caixa') initCaixa(); // remove imediatamente os números da tela
 }
 
 function lockAdminSectionsManually() {
@@ -4808,53 +4809,97 @@ function printReport() {
 /* ══════════════════════════════════════
    FECHAMENTO DE CAIXA
 ══════════════════════════════════════ */
+
+/* O caixa operacional usa apenas RPCs que NÃO retornam totais ao funcionário.
+   A autorização financeira é verificada no banco (profiles, nunca user_metadata).
+   No login admin compartilhado, o PIN é uma proteção adicional só de interface:
+   para isolamento real, a funcionária deve possuir sua própria conta operacional. */
+let _caixaRenderSeq = 0;
+
 async function initCaixa() {
   const el = elid('caixa-content');
   if (!el) return;
+  const seq = ++_caixaRenderSeq;
   el.innerHTML = '<p class="loading-msg"><i class="fas fa-spinner fa-spin"></i> Carregando...</p>';
   try {
-    const { data: openCaixa } = await getSb().from('cash_closings').select('*').eq('status', 'aberto').order('opened_at', { ascending: false }).limit(1).maybeSingle();
-    if (openCaixa) {
-      await renderCaixaAberto(openCaixa);
-    } else {
-      renderCaixaFechado();
+    const { data, error } = await getSb().rpc('get_cash_register_state');
+    if (error) throw error;
+    const state = Array.isArray(data) ? data[0] : data;
+    if (!state) throw new Error('Não foi possível consultar o caixa.');
+    if (seq !== _caixaRenderSeq || gs.section !== 'caixa') return;
+
+    if (state.bypass_pin === true) gs.ownerPinBypass = true;
+    const canViewFinance = state.can_view_financials === true &&
+      (state.bypass_pin === true || isAdminUnlocked());
+    const canUnlock = state.can_view_financials === true && !canViewFinance;
+
+    let register = state;
+    if (state.id && canViewFinance) {
+      // RLS permite esta consulta SOMENTE para admin/owner ativos.
+      const { data: full, error: readError } = await getSb().from('cash_closings')
+        .select('*').eq('id', state.id).single();
+      if (readError) throw readError;
+      if (seq !== _caixaRenderSeq || gs.section !== 'caixa' ||
+          (!state.bypass_pin && !isAdminUnlocked())) return;
+      register = full || state;
     }
+
+    if (state.id) renderCaixaAberto(register, { canViewFinance, canUnlock });
+    else renderCaixaFechado({ canViewFinance, canUnlock });
+
+    if (canViewFinance) renderCaixaHistorico(seq, state.bypass_pin === true);
   } catch (e) {
-    console.warn('[Caixa] Erro:', e);
-    el.innerHTML = '<p class="empty-msg">Erro ao carregar caixa. Verifique se a migration SQL foi executada.</p>';
+    console.warn('[Caixa] Não foi possível carregar o caixa:', e);
+    if (seq === _caixaRenderSeq && gs.section === 'caixa') {
+      el.innerHTML = '<p class="empty-msg">Não foi possível carregar o caixa. Verifique seu acesso ou tente novamente.</p>';
+    }
   }
 }
 
-function renderCaixaFechado() {
-  const el = elid('caixa-content');
-  el.innerHTML = `<div class="g-card">
-    <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-lock"></i> Caixa fechado</h2><p class="g-card-desc">Abra o caixa para registrar as vendas do dia.</p></div>
-    <div class="form-group"><label class="form-label">Valor inicial em dinheiro (troco)</label><input type="text" id="caixa-opening" class="form-input" placeholder="0,00" inputmode="decimal"></div>
-    <div class="form-group"><label class="form-label">Observação (opcional)</label><input type="text" id="caixa-open-notes" class="form-input" placeholder="Ex: Início do turno da noite"></div>
-    <div class="g-card-actions"><button class="btn-primary" onclick="abrirCaixa()"><i class="fas fa-lock-open"></i> Abrir caixa</button></div>
+function caixaAvisoFinanceiro(canUnlock) {
+  return `<div class="g-card" style="margin-bottom:16px">
+    <div class="g-card-head">
+      <h2 class="g-card-title"><i class="fas fa-eye-slash"></i> Valores financeiros protegidos</h2>
+      <p class="g-card-desc">Totais das vendas, valor esperado, diferenças de fechamento e histórico não aparecem no acesso operacional.</p>
+    </div>
+    ${canUnlock ? '<div class="g-card-actions"><button type="button" class="btn-secondary" onclick="desbloquearFinanceiroCaixa()"><i class="fas fa-lock"></i> Desbloquear valores (dona)</button></div>' : ''}
   </div>`;
 }
 
-async function renderCaixaAberto(c) {
+function renderCaixaFechado({ canViewFinance = false, canUnlock = false } = {}) {
   const el = elid('caixa-content');
-  const [start, end] = [new Date(c.opened_at), new Date()];
-  const orders = gs.orders.filter(o => {
-    if (o.status === 'cancelado' || !isPaidOrder(o) || !o.paid_at) return false;
-    const d = new Date(o.paid_at);
-    return d >= start && d <= end;
-  });
-  const cash = orders.filter(o => o.payment_method === 'dinheiro').reduce((s, o) => s + Number(o.total || 0), 0);
-  const pix = orders.filter(o => o.payment_method === 'pix_loja').reduce((s, o) => s + Number(o.total || 0), 0);
-  const card = orders.filter(o => o.payment_method === 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
-  const online = orders.filter(o => isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
-  const fee = orders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
-  const expectedCash = Number(c.opening_amount || 0) + cash;
+  el.innerHTML = `${canViewFinance ? '' : caixaAvisoFinanceiro(canUnlock)}
+  <div class="g-card">
+    <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-lock"></i> Caixa fechado</h2><p class="g-card-desc">Informe o troco inicial para abrir o caixa.</p></div>
+    <div class="form-group"><label class="form-label">Valor inicial em dinheiro (troco)</label><input type="text" id="caixa-opening" class="form-input" placeholder="0,00" inputmode="decimal"></div>
+    <div class="form-group"><label class="form-label">Observação (opcional)</label><input type="text" id="caixa-open-notes" class="form-input" placeholder="Ex: Início do turno da noite"></div>
+    <div class="g-card-actions"><button id="btn-abrir-caixa" class="btn-primary" onclick="abrirCaixa()"><i class="fas fa-lock-open"></i> Abrir caixa</button></div>
+  </div>
+  ${canViewFinance ? '<div id="caixa-historico"></div>' : ''}`;
+}
+
+function renderCaixaAberto(c, { canViewFinance = false, canUnlock = false } = {}) {
+  const el = elid('caixa-content');
   const openedDate = new Date(c.opened_at).toLocaleString('pt-BR');
   const opener = c.opened_by_email?.split('@')[0] || 'Sistema';
+  let financeCards = '';
 
-  el.innerHTML = `<div class="g-card">
-    <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-lock-open" style="color:var(--success)"></i> Caixa aberto</h2><p class="g-card-desc">Aberto por <strong>${esc(opener)}</strong> em ${openedDate}</p></div>
-    <div class="rpt-cards" style="margin-bottom:16px">
+  // Nenhum cálculo nem resumo financeiro para a funcionária.
+  if (canViewFinance) {
+    const [start, end] = [new Date(c.opened_at), new Date()];
+    const orders = gs.orders.filter(o => {
+      if (o.status === 'cancelado' || !isPaidOrder(o) || !o.paid_at) return false;
+      const d = new Date(o.paid_at);
+      return d >= start && d <= end;
+    });
+    const cash = orders.filter(o => o.payment_method === 'dinheiro').reduce((s, o) => s + Number(o.total || 0), 0);
+    const pix = orders.filter(o => o.payment_method === 'pix_loja').reduce((s, o) => s + Number(o.total || 0), 0);
+    const card = orders.filter(o => o.payment_method === 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+    const online = orders.filter(o => isOnlinePayment(o) && o.payment_method !== 'pix_loja' && o.payment_method !== 'cartao_maquininha').reduce((s, o) => s + Number(o.total || 0), 0);
+    const fee = orders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+    const expectedCash = Number(c.opening_amount || 0) + cash;
+
+    financeCards = `<div class="rpt-cards" style="margin-bottom:16px">
       <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-coins"></i></div><div class="rpt-card-val">R$ ${fmt(c.opening_amount || 0)}</div><div class="rpt-card-label">Valor inicial</div></div>
       <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-money-bill-wave"></i></div><div class="rpt-card-val">R$ ${fmt(cash)}</div><div class="rpt-card-label">Dinheiro</div></div>
       <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-qrcode"></i></div><div class="rpt-card-val">R$ ${fmt(pix)}</div><div class="rpt-card-label">Pix</div></div>
@@ -4863,43 +4908,122 @@ async function renderCaixaAberto(c) {
       <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-truck"></i></div><div class="rpt-card-val">R$ ${fmt(fee)}</div><div class="rpt-card-label">Entregas</div></div>
       <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-calculator"></i></div><div class="rpt-card-val">R$ ${fmt(expectedCash)}</div><div class="rpt-card-label">Esperado no caixa</div></div>
       <div class="rpt-card"><div class="rpt-card-icon"><i class="fas fa-receipt"></i></div><div class="rpt-card-val">${orders.length}</div><div class="rpt-card-label">Vendas</div></div>
-    </div>
+    </div>`;
+  }
+
+  el.innerHTML = `${canViewFinance ? '' : caixaAvisoFinanceiro(canUnlock)}
+  <div class="g-card">
+    <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-lock-open" style="color:var(--success)"></i> Caixa aberto</h2><p class="g-card-desc">Aberto por <strong>${esc(opener)}</strong> em ${openedDate}</p></div>
+    ${financeCards}
     <div class="form-group"><label class="form-label">Valor contado no caixa (dinheiro)</label><input type="text" id="caixa-counted" class="form-input" placeholder="0,00" inputmode="decimal"></div>
-    <div class="form-group"><label class="form-label">Observação do fechamento (opcional)</label><textarea id="caixa-close-notes" class="form-textarea" rows="2" placeholder="Ex: Tudo certo, sem diferença"></textarea></div>
-    <div class="g-card-actions"><button class="btn-primary" onclick="fecharCaixa('${c.id}', ${expectedCash})"><i class="fas fa-lock"></i> Fechar caixa</button><button class="btn-secondary" onclick="initCaixa()"><i class="fas fa-sync"></i> Atualizar</button></div>
+    <div class="form-group"><label class="form-label">Observação do fechamento (opcional)</label><textarea id="caixa-close-notes" class="form-textarea" rows="2" placeholder="Ex: Turno encerrado"></textarea></div>
+    <div class="g-card-actions"><button id="btn-fechar-caixa" class="btn-primary" onclick="fecharCaixa('${c.id}')"><i class="fas fa-lock"></i> Fechar caixa</button><button class="btn-secondary" onclick="initCaixa()"><i class="fas fa-sync"></i> Atualizar</button></div>
+  </div>
+  ${canViewFinance ? '<div id="caixa-historico"></div>' : ''}`;
+}
+
+async function renderCaixaHistorico(seq, bypassPin) {
+  const { data, error } = await getSb().from('cash_closings')
+    .select('closed_at,opening_amount,cash_sales_total,pix_sales_total,card_sales_total,online_sales_total,expected_cash_amount,counted_cash_amount,difference_amount')
+    .eq('status', 'fechado').order('closed_at', { ascending: false }).limit(10);
+  if (error) return;
+  if (seq !== _caixaRenderSeq || gs.section !== 'caixa' ||
+      (!bypassPin && !isAdminUnlocked())) return;
+  const target = elid('caixa-historico');
+  if (!target) return;
+  const rows = (data || []).map(c => {
+    const d = c.closed_at ? new Date(c.closed_at).toLocaleString('pt-BR') : '—';
+    const total = Number(c.cash_sales_total || 0) + Number(c.pix_sales_total || 0) +
+      Number(c.card_sales_total || 0) + Number(c.online_sales_total || 0);
+    return `<tr><td>${esc(d)}</td><td>R$ ${fmt(total)}</td>
+      <td>R$ ${fmt(c.expected_cash_amount || 0)}</td>
+      <td>${c.counted_cash_amount == null ? '—' : 'R$ ' + fmt(c.counted_cash_amount)}</td>
+      <td>${c.difference_amount == null ? '—' : 'R$ ' + fmt(c.difference_amount)}</td></tr>`;
+  }).join('');
+  target.innerHTML = `<div class="g-card">
+    <div class="g-card-head"><h2 class="g-card-title"><i class="fas fa-history"></i> Histórico de fechamentos (dona)</h2></div>
+    ${rows ? '<table class="rpt-table"><thead><tr><th>Fechamento</th><th>Vendas</th><th>Esperado</th><th>Contado</th><th>Diferença</th></tr></thead><tbody>' + rows + '</tbody></table>' : '<p class="empty-msg">Nenhum fechamento registrado.</p>'}
   </div>`;
+}
+
+async function desbloquearFinanceiroCaixa() {
+  try {
+    // Apenas administradora real vê este botão; funcionária nunca ganha permissão com PIN.
+    const { data, error } = await getSb().rpc('get_cash_register_state');
+    if (error) throw error;
+    const state = Array.isArray(data) ? data[0] : data;
+    if (state?.can_view_financials !== true) {
+      toast('Acesso financeiro exclusivo da dona da loja.', true);
+      return;
+    }
+    if (state.bypass_pin || isAdminUnlocked()) {
+      initCaixa();
+      return;
+    }
+    const pinState = await fetchManagementPinState();
+    if (!pinState?.is_configured) {
+      toast('Configure a senha administrativa em Configurações > Segurança.', true);
+      return;
+    }
+    gs.pendingSection = 'caixa';
+    openAdminPinModal('verify');
+  } catch (_) {
+    toast('Não foi possível validar o acesso financeiro.', true);
+  }
 }
 
 async function abrirCaixa() {
   const amount = parsePriceInput(elid('caixa-opening')?.value || '0');
   const notes = elid('caixa-open-notes')?.value?.trim() || null;
-  const actor = getCurrentActor();
-  const { error } = await getSb().from('cash_closings').insert({
-    opening_amount: amount, status: 'aberto', notes,
-    opened_by_user_id: actor.id, opened_by_email: actor.email,
-  });
-  if (error) { toast('Erro ao abrir caixa: ' + error.message, true); return; }
-  toast('Caixa aberto!');
-  logAuditAction('open_cash_register', 'cash', null, 'Caixa aberto', null, { opening_amount: amount, source: 'gestao' });
-  initCaixa();
+  if (!Number.isFinite(amount) || amount < 0) {
+    toast('Informe um valor inicial válido.', true);
+    return;
+  }
+  const btn = elid('btn-abrir-caixa');
+  if (btn) btn.disabled = true;
+  try {
+    const { error } = await getSb().rpc('open_cash_register', {
+      input_opening_amount: amount, input_notes: notes,
+    });
+    if (error) throw error;
+    toast('Caixa aberto!');
+    logAuditAction('open_cash_register', 'cash', null, 'Caixa aberto', null, { source: 'gestao' });
+    initCaixa();
+  } catch (e) {
+    toast('Erro ao abrir caixa: ' + (e.message || 'tente novamente'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
-async function fecharCaixa(id, expectedCash) {
-  const counted = parsePriceInput(elid('caixa-counted')?.value || '0');
+async function fecharCaixa(id) {
+  const countedText = elid('caixa-counted')?.value?.trim() || '';
+  if (!countedText) {
+    toast('Informe o dinheiro contado no caixa.', true);
+    return;
+  }
+  const counted = parsePriceInput(countedText);
+  if (!Number.isFinite(counted) || counted < 0) {
+    toast('Informe um valor contado válido.', true);
+    return;
+  }
   const notes = elid('caixa-close-notes')?.value?.trim() || null;
-  const diff = counted - expectedCash;
-  const actor = getCurrentActor();
-  const { error } = await getSb().from('cash_closings').update({
-    closed_at: new Date().toISOString(), status: 'fechado',
-    closed_by_user_id: actor.id, closed_by_email: actor.email,
-    expected_cash_amount: expectedCash, counted_cash_amount: counted,
-    difference_amount: diff, notes, updated_at: new Date().toISOString(),
-  }).eq('id', id);
-  if (error) { toast('Erro ao fechar caixa: ' + error.message, true); return; }
-  const diffLabel = diff === 0 ? 'Sem diferença' : (diff > 0 ? `Sobra: R$ ${fmt(diff)}` : `Falta: R$ ${fmt(Math.abs(diff))}`);
-  toast(`Caixa fechado. ${diffLabel}`);
-  logAuditAction('close_cash_register', 'cash', id, 'Caixa fechado', null, { expected: expectedCash, counted, difference: diff, source: 'gestao' });
-  initCaixa();
+  const btn = elid('btn-fechar-caixa');
+  if (btn) btn.disabled = true;
+  try {
+    const { data, error } = await getSb().rpc('close_cash_register', {
+      input_cash_id: id, input_counted_amount: counted, input_notes: notes,
+    });
+    if (error || data !== true) throw error || new Error('Fechamento não confirmado');
+    toast('Caixa fechado. Conferência disponível apenas para a dona.');
+    // Não registrar totais, diferença ou dinheiro contado em audit_logs.
+    logAuditAction('close_cash_register', 'cash', id, 'Caixa fechado', null, { source: 'gestao' });
+    initCaixa();
+  } catch (e) {
+    toast('Erro ao fechar caixa: ' + (e.message || 'tente novamente'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 /* ══════════════════════════════════════
@@ -5510,6 +5634,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // logout) sempre revalida do zero na próxima navegação protegida,
       // nunca herda o bypass de quem estava logado antes.
       gs.ownerPinBypass = false;
+      _caixaRenderSeq++;
+      const cashEl = elid('caixa-content');
+      if (cashEl) cashEl.replaceChildren(); // evita resíduos financeiros entre logins
     }
     gs._lastAuthUid = newUid;
 
