@@ -687,6 +687,7 @@ async function loadProductsFromDatabase() {
         featured:       !!p.featured,
         hero:           !!p.hero,
         hasOptions:     withOptions.has(p.id),
+        deliveryAvailable: p.delivery_available !== false,
       }));
       console.log('Produtos carregados do Supabase:', PRODUCTS_DATA.length);
     } else {
@@ -1418,6 +1419,7 @@ function renderProducts() {
     bebidas: '🥤 Bebidas',
     salgadinhos: '🥨 Salgadinhos',
     adicionais: '🍬 Adicionais',
+    conveniencia: '🏪 Conveniência',
   };
 
   const q = state.search.toLowerCase().trim();
@@ -1481,16 +1483,21 @@ function buildProductCard(p) {
     : `<div class="card-img-placeholder"><i class="fas ${icon}"></i><span>Foto em breve</span></div>`;
 
   const ctrlHTML = buildProductControl(p, qty);
+  const localOnlyHTML = p.deliveryAvailable === false
+    ? '<span class="badge badge-novo" style="background:#fff1db;color:#8a4200;top:8px;left:8px">Somente no local</span>'
+    : '';
 
   return `
     <div class="product-card" data-id="${p.id}" onclick="openProductPage('${p.id}')">
       <div class="card-img-wrap">
         ${imgHTML}
         ${badgeHTML}
+        ${localOnlyHTML}
       </div>
       <div class="card-body">
         <h3 class="card-name">${p.name}</h3>
         <p class="card-desc">${p.desc}</p>
+        ${p.deliveryAvailable === false ? '<p style="font-size:.78rem;color:#9a5300;font-weight:650;margin:6px 0">🏪 Sem entrega · Retirada ou consumo no local</p>' : ''}
         <div class="card-footer">
           <span class="card-price">R$ ${fmt(p.price)}</span>
           ${ctrlHTML}
@@ -1899,6 +1906,7 @@ const PP_CAT_LABELS = {
   hamburguer: '🍔 Hambúrguer', hotdog: '🌭 Hot Dogs',
   bebidas: '🥤 Bebidas', salgadinhos: '🥨 Salgadinhos',
   adicionais: '🍬 Adicionais',
+  conveniencia: '🏪 Conveniência',
 };
 
 function getPpProduct() {
@@ -2346,12 +2354,19 @@ function openProductPage(id) {
   /* Badge */
   const badgeMap = { mais: ['badge-mais','Mais pedido'], novo: ['badge-novo','Novo'], combo: ['badge-combo','3 adicionais grátis'], dest: ['badge-dest','Destaque'] };
   const slot = el('pp-badge-slot');
-  if (slot) slot.innerHTML = p.badges.length ? `<span class="badge ${badgeMap[p.badges[0]][0]}">${badgeMap[p.badges[0]][1]}</span>` : '';
+  if (slot) {
+    const normalBadge = p.badges.length ? `<span class="badge ${badgeMap[p.badges[0]][0]}">${badgeMap[p.badges[0]][1]}</span>` : '';
+    slot.innerHTML = p.deliveryAvailable === false
+      ? '<span class="badge badge-novo" style="background:#fff1db;color:#8a4200">Somente no local</span>'
+      : normalBadge;
+  }
 
   /* Textos */
   el('pp-name').textContent  = p.name;
   el('pp-price').textContent = `R$ ${fmt(p.price)}`;
-  el('pp-desc').textContent  = p.desc;
+  el('pp-desc').textContent  = p.deliveryAvailable === false
+    ? p.desc + ' · Disponível para retirada ou consumo no local. Não fazemos entrega deste produto.'
+    : p.desc;
   el('pp-cat-tag').textContent = PP_CAT_LABELS[p.cat] || p.cat;
   el('pp-qty-val').textContent = ppQty;
 
@@ -2715,6 +2730,7 @@ function buildSpResultCard(p) {
       <div class="card-body">
         <h3 class="card-name">${p.name}</h3>
         <p class="card-desc">${p.desc}</p>
+        ${p.deliveryAvailable === false ? '<p style="font-size:.78rem;color:#9a5300;font-weight:650;margin:6px 0">🏪 Sem entrega · Retirada ou consumo no local</p>' : ''}
         <div class="card-footer">
           <span class="card-price">R$ ${fmt(p.price)}</span>
           ${btnHTML}
