@@ -845,7 +845,7 @@ function renderProductList() {
     <table class="data-table products-table">
       <thead><tr>
         <th>Img</th><th>Nome</th><th>Categoria</th>
-        <th>Preço</th><th>Status</th><th>Ações</th>
+        <th>Preço</th><th>Atendimento</th><th>Status</th><th>Ações</th>
       </tr></thead>
       <tbody>${list.map(p => `
         <tr class="${!p._active?'row-inactive':''}">
@@ -853,6 +853,7 @@ function renderProductList() {
           <td><strong>${esc(p._name)}</strong>${p._badges?.length?`<span class="tbl-badge">${p._badges[0]}</span>`:''}</td>
           <td>${esc(p._cat)}</td>
           <td>R$ ${fmt(p._price)}</td>
+          <td>${p.delivery_available === false ? '<span class="status-pill status-inactive">Somente no local</span>' : 'Entrega e retirada'}</td>
           <td><span class="status-pill ${p._active?'status-active':'status-inactive'}">${p._active?'Ativo':'Inativo'}</span></td>
           <td>
             ${!gs.usingLocalProducts
@@ -873,6 +874,7 @@ async function openProductForm(id) {
   gs.uploadedUrl = '';
 
   elid('form-product').reset();
+  elid('p-delivery-available').checked = true;
   elid('p-id').value = '';
   elid('p-img').value = '';
   elid('p-img-url').value = '';
@@ -892,6 +894,7 @@ async function openProductForm(id) {
       elid('p-cat').value   = p.category || '';
       elid('p-badge').value = p.badges?.[0] || '';
       elid('p-active').checked = p.active !== false;
+      elid('p-delivery-available').checked = p.delivery_available !== false;
       elid('p-acai').checked   = !!p.allow_acai_addons;
       elid('p-img').value      = p.image_url || '';
       elid('p-img-url').value  = p.image_url || '';
@@ -952,6 +955,7 @@ async function handleSaveProduct(e) {
     description:      elid('p-desc').value.trim(),
     image_url:        imgUrl,
     active:           elid('p-active').checked,
+    delivery_available: elid('p-delivery-available').checked,
     allow_acai_addons: elid('p-acai').checked,
     badges:           badge ? [badge] : [],
     updated_at:       now,
@@ -976,6 +980,7 @@ async function handleSaveProduct(e) {
           if (oldP.price !== price) { meta.before.preco = oldP.price; meta.after.preco = price; }
           if (oldP.category !== cat) { meta.before.categoria = oldP.category; meta.after.categoria = cat; }
           if (oldP.active !== data.active) { meta.before.ativo = oldP.active; meta.after.ativo = data.active; }
+          if (oldP.delivery_available !== data.delivery_available) { meta.before.entrega = oldP.delivery_available !== false; meta.after.entrega = data.delivery_available; }
           if (oldP.image_url !== imgUrl) { meta.before.imagem = oldP.image_url ? 'sim' : 'nao'; meta.after.imagem = imgUrl ? 'sim' : 'nao'; }
         }
         logAuditAction('edit_product', 'product', existingId, name, null, meta);
