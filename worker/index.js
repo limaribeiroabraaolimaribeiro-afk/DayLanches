@@ -469,104 +469,56 @@ async function handlePrintAgentHealth(request, env) {
       (items.length > printed_items_count) — só o "delta" de itens novos,
       marcado com is_addition:true, pra virar um aviso "ADICIONAL — MESA N"
       em vez de reimprimir a comanda toda (evita duplicar itens na cozinha). */
+async function printAgentOwner(request) {
+  return sha256Hex((request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, ''));
+}
+
 async function handlePrintAgentPendingOrders(request, env) {
-  if (!(await validatePrintAgentDeviceAuth(request, env))) {
-    return json({ error: 'Unauthorized' }, 401);
-  }
-
+  if (!(await validatePrintAgentDeviceAuth(request, env))) return json({ error: 'Unauthorized' }, 401);
   try {
-    const fields = [
-      'id', 'order_number', 'created_at', 'customer_name', 'customer_phone',
-      'delivery_type', 'order_source', 'table_number', 'payment_method',
-      'payment_status', 'paid_at', 'status', 'subtotal', 'delivery_fee', 'total', 'items', 'notes',
-      'customer_address_text', 'location', 'printed_at', 'printed_items_count',
-    ].join(',');
-
-    const paramsFull = `select=${fields}&printed_at=is.null&status=neq.cancelado&order=created_at.asc&limit=10`;
-    const fullOrders = await sbGet(env, 'orders', paramsFull);
-
-    /* Sem filtro de payment_status: mesmo se a mesa foi paga rápido demais
-       entre o "adicionar item" e o próximo poll, o delta ainda tem que
-       chegar na cozinha — só some da lista quando for de fato impresso. */
-    const paramsAdd = `select=${fields}&printed_at=not.is.null&order_source=eq.balcao&table_number=not.is.null&status=neq.cancelado&order=created_at.asc&limit=10`;
-    const addCandidates = await sbGet(env, 'orders', paramsAdd);
-
-    const additions = (Array.isArray(addCandidates) ? addCandidates : [])
-      .filter(o => Array.isArray(o.items) && o.items.length > (o.printed_items_count || 0))
-      .map(o => ({
-        ...o,
-        printed_items_count_before: o.printed_items_count || 0,
-        items: o.items.slice(o.printed_items_count || 0),
-        is_addition: true,
-      }));
-
-    const orders = [...(Array.isArray(fullOrders) ? fullOrders : []), ...additions];
-
-    return json({ orders });
+    const legacy = new URL(request.url).searchParams.get('protocol') !== '2';
+    const result = await sbRpc(env, 'claim_daylanches_print', {
+      p_owner: await printAgentOwner(request), p_legacy: legacy,
+    });
+    if (!result.ok || !Array.isArray(result.data?.orders)) throw new Error('Failed to reserve print');
+    return new Response(JSON.stringify(result.data), { headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
   } catch (err) {
-    console.error('[DayLanches] Erro ao buscar pedidos pendentes:', err);
-    return json({ error: 'Erro interno ao buscar pedidos' }, 500);
+    console.error('[DayLanches] Erro ao reservar impressão:', err);
+    return json({ error: 'Erro ao reservar impressão' }, 500);
   }
 }
 
-/* POST /print-agent/mark-printed
-   printed_up_to (opcional): até qual índice do array `items` o Print Agent
-   efetivamente imprimiu — evita marcar como impresso um item que a Dayane
-   adicionou pela tela entre o Print Agent buscar os pedidos pendentes e
-   confirmar a impressão. Sem esse campo (Print Agent antigo, ainda não
-   atualizado), cai no comportamento anterior: usa o total atual de itens. */
 async function handlePrintAgentMarkPrinted(request, env) {
-  if (!(await validatePrintAgentDeviceAuth(request, env))) {
-    return json({ error: 'Unauthorized' }, 401);
-  }
-
+  if (!(await validatePrintAgentDeviceAuth(request, env))) return json({ error: 'Unauthorized' }, 401);
   let body;
-  try { body = await request.json(); }
-  catch { return json({ error: 'Invalid JSON' }, 400); }
-
-  const { order_id, printed_up_to } = body;
-  if (!order_id) return json({ error: 'order_id required' }, 400);
-
+  try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, 400); }
+  const { order_id, printed_up_to, print_claim_id } = body || {};
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (typeof order_id !== 'string' || !uuid.test(order_id) ||
+      (printed_up_to != null && (!Number.isSafeInteger(printed_up_to) || printed_up_to < 1)) ||
+      (print_claim_id != null && (typeof print_claim_id !== 'string' || !uuid.test(print_claim_id)))) {
+    return json({ error: 'Invalid print confirmation' }, 400);
+  }
   try {
-    let newCount = printed_up_to;
-    if (newCount == null) {
-      const rows = await sbGet(env, 'orders', `id=eq.${order_id}&select=items`);
-      newCount = Array.isArray(rows?.[0]?.items) ? rows[0].items.length : 0;
-    }
-
-    const res = await sbPatch(env, 'orders', `id=eq.${order_id}`, {
-      printed_at: new Date().toISOString(),
-      printed_items_count: newCount,
+    const result = await sbRpc(env, 'confirm_daylanches_print', {
+      p_owner: await printAgentOwner(request), p_order: order_id,
+      p_end: printed_up_to ?? null, p_claim: print_claim_id ?? null,
     });
-
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      console.error('[DayLanches] Erro ao marcar impresso:', res.status, detail);
-      return json({ error: 'Erro ao atualizar pedido' }, 500);
+    if (!result.ok) throw new Error('Failed to confirm print');
+    if (!result.data?.success) return json({ error: result.data?.error || 'claim_mismatch' }, 409);
+    if (!result.data.already_confirmed) {
+      try {
+        await sbPost(env, 'audit_logs', {
+          actor_name: 'Print Agent', action: 'auto_print_order', entity_type: 'order',
+          entity_id: order_id, entity_label: '#' + (result.data.order_number || order_id),
+          metadata: { printed_up_to: printed_up_to ?? null, print_claim_id: print_claim_id ?? null },
+        });
+      } catch (_) { /* confirmation is already durable */ }
     }
-
-    /* Registrar no audit_logs */
-    try {
-      const orders = await sbGet(env, 'orders', `id=eq.${order_id}&select=order_number`);
-      const orderNum = orders?.[0]?.order_number || order_id;
-      await fetch(`${env.SUPABASE_URL}/rest/v1/audit_logs`, {
-        method: 'POST',
-        headers: { ...sbHeaders(env), Prefer: 'return=minimal' },
-        body: JSON.stringify({
-          actor_name: 'Print Agent',
-          action: 'auto_print_order',
-          entity_type: 'order',
-          entity_id: order_id,
-          entity_label: `#${orderNum}`,
-          metadata: {},
-        }),
-      });
-    } catch (_) { /* não bloqueia o fluxo */ }
-
-    return json({ success: true });
+    return json({ success: true, already_confirmed: !!result.data.already_confirmed });
   } catch (err) {
-    console.error('[DayLanches] Erro ao marcar impresso:', err);
-    return json({ error: 'Erro interno' }, 500);
+    console.error('[DayLanches] Erro ao confirmar impressão:', err);
+    return json({ error: 'Erro ao confirmar impressão' }, 500);
   }
 }
 
