@@ -23,7 +23,7 @@ begin
  select t.* into o from public.orders t
  where t.deleted_at is null and t.status<>'cancelado'
  and jsonb_typeof(t.items)='array' and jsonb_array_length(t.items)>0
- and (t.printed_at is null or (t.order_source='balcao' and t.table_number is not null and t.printed_at is not null and jsonb_array_length(t.items)>coalesce(t.printed_items_count,0)))
+ and (t.printed_at is null or (t.order_source='balcao' and t.table_number is not null and t.printed_at is not null and t.created_at>=now()-interval '24 hours' and jsonb_array_length(t.items)>coalesce(t.printed_items_count,0)))
  and not exists (select 1 from public.print_agent_dispatches q where q.order_id=t.id and q.confirmed_at is null and (not q.legacy or q.claimed_at>now()-interval '5 minutes'))
  order by t.created_at asc,t.id limit 1 for update of t skip locked;
  if not found then return jsonb_build_object('orders','[]'::jsonb,'review_count',review_count,'protocol',2); end if;
