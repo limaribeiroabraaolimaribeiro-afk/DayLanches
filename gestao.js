@@ -1834,21 +1834,8 @@ async function checkForNewOrders() {
           ? `${newOnes.length} novos pedidos recebidos! Imprima a comanda.`
           : 'Novo pedido recebido! Imprima a comanda.');
 
-        if (gs.autoPrintEnabled) {
-          newOnes.forEach(o => {
-            if (o.status === 'cancelado') return;
-            /* Mesas de Balcão: a impressão automática é responsabilidade
-               EXCLUSIVA do Print Agent (protocolo printed_at/
-               printed_items_count). O navegador nunca imprime sozinho um
-               pedido de mesa — senão vira impressão duplicada (Gestão +
-               Print Agent) da mesma comanda inicial. Som/toast acima já
-               avisaram a Dayane; o Print Agent cuida da impressão física. */
-            const isBalcaoTable = o.order_source === 'balcao' && !!o.table_number;
-            if (isBalcaoTable) return;
-            const ok = printOrderReceipt(o.id);
-            if (!ok) toast('Clique em "Imprimir comanda" para imprimir este pedido.', true);
-          });
-        }
+        // Impressão automática tem um único dono: o Print Agent, com reserva
+        // atômica no servidor. Gestão só avisa; reimpressão manual continua disponível.
       } else {
         toast('Novo pedido recebido! Clique em "Ativar som de pedidos" para receber alertas.');
       }
