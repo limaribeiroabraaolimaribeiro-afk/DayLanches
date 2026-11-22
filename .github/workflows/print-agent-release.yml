@@ -1,0 +1,54 @@
+name: Build and release Day Lanches Print Agent
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/print-agent-release.yml'
+      - 'print-agent/package.json'
+      - 'print-agent/package-lock.json'
+      - 'print-agent/src/**'
+permissions:
+  contents: write
+concurrency:
+  group: daylanches-print-agent-release
+  cancel-in-progress: false
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: print-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: print-agent/package-lock.json
+      - name: Validate sources
+        run: |
+          node --check src/main.js
+          node --check src/renderer.js
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build installer
+        run: npm run build -- --publish never
+      - name: Publish versioned installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "print-agent-v$version"
+          $installer = 'dist/Day-Lanches-Impressao-Setup.exe'
+          if (!(Test-Path $installer)) { throw 'Installer not built' }
+          gh release view $tag --repo ${{ github.repository }} 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists; bump the package version for another release."
+            exit 0
+          }
+          gh release create $tag $installer --repo ${{ github.repository }} --target ${{ github.sha }} --title "Day Lanches Impressão $version" --notes "Impressão serializada, reserva atômica de comandas, confirmação idempotente e proteção contra múltiplas instâncias." --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
