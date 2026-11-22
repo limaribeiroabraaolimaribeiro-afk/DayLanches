@@ -51,6 +51,9 @@ function httpsPostJson(urlString, bodyObj) {
    em hardware/driver de video desatualizado). Precisa rodar antes do app ficar pronto. */
 app.disableHardwareAcceleration();
 
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (!hasInstanceLock) app.quit();
+
 /* URL do servidor — fixa no app, nunca editada pela usuaria. Nao e secreta
    (e um endereco publico), so nao faz sentido pedir pra Dayane digitar. */
 const WORKER_URL = 'https://day-lanches-worker.limaribeiroabraaolimaribeiro.workers.dev';
@@ -183,7 +186,7 @@ function createWindow() {
 
 /* ── App lifecycle ── */
 
-app.whenReady().then(() => {
+if (hasInstanceLock) app.whenReady().then(() => {
   autoLauncher = new AutoLaunch({
     name: 'Day Lanches Impressão',
     path: app.getPath('exe'),
@@ -196,6 +199,10 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('second-instance', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
 });
 
 app.on('before-quit', () => {
@@ -324,54 +331,39 @@ ipcMain.handle('get-auto-launch', async () => {
 /* ── IPC: Print receipt ── */
 
 ipcMain.handle('print-receipt', async (_event, { html, printerName, paperType }) => {
+  // Never destroy another in-flight print, and never start a second job in parallel.
+  if (printWindow && !printWindow.isDestroyed()) return { success: false, error: 'Impressora ocupada' };
   return new Promise((resolve) => {
-    if (printWindow && !printWindow.isDestroyed()) {
-      printWindow.destroy();
-    }
-
-    printWindow = new BrowserWindow({
-      show: false,
-      width: paperType === 'A4' ? 794 : (paperType === '58mm' ? 220 : 302),
-      height: 1200,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
-
-    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
-    printWindow.webContents.on('did-finish-load', () => {
-      const printOptions = {
-        silent: true,
-        printBackground: true,
-        margins: { marginType: 'none' },
-      };
-
-      if (printerName && printerName !== '__default__') {
-        printOptions.deviceName = printerName;
-      }
-
-      printWindow.webContents.print(printOptions, (success, failureReason) => {
-        if (printWindow && !printWindow.isDestroyed()) {
-          printWindow.destroy();
-          printWindow = null;
-        }
-
-        if (success) {
-          resolve({ success: true });
-        } else {
-          resolve({ success: false, error: failureReason || 'Falha na impressao' });
-        }
+    let job;
+    let settled = false;
+    let timeout;
+    const finish = (success, error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (job && !job.isDestroyed()) job.destroy();
+      if (printWindow === job) printWindow = null;
+      resolve({ success, ...(error ? { error } : {}) });
+    };
+    try {
+      job = new BrowserWindow({
+        show: false,
+        width: paperType === 'A4' ? 794 : (paperType === '58mm' ? 220 : 302),
+        height: 1200,
+        webPreferences: { contextIsolation: true, nodeIntegration: false },
       });
-    });
-
-    printWindow.webContents.on('did-fail-load', () => {
-      if (printWindow && !printWindow.isDestroyed()) {
-        printWindow.destroy();
-        printWindow = null;
-      }
-      resolve({ success: false, error: 'Falha ao carregar HTML da comanda' });
-    });
+      printWindow = job;
+      timeout = setTimeout(() => finish(false, 'Confirmação da impressora expirou; verifique fisicamente'), 60000);
+      job.webContents.once('did-finish-load', () => {
+        if (settled) return;
+        const options = { silent: true, printBackground: true, copies: 1, margins: { marginType: 'none' } };
+        if (printerName && printerName !== '__default__') options.deviceName = printerName;
+        try {
+          job.webContents.print(options, (success, reason) => finish(success, success ? undefined : (reason || 'Falha na impressão')));
+        } catch (err) { finish(false, err.message); }
+      });
+      job.webContents.once('did-fail-load', () => finish(false, 'Falha ao carregar HTML da comanda'));
+      job.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`).catch(err => finish(false, err.message));
+    } catch (err) { finish(false, err.message); }
   });
 });
