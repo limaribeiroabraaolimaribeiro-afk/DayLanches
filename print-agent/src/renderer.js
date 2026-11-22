@@ -267,9 +267,21 @@ function stopPolling() {
   if (state.printTimer) { clearInterval(state.printTimer); state.printTimer = null; }
 }
 
+let pollInProgress = false;
+let lastReviewCount = 0;
+const ACK_KEY = 'daylanches.print.pendingAck.v2';
+
 async function pollOrders() {
+  if (pollInProgress) return;
+  pollInProgress = true;
   try {
-    const url = `${getBaseUrl()}/print-agent/pending-orders`;
+    const pendingAck = JSON.parse(localStorage.getItem(ACK_KEY) || 'null');
+    if (pendingAck) {
+      if (!(await markPrinted(pendingAck.orderId, pendingAck.orderNum, pendingAck.printedUpTo, pendingAck.claimId))) return;
+      localStorage.removeItem(ACK_KEY);
+    }
+    if (!ui.autoPrint().checked) return;
+    const url = `${getBaseUrl()}/print-agent/pending-orders?protocol=2`;
     const res = await fetch(url, { headers: getHeaders() });
 
     if (res.status === 401) {
@@ -289,7 +301,11 @@ async function pollOrders() {
     }
 
     const data = await res.json();
+    if (data.protocol !== 2) throw new Error('Servidor sem proteção de impressão. Atualização necessária.');
     const orders = data.orders || [];
+    const reviewCount = Number(data.review_count || 0);
+    if (reviewCount && reviewCount !== lastReviewCount) log(`${reviewCount} impressão(ões) sem confirmação. Confira as comandas na cozinha antes de reimprimir manualmente.`, 'warn');
+    lastReviewCount = reviewCount;
 
     handlePollSuccess();
 
@@ -312,12 +328,15 @@ async function pollOrders() {
          impresso uma vez pode legitimamente voltar a aparecer aqui com um
          delta novo (mais itens adicionados numa mesa) — nesse caso é um
          trabalho de impressão diferente e não deve ser pulado pelo cache. */
-      const cacheKey = `${order.id}:${order.printed_items_count_before ?? (order.printed_items_count || 0)}`;
+      const cacheKey = order.print_claim_id;
+      if (!cacheKey) throw new Error('Pedido sem reserva de impressão');
       if (state.printedCache.has(cacheKey)) continue;
       await printOrder(order, cacheKey);
     }
   } catch (err) {
     handlePollFailure(err.message);
+  } finally {
+    pollInProgress = false;
   }
 }
 
@@ -349,7 +368,7 @@ async function printOrder(order, cacheKey) {
     const result = await window.api.printReceipt({ html, printerName, paperType: state.paperType });
 
     if (!result.success) {
-      log(`Erro ao imprimir #${num}: ${result.error}`, 'error');
+      log(`Erro ao imprimir #${num}: ${result.error}. Confira fisicamente antes de reimprimir; a reserva permanece bloqueada.`, 'error');
       return;
     }
 
@@ -358,29 +377,35 @@ async function printOrder(order, cacheKey) {
     const printedUpTo = isAddition
       ? (order.printed_items_count_before || 0) + order.items.length
       : order.items.length;
-    await markPrinted(order.id, num, printedUpTo);
+    const pendingAck = { orderId: order.id, orderNum: num, printedUpTo, claimId: cacheKey };
+    localStorage.setItem(ACK_KEY, JSON.stringify(pendingAck));
+    if (await markPrinted(order.id, num, printedUpTo, cacheKey)) localStorage.removeItem(ACK_KEY);
   } catch (err) {
     log(`Erro ao imprimir #${num}: ${err.message}`, 'error');
   }
 }
 
-async function markPrinted(orderId, orderNum, printedUpTo) {
+async function markPrinted(orderId, orderNum, printedUpTo, claimId) {
   try {
     const res = await fetch(`${getBaseUrl()}/print-agent/mark-printed`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ order_id: orderId, printed_up_to: printedUpTo }),
+      body: JSON.stringify({ order_id: orderId, printed_up_to: printedUpTo, print_claim_id: claimId }),
     });
 
     if (res.ok) {
       const data = await res.json();
-      if (data.success) log(`#${orderNum} marcado como impresso.`, 'success');
+      if (data.success) {
+        log(`#${orderNum} marcado como impresso.`, 'success');
+        return true;
+      }
     } else {
       log(`Erro ao marcar #${orderNum}: HTTP ${res.status}`, 'error');
     }
   } catch (err) {
     log(`Erro ao marcar #${orderNum}: ${err.message}`, 'error');
   }
+  return false;
 }
 
 /* ══════════════════════════════════════════════════════════
